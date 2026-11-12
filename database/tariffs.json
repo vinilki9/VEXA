@@ -1,0 +1,154 @@
+{
+  "currency": "RUB",
+  "version": "draft-0.2.0",
+  "groups": {
+    "moscow": [
+      {
+        "code": "economy",
+        "base_rub": 150,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 13,
+        "per_minute_rub": 13
+      },
+      {
+        "code": "comfort",
+        "base_rub": 180,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 15,
+        "per_minute_rub": 15
+      },
+      {
+        "code": "comfort_plus",
+        "base_rub": 210,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 18,
+        "per_minute_rub": 18
+      },
+      {
+        "code": "business",
+        "base_rub": 410,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 25,
+        "per_minute_rub": 25
+      },
+      {
+        "code": "premier",
+        "base_rub": 650,
+        "included_minutes": 8,
+        "included_km": 2,
+        "per_km_rub": 41,
+        "per_minute_rub": 41
+      }
+    ],
+    "moscow_region": [
+      {
+        "code": "economy",
+        "base_rub": 150,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 13,
+        "per_minute_rub": 8
+      },
+      {
+        "code": "comfort",
+        "base_rub": 180,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 15,
+        "per_minute_rub": 15
+      },
+      {
+        "code": "comfort_plus",
+        "base_rub": 200,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 18,
+        "per_minute_rub": 18
+      },
+      {
+        "code": "business",
+        "base_rub": 400,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 23,
+        "per_minute_rub": 23
+      },
+      {
+        "code": "premier",
+        "base_rub": 500,
+        "included_minutes": 8,
+        "included_km": 2,
+        "per_km_rub": 40,
+        "per_minute_rub": 40
+      }
+    ],
+    "other_approved_cities_discount_3_percent": [
+      {
+        "code": "economy",
+        "base_rub": 145.5,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 12.61,
+        "per_minute_rub": 7.76
+      },
+      {
+        "code": "comfort",
+        "base_rub": 174.6,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 14.55,
+        "per_minute_rub": 14.55
+      },
+      {
+        "code": "comfort_plus",
+        "base_rub": 194,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 17.46,
+        "per_minute_rub": 17.46
+      },
+      {
+        "code": "business",
+        "base_rub": 388,
+        "included_minutes": 3,
+        "included_km": 1,
+        "per_km_rub": 22.31,
+        "per_minute_rub": 22.31
+      },
+      {
+        "code": "premier",
+        "base_rub": 485,
+        "included_minutes": 8,
+        "included_km": 2,
+        "per_km_rub": 38.8,
+        "per_minute_rub": 38.8
+      }
+    ]
+  },
+  "moscow_grid_cities": [
+    "Санкт-Петербург",
+    "Новосибирск",
+    "Екатеринбург",
+    "Казань",
+    "Красноярск",
+    "Нижний Новгород",
+    "Челябинск",
+    "Омск",
+    "Самара",
+    "Ростов-на-Дону",
+    "Уфа",
+    "Воронеж",
+    "Волгоград",
+    "Пермь",
+    "Краснодар"
+  ],
+  "additional_services": {
+    "anonymous_order_rub": 100,
+    "child_seat_rub": 100,
+    "animal_rub": 100
+  }
+}

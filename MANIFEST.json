@@ -1,0 +1,181 @@
+{
+  "package": "VEXA_FULL_RELEASE",
+  "version": "0.2.0",
+  "files": [
+    {
+      "path": ".gitignore",
+      "size": 108,
+      "sha256": "65685a9e35bcdd7b67d11f9eda4a6a4131e934cb105098b58ce3c5913bce1399"
+    },
+    {
+      "path": "README.md",
+      "size": 3383,
+      "sha256": "97e29ab12805c1923a69f7ae91c86a06e7c713541022fd503fa2aa45a9890e88"
+    },
+    {
+      "path": "android/client/app/build.gradle.kts",
+      "size": 805,
+      "sha256": "0ad3924806cc0dcaf2f4c058dab2834ab2ea4bd3f6cb2080aa87ea8fbdeaff58"
+    },
+    {
+      "path": "android/client/app/src/main/AndroidManifest.xml",
+      "size": 456,
+      "sha256": "9f7e7270993b87c26d9b84abe07b273f12f4f6c2f380692a9ba2c95b5c3a6a36"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/MainActivity.kt",
+      "size": 4028,
+      "sha256": "53218e5a2c1214d84754cee376759ca117816bd996a5a76539b35021d8795dc9"
+    },
+    {
+      "path": "android/client/build.gradle.kts",
+      "size": 207,
+      "sha256": "e1cd0888abdf99f6ae05800a853dcc26ee458b9d7925d1a1059c666d61fb5490"
+    },
+    {
+      "path": "android/client/gradle.properties",
+      "size": 100,
+      "sha256": "d5f372c6d46ad7c8d33f714bfae564eb5e1d73a159c495df9bc782b33e3567c2"
+    },
+    {
+      "path": "android/client/settings.gradle.kts",
+      "size": 273,
+      "sha256": "c722707c01105f7fb122ab9999258ed2e89d6a90b6a18bd03f32bf0dda35202d"
+    },
+    {
+      "path": "android/driver/app/build.gradle.kts",
+      "size": 805,
+      "sha256": "598d4503946b72f9dfb91370d28b51af388d06ca4a3362de485eccc0839607b1"
+    },
+    {
+      "path": "android/driver/app/src/main/AndroidManifest.xml",
+      "size": 456,
+      "sha256": "fb049135716710814c5b69923c0a3c94a3c5e0b8931275b742124daacfefc455"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/MainActivity.kt",
+      "size": 3613,
+      "sha256": "bf50470ed19193e33ef5e56b5cf38f8dc30b918139118762c80a92769ee27a78"
+    },
+    {
+      "path": "android/driver/build.gradle.kts",
+      "size": 207,
+      "sha256": "e1cd0888abdf99f6ae05800a853dcc26ee458b9d7925d1a1059c666d61fb5490"
+    },
+    {
+      "path": "android/driver/gradle.properties",
+      "size": 100,
+      "sha256": "d5f372c6d46ad7c8d33f714bfae564eb5e1d73a159c495df9bc782b33e3567c2"
+    },
+    {
+      "path": "android/driver/settings.gradle.kts",
+      "size": 273,
+      "sha256": "8b1002f4450b2edaaf23b3a33cca3a55f9472c6dd3cdd3e043a88e8f62496763"
+    },
+    {
+      "path": "backend/Dockerfile",
+      "size": 203,
+      "sha256": "f892f13ba52cf16bbaaa6d88c1ab5b9bffc45128c4157f02fc3fd2d02a473297"
+    },
+    {
+      "path": "backend/app/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/app/main.py",
+      "size": 3406,
+      "sha256": "794a7869de1cb2bc6f4e931e2fae17b33286ed79adee60f86466ff0002e194f1"
+    },
+    {
+      "path": "backend/requirements.txt",
+      "size": 60,
+      "sha256": "7a1a436a09a46b9d2e327d40e8750e9fb2c60c48679e04b2acb567ba26e018c7"
+    },
+    {
+      "path": "database/schema.sql",
+      "size": 2366,
+      "sha256": "155c9698e0b62e9de2ed384ba1b79f4e79ba88a88de88a99538e62fe17593b77"
+    },
+    {
+      "path": "database/tariffs.json",
+      "size": 3468,
+      "sha256": "e2cda575ed336ee2cba1e500f511f373a87e6583ab0157cf57186ef9e9287987"
+    },
+    {
+      "path": "design/palette.json",
+      "size": 574,
+      "sha256": "10fd4e9776284c42f719469926041c6bc76b2f9236e749dcf5fd97d3987373d2"
+    },
+    {
+      "path": "dispatcher/index.html",
+      "size": 259,
+      "sha256": "2277d7fca37a1f4d677406cc87546933f719c17e26383f7a168fa0ae37ae1024"
+    },
+    {
+      "path": "dispatcher/package.json",
+      "size": 415,
+      "sha256": "1cfcf1f9c2dc5012b75d1765d00e42b84f0d74252fe5bb4a1c0c822a978fcbf6"
+    },
+    {
+      "path": "dispatcher/src/main.tsx",
+      "size": 3753,
+      "sha256": "e3feee9d3abe3e54f944a7f13d2589e16ea3a033d67baf41e6b19487bf74ce57"
+    },
+    {
+      "path": "dispatcher/src/style.css",
+      "size": 5357,
+      "sha256": "edef0b6e0dc93219f60de1f865500e14def271735198d8d5ac123826b7d05fba"
+    },
+    {
+      "path": "dispatcher/tsconfig.json",
+      "size": 439,
+      "sha256": "3825a14192363ea0a908ae994f0f66a8cfb044a1cc5637d7e3656eeb49b364c6"
+    },
+    {
+      "path": "dispatcher/vite.config.ts",
+      "size": 128,
+      "sha256": "a64500b58c376b9e886092ce84f9f27c5d8fbd8512b68c757e9e4f461427e865"
+    },
+    {
+      "path": "docs/ACCEPTANCE_TESTS.md",
+      "size": 1874,
+      "sha256": "247326eb326c9617d8865777437a4517e4534cf3dc18d7fdb7a877161f1bfe9a"
+    },
+    {
+      "path": "docs/ANDROID_BUILD.md",
+      "size": 1189,
+      "sha256": "8335a3a05b537913ffd9e00a1a0a9533792e35128f854662a0a8dc0b55543a0e"
+    },
+    {
+      "path": "docs/DECISIONS_AND_REQUIREMENTS.md",
+      "size": 10407,
+      "sha256": "d3b7a2662f199031095b179376b35280c3b2ba154ab9f1da6596889f1cecd926"
+    },
+    {
+      "path": "docs/INSTALLATION.md",
+      "size": 1131,
+      "sha256": "396fb0181dd8b9627ec90361399326cca051d0851b75e9b8eec41487401a6d37"
+    },
+    {
+      "path": "docs/STATUS.md",
+      "size": 2689,
+      "sha256": "5baaced05d077fa713659212c6a19c3253908eb1ec97a0697894cf33d7a496f6"
+    },
+    {
+      "path": "infrastructure/.env.example",
+      "size": 195,
+      "sha256": "e2d612d8e025646d6f31579971f583b1ba70f3a8a3eaea3bed1230013d0de7f0"
+    },
+    {
+      "path": "infrastructure/docker-compose.yml",
+      "size": 975,
+      "sha256": "4a825ef5cc718ee5651bfef1d96d6a163cba3069c4134432952337807c2db0c2"
+    },
+    {
+      "path": "infrastructure/nginx-vexa.conf.example",
+      "size": 405,
+      "sha256": "4b34fc040c88d436202e27d766c57a9acf70850ae703b3b2d967c827e23dc5ba"
+    }
+  ]
+}
