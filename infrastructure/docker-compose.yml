@@ -13,25 +13,38 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redisdata:/data
     restart: unless-stopped
+
   api:
-    build: ../backend
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     ports:
-      - "http://127.0.0.1:${API_PORT:-8000}:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started
     restart: unless-stopped
+
+  dispatcher:
+    build:
+      context: ../dispatcher
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8081:80"
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:
