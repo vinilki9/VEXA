@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "vite --host 109.120.184.20",
+    "dev": "vite --host https://109.120.184.20",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
