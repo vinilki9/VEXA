@@ -1,0 +1,43 @@
+name: Deploy VEXA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vexa-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure the restricted deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.VEXA_DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ vars.VEXA_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.VEXA_DEPLOY_PORT }}
+        run: |
+          set -eu
+          test -n "$DEPLOY_KEY"
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_PORT"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+      - name: Send the commit and deploy it
+        env:
+          DEPLOY_HOST: ${{ vars.VEXA_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.VEXA_DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          git archive --format=tar "$GITHUB_SHA" | gzip -n | \
+            ssh -i ~/.ssh/id_ed25519 -p "$DEPLOY_PORT" \
+              -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              vexa-deploy@"$DEPLOY_HOST" "deploy $GITHUB_SHA"
