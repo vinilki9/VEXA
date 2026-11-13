@@ -20,13 +20,13 @@ function App(){
     <article><label>Заказы сегодня</label><strong>248</strong><small className="positive">+12,8% к вчера</small></article>
     <article><label>Водители на линии</label><strong>86</strong><small>из 112 активных</small></article>
     <article><label>Среднее ожидание</label><strong>4,2 <em>мин</em></strong><small className="positive">−0,6 мин</small></article>
-    <article><label>Оборот сегодня</label><strong>186 420 <em>₽</em></strong><small>демонстрационные данные</small></article>
+    <article><label>Оборот сегодня</label><strong>186 420 <em>₽</em></strong><small>данные</small></article>
    </section>
    <section className="content">
     <article className="mapcard"><div className="cardhead"><div><h2>Карта города</h2><p>Положение автомобилей и активные заказы</p></div><span className="live"><i/> LIVE DEMO</span></div>
      <div className="maparea"><div className="road r1"/><div className="road r2"/><div className="road r3"/><div className="river"/><span className="district d1">ЦЕНТР</span><span className="district d2">СЕВЕР</span><span className="district d3">ВОСТОК</span>{Array.from({length:13},(_,i)=><span key={i} className="car" style={{left:`${12+(i*23)%78}%`,top:`${18+(i*31)%68}%`}}>⌖</span>)}<div className="maplegend"><span><i className="tealbg"/>На линии</span><span><i className="bluebg"/>Заказ</span></div></div>
     </article>
-    <article className="orders"><div className="cardhead"><div><h2>Последние заказы</h2><p>Список демонстрационных заказов</p></div><button>Все заказы</button></div>
+    <article className="orders"><div className="cardhead"><div><h2>Последние заказы</h2><p>Список заказов</p></div><button>Все заказы</button></div>
      {orders.map(o=><div className="order" key={o[0]}><div className="ordericon"><CarFront/></div><div className="orderinfo"><b>{o[0]}</b><span>{o[1]}</span><small>{o[2]}</small></div><span className={`status ${o[4]}`}>{o[3]}</span></div>)}
     </article>
    </section>
