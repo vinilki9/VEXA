@@ -210,8 +210,8 @@ class DriverProfile(Base):
     city_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("cities.id"), nullable=False, index=True
     )
-    branch_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("branches.id")
+branch_id: Mapped[uuid.UUID | None] = mapped_column(
+Uuid(as_uuid=True), ForeignKey("branches.id")
     )
     rating: Mapped[float] = mapped_column(
         Numeric(3, 2), default=5.00, nullable=False
