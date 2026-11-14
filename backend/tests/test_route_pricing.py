@@ -45,14 +45,11 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
         self.assertEqual(result.provider_name, "osrm")
         self.assertEqual(result.route.distance_meters, Decimal("2500"))
         self.assertEqual(result.route.duration_seconds, Decimal("600"))
-
         self.assertEqual(result.fare.base_price_kopecks, 5000)
         self.assertEqual(result.fare.distance_price_kopecks, 5000)
         self.assertEqual(result.fare.time_price_kopecks, 1000)
         self.assertEqual(result.fare.anonymous_surcharge_kopecks, 10000)
         self.assertEqual(result.fare.total_price_kopecks, 21000)
-        get_provider.assert_called_once()
-        provider.get_route.assert_called_once()
         get_provider.assert_called_once_with(
             provider_name="osrm",
             osrm_base_url="http://localhost:5000",
@@ -171,8 +168,5 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
             result.fare.total_price_kopecks,
             11000,
         )
-
-
-
 if __name__ == "__main__":
     unittest.main()
