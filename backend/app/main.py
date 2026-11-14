@@ -56,6 +56,7 @@ def order_to_response(order: Order, city: City) -> dict:
         "id": order.id,
         "public_number": order.public_number,
         "city_id": order.city_id,
+        "branch_id": order.branch_id,
         "city_code": city.code,
         "passenger_user_id": order.passenger_user_id,
         "driver_user_id": order.driver_user_id,
