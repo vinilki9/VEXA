@@ -100,13 +100,16 @@ class TokenResponse(APIModel):
     token_type: str = "bearer"
 
 
+
 class DispatcherResponse(APIModel):
     # UUID пользователя из таблицы users.
     id: UUID
     username: str
     is_active: bool
     role: str
+    branch_id: UUID | None = None
     created_at: datetime
+
 
 
 # ------------------------------------------------------------
