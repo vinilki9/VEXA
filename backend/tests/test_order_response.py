@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
 
+from app.main import order_to_response
 from app.schemas import OrderResponse
 
 
@@ -14,32 +15,50 @@ class OrderResponseSerializationTests(unittest.TestCase):
             "id": uuid4(),
             "public_number": "VEXA-OB-000125",
             "city_id": uuid4(),
-            "city_code": "obolensk",
+            "tariff_id": uuid4(),
+            "branch_id": uuid4(),
+            "passenger_user_id": None,
+            "driver_user_id": None,
+            "vehicle_id": None,
+            "customer_name": "Иван",
             "customer_phone": "+79990000000",
             "anonymous": False,
             "pickup_address": "Оболенск, улица Ленина, 1",
             "destination_address": "Оболенск, улица Центральная, 5",
-            "status": "new",
-            "payment_method": "cash",
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
+            "pickup_latitude": 54.9,
+            "pickup_longitude": 37.2,
+            "destination_latitude": 54.91,
+            "destination_longitude": 37.21,
             "route_distance_meters": 2500,
             "route_duration_seconds": 600,
             "routing_provider": "osrm",
+            "status": "new",
+            "payment_method": "cash",
+            "price_rub": 210,
+            "price_kopecks": 21000,
+            "comment": None,
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
         }
         data.update(overrides)
         return SimpleNamespace(**data)
 
     def test_route_metadata_is_preserved_in_json_response(self):
         order = self.make_order()
+        city = SimpleNamespace(
+            id=order.city_id,
+            code="obolensk",
+        )
 
-        response = OrderResponse.model_validate(order)
+        payload = order_to_response(order, city)
+        response = OrderResponse.model_validate(payload)
         result = json.loads(response.model_dump_json())
 
         self.assertEqual(result["route_distance_meters"], 2500)
         self.assertEqual(result["route_duration_seconds"], 600)
         self.assertEqual(result["routing_provider"], "osrm")
         self.assertEqual(result["public_number"], "VEXA-OB-000125")
+        self.assertEqual(result["price_kopecks"], 21000)
 
     def test_missing_route_metadata_is_serialized_as_null(self):
         order = self.make_order(
@@ -47,8 +66,13 @@ class OrderResponseSerializationTests(unittest.TestCase):
             route_duration_seconds=None,
             routing_provider=None,
         )
+        city = SimpleNamespace(
+            id=order.city_id,
+            code="obolensk",
+        )
 
-        response = OrderResponse.model_validate(order)
+        payload = order_to_response(order, city)
+        response = OrderResponse.model_validate(payload)
         result = json.loads(response.model_dump_json())
 
         self.assertIsNone(result["route_distance_meters"])
