@@ -362,19 +362,22 @@ def dispatcher_login(
     "/api/v1/dispatch/auth/me",
     response_model=DispatcherResponse,
 )
+
 def dispatcher_me(
     user: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    profile = db.get(DispatcherProfile, user.id)
+    profile = get_dispatcher_profile(db, user)
 
     return {
         "id": user.id,
         "username": user.username,
         "is_active": user.is_active and profile.is_active,
         "role": profile.role,
+        "branch_id": profile.branch_id,
         "created_at": user.created_at,
     }
+
 
 
 @app.get(
