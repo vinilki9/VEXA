@@ -365,15 +365,17 @@ def create_order(
             detail="Не удалось рассчитать маршрут. Попробуйте позже.",
         ) from exc
 
-total_kopecks = route_pricing.fare.total_price_kopecks
-route_distance_meters = int(
-    route_pricing.route.distance_meters.to_integral_value()
-)
-route_duration_seconds = int(
-    route_pricing.route.duration_seconds.to_integral_value()
-)
+    total_kopecks = route_pricing.fare.total_price_kopecks
+    route_distance_meters = int(
+        route_pricing.route.distance_meters.to_integral_value()
+    )
+    route_duration_seconds = int(
+        route_pricing.route.duration_seconds.to_integral_value()
+    )
+
     # Округление до целого рубля для совместимости
     # с прежним полем price_rub.
+    total_rubles = (total_kopecks + 50) // 100
     total_rubles = (total_kopecks + 50) // 100
 
     order = Order(
