@@ -506,6 +506,36 @@ class Order(Base):
             "price_kopecks IS NULL OR price_kopecks >= 0",
             name="orders_price_kopecks_nonnegative",
         ),
+        CheckConstraint(
+            """
+            (
+            fare_base_price_kopecks IS NULL
+            AND fare_distance_price_kopecks IS NULL
+            AND fare_time_price_kopecks IS NULL
+            AND fare_limit_adjustment_kopecks IS NULL
+            AND anonymous_surcharge_kopecks IS NULL
+            )
+            OR
+            (
+            fare_base_price_kopecks IS NOT NULL
+            AND fare_distance_price_kopecks IS NOT NULL
+            AND fare_time_price_kopecks IS NOT NULL
+            AND fare_limit_adjustment_kopecks IS NOT NULL
+            AND anonymous_surcharge_kopecks IS NOT NULL
+            AND fare_base_price_kopecks >= 0
+            AND fare_distance_price_kopecks >= 0
+            AND fare_time_price_kopecks >= 0
+            AND anonymous_surcharge_kopecks >= 0
+            AND price_kopecks =
+            fare_base_price_kopecks
+            + fare_distance_price_kopecks
+            + fare_time_price_kopecks
+            + fare_limit_adjustment_kopecks
+            + anonymous_surcharge_kopecks
+            )
+            """,
+                    name="orders_fare_breakdown_consistent",
+                ),
         Index(
             "ix_orders_city_status_created",
             "city_id",
@@ -631,7 +661,31 @@ class Order(Base):
         Integer,
         nullable=True,
     )
+    # Неизменяемый снимок расчёта стоимости заказа.
+    fare_base_price_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
 
+    fare_distance_price_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    fare_time_price_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    fare_limit_adjustment_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    anonymous_surcharge_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
     comment: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
