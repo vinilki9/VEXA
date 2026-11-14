@@ -78,12 +78,7 @@ class CityOrderCounter(Base):
         ForeignKey("cities.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    tariff_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("tariffs.id"),
-        nullable=True,
-        index=True,
-    )
+
     last_number: Mapped[int] = mapped_column(
         Integer,
         default=0,
@@ -321,6 +316,12 @@ class Order(Base):
             "idempotency_key",
             name="uq_orders_city_idempotency",
         ),
+    tariff_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("tariffs.id"),
+        nullable=True,
+        index=True,
+    )
         UniqueConstraint("public_number", name="uq_orders_public_number"),
         CheckConstraint(
             "price_rub IS NULL OR price_rub >= 0",
