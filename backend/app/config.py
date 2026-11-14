@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     secret_key: str = "CHANGE_ME_BEFORE_DEPLOYMENT"
 
     access_token_minutes: int = Field(default=60, gt=0)
+    osrm_base_url: str = ""
+    osrm_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
 
     default_city_id: str = "obolensk"
 
