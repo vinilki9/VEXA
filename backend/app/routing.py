@@ -72,8 +72,8 @@ def get_driving_route(
         with urlopen(url, timeout=timeout_seconds) as response:
             payload = json.loads(response.read().decode("utf-8"))
 
-    except (URLError, TimeoutError, OSError) as exc:
-        raise RoutingError("OSRM service is unavailable") from exc
+except (URLError, TimeoutError, OSError, HTTPException) as exc:
+    raise RoutingError("OSRM service is unavailable") from exc
 
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RoutingError("OSRM returned invalid data") from exc
@@ -87,7 +87,8 @@ def get_driving_route(
         raise RoutingError("OSRM returned no routes")
 
     route = routes[0]
-
+if not isinstance(route, dict):
+    raise RoutingError("OSRM returned invalid route structure")
     try:
         distance = Decimal(str(route["distance"]))
         duration = Decimal(str(route["duration"]))
