@@ -9,6 +9,9 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.routing import RoutingError
+from app.route_pricing import calculate_order_route_price
+
 from app.config import settings
 from app.database import get_db
 from app.models import (
@@ -250,6 +253,12 @@ def get_tariffs(
     response_model=OrderResponse,
     status_code=201,
 )
+
+@app.post(
+    "/api/v1/orders",
+    response_model=OrderResponse,
+    status_code=201,
+)
 def create_order(
     payload: OrderCreate,
     idempotency_key: str = Header(
@@ -270,7 +279,8 @@ def create_order(
     if city is None:
         raise HTTPException(400, "City is not enabled")
 
-    # Повторный запрос с тем же ключом не создаёт новый заказ.
+    # Повторный запрос не создаёт новый заказ
+    # и не запускает повторный расчёт маршрута.
     existing = db.scalar(
         select(Order).where(
             Order.city_id == city.id,
@@ -284,7 +294,7 @@ def create_order(
     if payload.tariff_id is None:
         raise HTTPException(
             status_code=400,
-            detail="Перед созданием заказа необходимо выбрать тариф",
+            detail="Необходимо выбрать тариф",
         )
 
     selected_tariff = db.scalar(
@@ -327,6 +337,45 @@ def create_order(
         or not (payload.customer_name or "").strip()
     )
 
+    # Для автоматического расчёта нужны все координаты.
+    coordinates = (
+        payload.pickup_latitude,
+        payload.pickup_longitude,
+        payload.destination_latitude,
+        payload.destination_longitude,
+    )
+
+    if any(value is None for value in coordinates):
+        raise HTTPException(
+            status_code=400,
+            detail="Для расчёта стоимости необходимы координаты подачи и назначения",
+        )
+
+    # Расстояние, время и стоимость определяются только сервером.
+    try:
+        route_pricing = calculate_order_route_price(
+            pickup_latitude=payload.pickup_latitude,
+            pickup_longitude=payload.pickup_longitude,
+            destination_latitude=payload.destination_latitude,
+            destination_longitude=payload.destination_longitude,
+            base_price_kopecks=selected_tariff.base_price_kopecks,
+            price_per_km_kopecks=selected_tariff.price_per_km_kopecks,
+            price_per_minute_kopecks=selected_tariff.price_per_minute_kopecks,
+            anonymous=is_anonymous,
+        )
+
+    except RoutingError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Не удалось рассчитать маршрут. Попробуйте позже.",
+        ) from exc
+
+    total_kopecks = route_pricing.fare.total_price_kopecks
+
+    # Округление до целого рубля для совместимости
+    # с прежним полем price_rub.
+    total_rubles = (total_kopecks + 50) // 100
+
     order = Order(
         public_number=next_order_number(db, city),
         city_id=city.id,
@@ -347,9 +396,8 @@ def create_order(
         destination_longitude=payload.destination_longitude,
         status="new",
         payment_method=payload.payment_method,
-        # Стоимость пока не рассчитывается по данным клиента.
-        price_rub=None,
-        price_kopecks=None,
+        price_rub=total_rubles,
+        price_kopecks=total_kopecks,
         comment=payload.comment,
         idempotency_key=idempotency_key,
     )
@@ -375,10 +423,11 @@ def create_order(
 
         raise HTTPException(
             status_code=409,
-            detail="Could not create order",
+            detail="Не удалось создать заказ",
         )
 
     return order_to_response(order, city)
+
 
 @app.post(
     "/api/v1/dispatch/auth/login",
