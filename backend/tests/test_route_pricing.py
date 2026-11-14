@@ -54,6 +54,20 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
 
         get_provider.assert_called_once()
         provider.get_route.assert_called_once()
+        get_provider.assert_called_once_with(
+    provider_name="osrm",
+    osrm_base_url="http://localhost:5000",
+    timeout_seconds=8.0,
+    two_gis_api_key="",
+    yandex_api_key="",
+)
+
+provider.get_route.assert_called_once_with(
+    pickup_latitude=54.9,
+    pickup_longitude=37.2,
+    destination_latitude=54.91,
+    destination_longitude=37.21,
+)
 
     @patch("app.route_pricing.get_routing_provider")
     @patch(
@@ -117,6 +131,49 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
                 price_per_minute_kopecks=100,
                 anonymous=False,
             )
+
+    @patch("app.route_pricing.get_routing_provider")
+    @patch(
+        "app.route_pricing.settings",
+        SimpleNamespace(
+            routing_provider="osrm",
+            osrm_base_url="http://localhost:5000",
+            routing_timeout_seconds=8.0,
+            two_gis_api_key="",
+            yandex_api_key="",
+        ),
+    )
+    def test_calculates_fare_without_anonymous_surcharge(
+        self,
+        get_provider,
+    ):
+        provider = Mock()
+        provider.get_route.return_value = RouteResult(
+            distance_meters=Decimal("2500"),
+            duration_seconds=Decimal("600"),
+        )
+        get_provider.return_value = provider
+
+        result = calculate_order_route_price(
+            pickup_latitude=54.9,
+            pickup_longitude=37.2,
+            destination_latitude=54.91,
+            destination_longitude=37.21,
+            base_price_kopecks=5000,
+            price_per_km_kopecks=2000,
+            price_per_minute_kopecks=100,
+            anonymous=False,
+        )
+
+        self.assertEqual(
+            result.fare.anonymous_surcharge_kopecks,
+            0,
+        )
+        self.assertEqual(
+            result.fare.total_price_kopecks,
+            11000,
+        )
+
 
 
 if __name__ == "__main__":
