@@ -4,13 +4,19 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.main import create_order
-from app.models import Branch, City, Order, Tariff
+from app.models import (
+    Branch,
+    City,
+    CityOrderCounter,
+    Order,
+    Tariff,
+)
 from app.schemas import OrderCreate
 from app.routing import RouteResult
 
@@ -37,7 +43,12 @@ class OrderIdempotencyTests(unittest.TestCase):
 
     def setUp(self):
         self.db = self.Session()
-
+        self.db.execute(delete(Order))
+        self.db.execute(delete(CityOrderCounter))
+        self.db.execute(delete(Tariff))
+        self.db.execute(delete(Branch))
+        self.db.execute(delete(City))
+        self.db.commit()
         self.city = City(
             code="obolensk",
             name="Оболенск",
@@ -139,6 +150,56 @@ class OrderIdempotencyTests(unittest.TestCase):
         )
 
         calculate_route.assert_called_once()
+
+    @patch("app.main.calculate_order_route_price")
+    def test_different_keys_create_separate_orders(
+        self,
+        calculate_route,
+    ):
+        calculate_route.return_value = SimpleNamespace(
+            route=RouteResult(
+                distance_meters=Decimal("2500"),
+                duration_seconds=Decimal("600"),
+            ),
+            fare=SimpleNamespace(
+                total_price_kopecks=21000,
+            ),
+            provider_name="osrm",
+        )
+
+        first_response = create_order(
+            payload=self.payload,
+            idempotency_key="vexa-test-order-002",
+            db=self.db,
+        )
+
+        second_response = create_order(
+            payload=self.payload,
+            idempotency_key="vexa-test-order-003",
+            db=self.db,
+        )
+
+        order_count = self.db.scalar(
+            select(func.count()).select_from(Order)
+        )
+
+        self.assertNotEqual(
+            first_response["id"],
+            second_response["id"],
+        )
+        self.assertEqual(order_count, 2)
+
+        self.assertEqual(
+            first_response["price_kopecks"],
+            21000,
+        )
+        self.assertEqual(
+            second_response["price_kopecks"],
+            21000,
+        )
+
+        calculate_route.assert_called()
+        self.assertEqual(calculate_route.call_count, 2)
 
 
 if __name__ == "__main__":
