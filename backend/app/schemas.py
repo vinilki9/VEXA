@@ -25,7 +25,7 @@ class APIModel(BaseModel):
 class OrderCreate(APIModel):
     # Публичный код города, не UUID из таблицы cities.
     city_code: str = Field(default="obolensk", min_length=1, max_length=80)
-
+    tariff_id: UUID | None = None
     customer_name: str | None = Field(default=None, max_length=120)
     customer_phone: str = Field(min_length=5, max_length=40)
 
@@ -55,6 +55,7 @@ class OrderResponse(APIModel):
 
     # UUID города в базе данных.
     city_id: UUID
+    tariff_id: UUID | None = None
     branch_id: UUID | None = None
     city_code: str
 
