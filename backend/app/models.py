@@ -185,11 +185,9 @@ class Tariff(Base):
         ),
         CheckConstraint(
             "minimum_fare_kopecks IS NULL OR minimum_fare_kopecks >= 0",
-            name="tariffs_minimum_fare_nonnegative",
         ),
         CheckConstraint(
             "maximum_fare_kopecks IS NULL OR maximum_fare_kopecks >= 0",
-            name="tariffs_maximum_fare_nonnegative",
         ),
         CheckConstraint(
             """
@@ -197,7 +195,6 @@ class Tariff(Base):
             OR maximum_fare_kopecks IS NULL
             OR maximum_fare_kopecks >= minimum_fare_kopecks
             """,
-            name="tariffs_maximum_fare_gte_minimum",
         ),
     )
 
