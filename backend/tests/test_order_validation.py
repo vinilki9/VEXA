@@ -229,5 +229,91 @@ class OrderValidationTests(unittest.TestCase):
         self.assertEqual(order.route_duration_seconds, 600)
         self.assertEqual(order.routing_provider, "osrm")
 
+    @patch("app.main.calculate_order_route_price")
+    def test_client_price_is_ignored(self, calculate_route):
+        calculate_route.return_value = SimpleNamespace(
+            route=RouteResult(
+                distance_meters=Decimal("2500"),
+                duration_seconds=Decimal("600"),
+            ),
+            fare=SimpleNamespace(
+                total_price_kopecks=21000,
+            ),
+            provider_name="osrm",
+        )
+
+        payload = self.payload.model_copy(
+            update={"price_rub": 1}
+        )
+
+        order = create_order(
+            payload=payload,
+            idempotency_key="vexa-client-price-test",
+            db=self.db,
+        )
+
+        self.assertEqual(order.price_kopecks, 21000)
+        self.assertEqual(order.price_rub, 210)
+
+    @patch("app.main.calculate_order_route_price")
+    def test_missing_customer_name_enables_anonymous_surcharge(
+        self,
+        calculate_route,
+    ):
+        calculate_route.return_value = SimpleNamespace(
+            route=RouteResult(
+                distance_meters=Decimal("2500"),
+                duration_seconds=Decimal("600"),
+            ),
+            fare=SimpleNamespace(
+                total_price_kopecks=21000,
+            ),
+            provider_name="osrm",
+        )
+
+        payload = self.payload.model_copy(
+            update={
+                "customer_name": None,
+                "anonymous": False,
+            }
+        )
+
+        order = create_order(
+            payload=payload,
+            idempotency_key="vexa-anonymous-test",
+            db=self.db,
+        )
+
+        self.assertTrue(order.anonymous)
+        self.assertIsNone(order.customer_name)
+
+        self.assertEqual(
+            calculate_route.call_args.kwargs["anonymous"],
+            True,
+        )
+
+    @patch("app.main.calculate_order_route_price")
+    def test_routing_failure_does_not_create_order(
+        self,
+        calculate_route,
+    ):
+        from app.routing import RoutingError
+
+        calculate_route.side_effect = RoutingError(
+            "Routing service unavailable"
+        )
+
+        with self.assertRaises(HTTPException) as context:
+            create_order(
+                payload=self.payload,
+                idempotency_key="vexa-routing-failure-test",
+                db=self.db,
+            )
+
+        self.assertEqual(context.exception.status_code, 503)
+
+        order_count = self.db.query(Order).count()
+        self.assertEqual(order_count, 0)
+
 if __name__ == "__main__":
     unittest.main()
