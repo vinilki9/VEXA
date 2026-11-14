@@ -33,6 +33,18 @@ def calculate_fare(
     if price_per_minute_kopecks < 0:
         raise ValueError("Time price cannot be negative")
 
+    if (
+        not isinstance(distance_km, Decimal)
+        or not distance_km.is_finite()
+    ):
+        raise ValueError("Distance must be a finite Decimal")
+
+    if (
+        not isinstance(duration_minutes, Decimal)
+        or not duration_minutes.is_finite()
+    ):
+        raise ValueError("Duration must be a finite Decimal")
+
     if distance_km < 0 or duration_minutes < 0:
         raise ValueError("Route values cannot be negative")
 
