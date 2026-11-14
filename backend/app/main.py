@@ -233,6 +233,7 @@ def get_tariffs(
             {
                 "id": tariff.id,
                 "name": tariff.name,
+                "vehicle_class": tariff.vehicle_class,
                 "base_price_kopecks": tariff.base_price_kopecks,
                 "price_per_km_kopecks": tariff.price_per_km_kopecks,
                 "price_per_minute_kopecks": tariff.price_per_minute_kopecks,
