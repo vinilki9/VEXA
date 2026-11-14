@@ -6,7 +6,7 @@ from math import isfinite
 from urllib.error import URLError
 from urllib.request import urlopen
 from urllib.parse import urlencode
-
+from http.client import HTTPException
 
 class RoutingError(Exception):
     """Ошибка получения автомобильного маршрута."""
