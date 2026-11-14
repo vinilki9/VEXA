@@ -26,7 +26,10 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      DEFAULT_CITY_ID: ${DEFAULT_CITY_ID:-obolensk}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
@@ -42,7 +45,7 @@ services:
       context: ../dispatcher
       dockerfile: Dockerfile
     ports:
-      - "127.0.0.1:8081:80"
+      - "127.0.0.1:${DISPATCHER_PORT:-8081}:80"
     restart: unless-stopped
 
 volumes:
