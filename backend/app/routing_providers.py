@@ -1,7 +1,5 @@
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from decimal import Decimal
 
 from app.routing import (
     RouteResult,
@@ -10,25 +8,22 @@ from app.routing import (
 )
 
 
-@dataclass(frozen=True)
-class RouteRequest:
-    pickup_latitude: float
-    pickup_longitude: float
-    destination_latitude: float
-    destination_longitude: float
-
-
 class RoutingProvider(ABC):
-    """Общий интерфейс поставщиков маршрутизации VEXA."""
+    """Единый интерфейс маршрутизации VEXA."""
 
     @abstractmethod
-    def get_route(self, request: RouteRequest) -> RouteResult:
-        """Возвращает расстояние и время автомобильного маршрута."""
+    def get_route(
+        self,
+        pickup_latitude: float,
+        pickup_longitude: float,
+        destination_latitude: float,
+        destination_longitude: float,
+    ) -> RouteResult:
         raise NotImplementedError
 
 
 class OSRMProvider(RoutingProvider):
-    """Рабочий поставщик маршрутов OSRM."""
+    """Рабочая маршрутизация OSRM."""
 
     def __init__(
         self,
@@ -38,25 +33,25 @@ class OSRMProvider(RoutingProvider):
         self.base_url = base_url
         self.timeout_seconds = timeout_seconds
 
-    def get_route(self, request: RouteRequest) -> RouteResult:
+    def get_route(
+        self,
+        pickup_latitude: float,
+        pickup_longitude: float,
+        destination_latitude: float,
+        destination_longitude: float,
+    ) -> RouteResult:
         return get_driving_route(
             base_url=self.base_url,
-            pickup_latitude=request.pickup_latitude,
-            pickup_longitude=request.pickup_longitude,
-            destination_latitude=request.destination_latitude,
-            destination_longitude=request.destination_longitude,
+            pickup_latitude=pickup_latitude,
+            pickup_longitude=pickup_longitude,
+            destination_latitude=destination_latitude,
+            destination_longitude=destination_longitude,
             timeout_seconds=self.timeout_seconds,
         )
 
 
 class TwoGISProvider(RoutingProvider):
-    """
-    Адаптер 2ГИС.
-
-    Интерфейс совместим с OSRM.
-    Реальный HTTP-запрос к API 2ГИС будет добавлен
-    после настройки API-ключа и параметров API.
-    """
+    """Адаптер для будущей интеграции API 2ГИС."""
 
     def __init__(
         self,
@@ -66,15 +61,48 @@ class TwoGISProvider(RoutingProvider):
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
 
-    def get_route(self, request: RouteRequest) -> RouteResult:
+    def get_route(
+        self,
+        pickup_latitude: float,
+        pickup_longitude: float,
+        destination_latitude: float,
+        destination_longitude: float,
+    ) -> RouteResult:
         if not self.api_key.strip():
             raise RoutingError(
                 "Для подключения 2ГИС необходим API-ключ"
             )
 
         raise RoutingError(
-            "Провайдер 2ГИС пока не настроен. "
-            "Используйте OSRM до завершения интеграции."
+            "Интеграция API 2ГИС ещё не завершена"
+        )
+
+
+class YandexProvider(RoutingProvider):
+    """Адаптер для будущей интеграции Яндекс Маршрутизации."""
+
+    def __init__(
+        self,
+        api_key: str,
+        timeout_seconds: float = 8.0,
+    ) -> None:
+        self.api_key = api_key
+        self.timeout_seconds = timeout_seconds
+
+    def get_route(
+        self,
+        pickup_latitude: float,
+        pickup_longitude: float,
+        destination_latitude: float,
+        destination_longitude: float,
+    ) -> RouteResult:
+        if not self.api_key.strip():
+            raise RoutingError(
+                "Для подключения Яндекса необходим API-ключ"
+            )
+
+        raise RoutingError(
+            "Интеграция API Яндекса ещё не завершена"
         )
 
 
@@ -82,18 +110,11 @@ def get_routing_provider(
     *,
     provider_name: str,
     osrm_base_url: str,
-    osrm_timeout_seconds: float = 8.0,
+    timeout_seconds: float = 8.0,
     two_gis_api_key: str = "",
+    yandex_api_key: str = "",
 ) -> RoutingProvider:
-    """
-    Выбирает поставщика маршрутизации по настройке сервера.
-
-    Допустимые значения:
-    - osrm
-    - 2gis
-
-    Переключение не требует изменения приложений.
-    """
+    """Выбирает поставщика маршрутов по настройке сервера."""
 
     provider = provider_name.strip().lower()
 
@@ -105,13 +126,19 @@ def get_routing_provider(
 
         return OSRMProvider(
             base_url=osrm_base_url,
-            timeout_seconds=osrm_timeout_seconds,
+            timeout_seconds=timeout_seconds,
         )
 
     if provider in {"2gis", "two_gis", "2гис"}:
         return TwoGISProvider(
             api_key=two_gis_api_key,
-            timeout_seconds=osrm_timeout_seconds,
+            timeout_seconds=timeout_seconds,
+        )
+
+    if provider in {"yandex", "yandex_maps", "яндекс"}:
+        return YandexProvider(
+            api_key=yandex_api_key,
+            timeout_seconds=timeout_seconds,
         )
 
     raise RoutingError(
