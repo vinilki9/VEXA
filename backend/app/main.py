@@ -381,28 +381,46 @@ def dispatcher_me(
     "/api/v1/dispatch/orders",
     response_model=list[OrderResponse],
 )
+
 def list_orders(
     city_code: str = "obolensk",
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    city = db.scalar(
-        select(City).where(
-            City.code == city_code,
-            City.is_active.is_(True),
+    profile = get_dispatcher_profile(db, dispatcher)
+
+    query = select(Order).order_by(Order.created_at.desc())
+
+    if profile.role == "dispatcher":
+        query = query.where(
+            Order.branch_id == profile.branch_id
         )
-    )
+    elif profile.role == "chief_dispatcher":
+        if city_code:
+            city = db.scalar(
+                select(City).where(
+                    City.code == city_code,
+                    City.is_active.is_(True),
+                )
+            )
 
-    if city is None:
-        raise HTTPException(404, "City is not enabled")
+            if city is None:
+                raise HTTPException(404, "City is not enabled")
 
-    orders = db.scalars(
-        select(Order)
-        .where(Order.city_id == city.id)
-        .order_by(Order.created_at.desc())
-    ).all()
+            query = query.where(Order.city_id == city.id)
 
-    return [order_to_response(order, city) for order in orders]
+    orders = db.scalars(query).all()
+
+    result = []
+
+    for order in orders:
+        city = db.get(City, order.city_id)
+
+        if city is not None:
+            result.append(order_to_response(order, city))
+
+    return result
+
 
 
 @app.patch(
