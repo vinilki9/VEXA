@@ -697,3 +697,70 @@ class OrderStatusHistory(Base):
         default=now_utc,
         nullable=False,
     )
+# ============================================================
+# TARIFF CHANGE HISTORY
+# Неизменяемый журнал изменений тарифов
+# ============================================================
+
+class TariffChangeHistory(Base):
+    __tablename__ = "tariff_change_history"
+
+    __table_args__ = (
+        Index(
+            "ix_tariff_history_city_changed",
+            "city_id",
+            "changed_at",
+        ),
+        Index(
+            "ix_tariff_history_tariff_changed",
+            "tariff_id",
+            "changed_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    tariff_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("tariffs.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    city_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("cities.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    changed_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    action: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    old_values: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    new_values: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=False,
+    )
+
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+        index=True,
+    )
