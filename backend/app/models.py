@@ -111,12 +111,7 @@ class Branch(Base):
         DateTime(timezone=True), default=now_utc, nullable=False
     )
 
-    branch_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("branches.id"),
-        nullable=True,
-        index=True,
-    )
+
 
 
 class CitySetting(Base):
@@ -338,6 +333,12 @@ class Order(Base):
     )
     city_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("cities.id"), nullable=False, index=True
+    )
+        branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("branches.id"),
+        nullable=True,
+        index=True,
     )
     passenger_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("passenger_profiles.user_id")
