@@ -322,6 +322,10 @@ def create_order(
     order = Order(
         public_number=next_order_number(db, city),
         city_id=city.id,
+        tariff_id=(selected_tariff.id
+            if selected_tariff is not None
+            else None
+        ),
         branch_id=selected_branch.id,
         customer_name=(
             None
