@@ -142,10 +142,8 @@ class Tariff(Base):
         Uuid(as_uuid=True), ForeignKey("cities.id"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-        vehicle_class: Mapped[str] = mapped_column(
-        String(40),
-        default="standard",
-        nullable=False,
+    vehicle_class: Mapped[str] = mapped_column(
+        String(40),default="standard",nullable=False,
     )
     base_price_kopecks: Mapped[int] = mapped_column(Integer, default=0)
     price_per_km_kopecks: Mapped[int] = mapped_column(Integer, default=0)
