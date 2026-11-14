@@ -329,7 +329,7 @@ class Order(Base):
         Uuid(as_uuid=True), primary_key=True, default=new_uuid
     )
     public_number: Mapped[str] = mapped_column(
-        String(40), unique=True, nullable=False, index=True
+        String(40), nullable=False
     )
     city_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("cities.id"), nullable=False, index=True
