@@ -244,6 +244,7 @@ def get_tariffs(
     }
 
 
+
 @app.post(
     "/api/v1/orders",
     response_model=OrderResponse,
@@ -265,33 +266,11 @@ def create_order(
             City.is_active.is_(True),
         )
     )
+
     if city is None:
         raise HTTPException(400, "City is not enabled")
-        if payload.tariff_id is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Перед созданием заказа необходимо выбрать тариф",
-            )
-            selected_tariff = db.scalar(
-                select(Tariff).where(
-                    Tariff.id == payload.tariff_id,
-                    Tariff.city_id == city.id,
-                    Tariff.is_active.is_(True),
-                )
-            )
 
-if selected_tariff is None:
-    raise HTTPException(
-        status_code=400,
-        detail="Выбранный тариф не найден или неактивен",
-    )
-        )
-
-if selected_tariff is None:
-    raise HTTPException(
-        status_code=400,
-        detail="Выбранный тариф не найден или неактивен",
-            )
+    # Повторный запрос с тем же ключом не создаёт новый заказ.
     existing = db.scalar(
         select(Order).where(
             Order.city_id == city.id,
@@ -299,8 +278,29 @@ if selected_tariff is None:
         )
     )
 
-    if existing:
+    if existing is not None:
         return order_to_response(existing, city)
+
+    if payload.tariff_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Перед созданием заказа необходимо выбрать тариф",
+        )
+
+    selected_tariff = db.scalar(
+        select(Tariff).where(
+            Tariff.id == payload.tariff_id,
+            Tariff.city_id == city.id,
+            Tariff.is_active.is_(True),
+        )
+    )
+
+    if selected_tariff is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Выбранный тариф не найден или неактивен",
+        )
+
     branches = db.scalars(
         select(Branch).where(
             Branch.city_id == city.id,
@@ -330,10 +330,7 @@ if selected_tariff is None:
     order = Order(
         public_number=next_order_number(db, city),
         city_id=city.id,
-        tariff_id=(selected_tariff.id
-            if selected_tariff is not None
-            else None
-        ),
+        tariff_id=selected_tariff.id,
         branch_id=selected_branch.id,
         customer_name=(
             None
@@ -350,7 +347,7 @@ if selected_tariff is None:
         destination_longitude=payload.destination_longitude,
         status="new",
         payment_method=payload.payment_method,
-        # Цена от клиента не считается доверенной.
+        # Стоимость пока не рассчитывается по данным клиента.
         price_rub=None,
         price_kopecks=None,
         comment=payload.comment,
@@ -362,6 +359,7 @@ if selected_tariff is None:
     try:
         db.commit()
         db.refresh(order)
+
     except IntegrityError:
         db.rollback()
 
@@ -372,13 +370,15 @@ if selected_tariff is None:
             )
         )
 
-        if existing:
+        if existing is not None:
             return order_to_response(existing, city)
 
-        raise HTTPException(409, "Could not create order")
+        raise HTTPException(
+            status_code=409,
+            detail="Could not create order",
+        )
 
     return order_to_response(order, city)
-
 
 @app.post(
     "/api/v1/dispatch/auth/login",
