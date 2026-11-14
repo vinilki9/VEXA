@@ -98,8 +98,8 @@ if not isinstance(route, dict):
     if (
         not distance.is_finite()
         or not duration.is_finite()
-        or distance < 0
-        or duration < 0
+        or distance <= 0
+        or duration <= 0
     ):
         raise RoutingError("OSRM returned invalid route values")
 
