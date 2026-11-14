@@ -199,7 +199,7 @@ class PassengerProfile(Base):
     )
 
 
-class Commission(Base):
+class DriverProfile(Base):
     __tablename__ = "driver_profiles"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
