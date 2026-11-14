@@ -266,8 +266,8 @@ def create_order(
         )
     )
 
-    if city is None:
-        raise HTTPException(400, "City is not enabled")
+if city is None:
+    raise HTTPException(400, "City is not enabled")
     if payload.tariff_id is None:
     raise HTTPException(
         status_code=400,
@@ -289,10 +289,10 @@ if selected_tariff is None:
     )
         )
 
-        if selected_tariff is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Выбранный тариф не найден или неактивен",
+if selected_tariff is None:
+    raise HTTPException(
+        status_code=400,
+        detail="Выбранный тариф не найден или неактивен",
             )
     existing = db.scalar(
         select(Order).where(
