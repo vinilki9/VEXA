@@ -62,11 +62,9 @@ def order_to_response(order: Order, city: City) -> dict:
         "passenger_user_id": order.passenger_user_id,
         "driver_user_id": order.driver_user_id,
         "vehicle_id": order.vehicle_id,
-        customer_name=(
-            None
-            if is_anonymous
-            else payload.customer_name.strip()
-        ),
+        "customer_name": order.customer_name,
+        "customer_phone": order.customer_phone,
+        "anonymous": order.anonymous,
         customer_phone=payload.customer_phone,
         anonymous=is_anonymous,
         "pickup_address": order.pickup_address,
@@ -291,9 +289,13 @@ def create_order(
         public_number=next_order_number(db, city),
         city_id=city.id,
         branch_id=selected_branch.id,
-        customer_name=payload.customer_name,
+        customer_name=(
+            None
+            if is_anonymous
+            else payload.customer_name.strip()
+        ),
         customer_phone=payload.customer_phone,
-        anonymous=payload.anonymous,
+        anonymous=is_anonymous,
         pickup_address=payload.pickup_address,
         destination_address=payload.destination_address,
         pickup_latitude=payload.pickup_latitude,
