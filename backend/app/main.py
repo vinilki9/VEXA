@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models import (
+    Branch,
     City,
     CityOrderCounter,
     DispatcherProfile,
@@ -202,10 +203,30 @@ def create_order(
 
     if existing:
         return order_to_response(existing, city)
+    branches = db.scalars(
+        select(Branch).where(
+            Branch.city_id == city.id,
+            Branch.is_active.is_(True),
+        )
+    ).all()
 
+    if not branches:
+        raise HTTPException(
+            status_code=503,
+            detail="Для города не настроен активный филиал",
+        )
+
+    if len(branches) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail="Для города требуется настройка выбора филиала",
+        )
+
+    selected_branch = branches[0]
     order = Order(
         public_number=next_order_number(db, city),
         city_id=city.id,
+        branch_id=selected_branch.id,
         customer_name=payload.customer_name,
         customer_phone=payload.customer_phone,
         anonymous=payload.anonymous,
