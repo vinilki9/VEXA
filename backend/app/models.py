@@ -218,7 +218,7 @@ class DriverProfile(Base):
     )
     commission_rate: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), default=Decimal("10.00"), nullable=False
-)
+    )
     is_online: Mapped[bool] = mapped_column(Boolean, default=False)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
