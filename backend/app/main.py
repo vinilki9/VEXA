@@ -76,6 +76,12 @@ def order_to_response(order: Order, city: City) -> dict:
         "pickup_longitude": order.pickup_longitude,
         "destination_latitude": order.destination_latitude,
         "destination_longitude": order.destination_longitude,
+        "route_distance_meters": order.route_distance_meters,
+        "route_duration_seconds": order.route_duration_seconds,
+        "routing_provider": order.routing_provider,
+        "route_distance_meters": order.route_distance_meters,
+        "route_duration_seconds": order.route_duration_seconds,
+        "routing_provider": order.routing_provider,
         "status": order.status,
         "payment_method": order.payment_method,
         "price_rub": order.price_rub,
@@ -363,6 +369,13 @@ def create_order(
         ) from exc
 
     total_kopecks = route_pricing.fare.total_price_kopecks
+    route_distance_meters = int(
+    route_pricing.route.distance_meters.to_integral_value()
+    )
+    route_duration_seconds = int(
+        route_pricing.route.duration_seconds.to_integral_value()
+    )
+
 
     # Округление до целого рубля для совместимости
     # с прежним полем price_rub.
@@ -386,6 +399,9 @@ def create_order(
         pickup_longitude=payload.pickup_longitude,
         destination_latitude=payload.destination_latitude,
         destination_longitude=payload.destination_longitude,
+        route_distance_meters=route_distance_meters,
+        route_duration_seconds=route_duration_seconds,
+        routing_provider=route_pricing.provider_name,
         status="new",
         payment_method=payload.payment_method,
         price_rub=total_rubles,
