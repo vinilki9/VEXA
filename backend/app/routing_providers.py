@@ -1,11 +1,21 @@
 
 from abc import ABC, abstractmethod
+from math import isfinite
 
 from app.routing import (
     RouteResult,
     RoutingError,
     get_driving_route,
 )
+
+
+def _validate_timeout(timeout_seconds: float) -> None:
+    if (
+        not isfinite(timeout_seconds)
+        or timeout_seconds <= 0
+        or timeout_seconds > 30
+    ):
+        raise ValueError("Invalid routing timeout")
 
 
 class RoutingProvider(ABC):
@@ -30,7 +40,14 @@ class OSRMProvider(RoutingProvider):
         base_url: str,
         timeout_seconds: float = 8.0,
     ) -> None:
-        self.base_url = base_url
+        normalized_url = base_url.strip().rstrip("/")
+
+        if not normalized_url:
+            raise RoutingError("Не задан адрес сервера OSRM")
+
+        _validate_timeout(timeout_seconds)
+
+        self.base_url = normalized_url
         self.timeout_seconds = timeout_seconds
 
     def get_route(
@@ -58,7 +75,8 @@ class TwoGISProvider(RoutingProvider):
         api_key: str,
         timeout_seconds: float = 8.0,
     ) -> None:
-        self.api_key = api_key
+        _validate_timeout(timeout_seconds)
+        self.api_key = api_key.strip()
         self.timeout_seconds = timeout_seconds
 
     def get_route(
@@ -68,7 +86,7 @@ class TwoGISProvider(RoutingProvider):
         destination_latitude: float,
         destination_longitude: float,
     ) -> RouteResult:
-        if not self.api_key.strip():
+        if not self.api_key:
             raise RoutingError(
                 "Для подключения 2ГИС необходим API-ключ"
             )
@@ -86,7 +104,8 @@ class YandexProvider(RoutingProvider):
         api_key: str,
         timeout_seconds: float = 8.0,
     ) -> None:
-        self.api_key = api_key
+        _validate_timeout(timeout_seconds)
+        self.api_key = api_key.strip()
         self.timeout_seconds = timeout_seconds
 
     def get_route(
@@ -96,7 +115,7 @@ class YandexProvider(RoutingProvider):
         destination_latitude: float,
         destination_longitude: float,
     ) -> RouteResult:
-        if not self.api_key.strip():
+        if not self.api_key:
             raise RoutingError(
                 "Для подключения Яндекса необходим API-ключ"
             )
@@ -119,11 +138,6 @@ def get_routing_provider(
     provider = provider_name.strip().lower()
 
     if provider == "osrm":
-        if not osrm_base_url.strip():
-            raise RoutingError(
-                "Не задан адрес сервера OSRM"
-            )
-
         return OSRMProvider(
             base_url=osrm_base_url,
             timeout_seconds=timeout_seconds,
