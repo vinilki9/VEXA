@@ -427,6 +427,7 @@ def list_orders(
     "/api/v1/dispatch/orders/{order_id}/status",
     response_model=OrderResponse,
 )
+
 def update_order_status(
     order_id: UUID,
     new_status: str,
@@ -438,9 +439,16 @@ def update_order_status(
     if order is None:
         raise HTTPException(404, "Order not found")
 
+    # Проверяем права до любого изменения заказа.
+    ensure_dispatcher_can_access_order(
+        db,
+        dispatcher,
+        order,
+    )
+
     city = db.get(City, order.city_id)
 
-    if city is None or city.code != settings.default_city_id:
+    if city is None or not city.is_active:
         raise HTTPException(404, "Order not found")
 
     allowed = ORDER_STATUSES.get(order.status, set())
