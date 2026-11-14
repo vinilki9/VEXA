@@ -181,6 +181,15 @@ class Tariff(Base):
         ),
         CheckConstraint(
             "price_per_minute_kopecks >= 0",
+            minimum_fare_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    maximum_fare_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
             name="tariffs_price_per_minute_nonnegative",
         ),
     )
@@ -478,6 +487,22 @@ class Order(Base):
         CheckConstraint(
             "price_kopecks IS NULL OR price_kopecks >= 0",
             name="orders_price_kopecks_nonnegative",
+        ),
+        CheckConstraint(
+            "minimum_fare_kopecks IS NULL OR minimum_fare_kopecks >= 0",
+            name="tariffs_minimum_fare_nonnegative",
+        ),
+        CheckConstraint(
+            "maximum_fare_kopecks IS NULL OR maximum_fare_kopecks >= 0",
+            name="tariffs_maximum_fare_nonnegative",
+        ),
+        CheckConstraint(
+            """
+            minimum_fare_kopecks IS NULL
+            OR maximum_fare_kopecks IS NULL
+            OR maximum_fare_kopecks >= minimum_fare_kopecks
+            """,
+            name="tariffs_maximum_fare_gte_minimum",
         ),
         Index(
             "ix_orders_city_status_created",
