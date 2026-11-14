@@ -376,8 +376,6 @@ def create_order(
     # Округление до целого рубля для совместимости
     # с прежним полем price_rub.
     total_rubles = (total_kopecks + 50) // 100
-    total_rubles = (total_kopecks + 50) // 100
-
     order = Order(
         public_number=next_order_number(db, city),
         city_id=city.id,
