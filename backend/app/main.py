@@ -65,8 +65,6 @@ def order_to_response(order: Order, city: City) -> dict:
         "customer_name": order.customer_name,
         "customer_phone": order.customer_phone,
         "anonymous": order.anonymous,
-        customer_phone=payload.customer_phone,
-        anonymous=is_anonymous,
         "pickup_address": order.pickup_address,
         "destination_address": order.destination_address,
         "pickup_latitude": order.pickup_latitude,
