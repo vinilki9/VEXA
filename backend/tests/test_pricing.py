@@ -109,7 +109,36 @@ class CalculateFareTests(unittest.TestCase):
                         distance_km=Decimal("0"),
                         duration_minutes=Decimal("0"),
                     )
+    def test_non_finite_distance_is_rejected(self):
+        for distance in (
+            Decimal("NaN"),
+            Decimal("Infinity"),
+            Decimal("-Infinity"),
+        ):
+            with self.subTest(distance=distance):
+                with self.assertRaises(ValueError):
+                    calculate_fare(
+                        base_price_kopecks=5000,
+                        price_per_km_kopecks=1000,
+                        price_per_minute_kopecks=100,
+                        distance_km=distance,
+                        duration_minutes=Decimal("10"),
+                    )
 
-
+    def test_non_finite_duration_is_rejected(self):
+        for duration in (
+            Decimal("NaN"),
+            Decimal("Infinity"),
+            Decimal("-Infinity"),
+        ):
+            with self.subTest(duration=duration):
+                with self.assertRaises(ValueError):
+                    calculate_fare(
+                        base_price_kopecks=5000,
+                        price_per_km_kopecks=1000,
+                        price_per_minute_kopecks=100,
+                        distance_km=Decimal("2"),
+                        duration_minutes=duration,
+                    )
 if __name__ == "__main__":
     unittest.main()
