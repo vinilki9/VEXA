@@ -151,20 +151,28 @@ class OrderValidationTests(unittest.TestCase):
 
 
     def test_missing_pickup_coordinates_are_rejected(self):
-        payload = self.payload.model_copy(
-            update={
-                "pickup_latitude": None,
-            }
-        )
+        for field in (
+            "pickup_latitude",
+            "pickup_longitude",
+        ):
+            with self.subTest(field=field):
+                payload = self.payload.model_copy(
+                    update={field: None}
+                )
 
-        self.assert_order_rejected(payload, 400)
+                self.assert_order_rejected(payload, 400)
 
     def test_missing_destination_coordinates_are_rejected(self):
-        payload = self.payload.model_copy(
-            update={
-                "destination_longitude": None,
-            }
-        )
+        for field in (
+            "destination_latitude",
+            "destination_longitude",
+        ):
+            with self.subTest(field=field):
+                payload = self.payload.model_copy(
+                    update={field: None}
+                )
+
+                self.assert_order_rejected(payload, 400)
 
         self.assert_order_rejected(payload, 400)
 
@@ -200,7 +208,7 @@ class OrderValidationTests(unittest.TestCase):
             provider_name="osrm",
         )
 
-        create_order(
+        order = create_order(
             payload=self.payload,
             idempotency_key="vexa-coordinates-test",
             db=self.db,
@@ -216,6 +224,10 @@ class OrderValidationTests(unittest.TestCase):
             price_per_minute_kopecks=100,
             anonymous=False,
         )
+
+        self.assertEqual(order.route_distance_meters, 2500)
+        self.assertEqual(order.route_duration_seconds, 600)
+        self.assertEqual(order.routing_provider, "osrm")
 
 if __name__ == "__main__":
     unittest.main()
