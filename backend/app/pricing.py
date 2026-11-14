@@ -11,6 +11,7 @@ class FareResult:
     base_price_kopecks: int
     distance_price_kopecks: int
     time_price_kopecks: int
+    fare_limit_adjustment_kopecks: int
     anonymous_surcharge_kopecks: int
     total_price_kopecks: int
 
@@ -23,15 +24,38 @@ def calculate_fare(
     distance_km: Decimal,
     duration_minutes: Decimal,
     anonymous: bool = False,
+    minimum_fare_kopecks: int | None = None,
+    maximum_fare_kopecks: int | None = None,
 ) -> FareResult:
-    if base_price_kopecks < 0:
-        raise ValueError("Base price cannot be negative")
+    prices = (
+        base_price_kopecks,
+        price_per_km_kopecks,
+        price_per_minute_kopecks,
+    )
 
-    if price_per_km_kopecks < 0:
-        raise ValueError("Distance price cannot be negative")
+    if any(value < 0 for value in prices):
+        raise ValueError("Tariff prices cannot be negative")
 
-    if price_per_minute_kopecks < 0:
-        raise ValueError("Time price cannot be negative")
+    if (
+        minimum_fare_kopecks is not None
+        and minimum_fare_kopecks < 0
+    ):
+        raise ValueError("Minimum fare cannot be negative")
+
+    if (
+        maximum_fare_kopecks is not None
+        and maximum_fare_kopecks < 0
+    ):
+        raise ValueError("Maximum fare cannot be negative")
+
+    if (
+        minimum_fare_kopecks is not None
+        and maximum_fare_kopecks is not None
+        and maximum_fare_kopecks < minimum_fare_kopecks
+    ):
+        raise ValueError(
+            "Maximum fare cannot be lower than minimum fare"
+        )
 
     if (
         not isinstance(distance_km, Decimal)
@@ -51,23 +75,60 @@ def calculate_fare(
     distance_price = int(
         (
             Decimal(price_per_km_kopecks) * distance_km
-        ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        ).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP,
+        )
     )
 
     time_price = int(
         (
             Decimal(price_per_minute_kopecks) * duration_minutes
-        ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        ).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP,
+        )
     )
 
-    anonymous_surcharge = (
-        ANONYMOUS_SURCHARGE_KOPECKS if anonymous else 0
-    )
-
-    total = (
+    # Стоимость поездки без дополнительных доплат.
+    raw_trip_price = (
         base_price_kopecks
         + distance_price
         + time_price
+    )
+
+    limited_trip_price = raw_trip_price
+
+    # Применяем минимальную стоимость.
+    if minimum_fare_kopecks is not None:
+        limited_trip_price = max(
+            limited_trip_price,
+            minimum_fare_kopecks,
+        )
+
+    # Применяем максимальную стоимость.
+    if maximum_fare_kopecks is not None:
+        limited_trip_price = min(
+            limited_trip_price,
+            maximum_fare_kopecks,
+        )
+
+    # Корректировка показывает влияние минимального
+    # или максимального ограничения на итог поездки.
+    fare_limit_adjustment = (
+        limited_trip_price - raw_trip_price
+    )
+
+    # Анонимная доплата добавляется отдельно,
+    # после применения ограничений тарифа.
+    anonymous_surcharge = (
+        ANONYMOUS_SURCHARGE_KOPECKS
+        if anonymous
+        else 0
+    )
+
+    total = (
+        limited_trip_price
         + anonymous_surcharge
     )
 
@@ -75,6 +136,7 @@ def calculate_fare(
         base_price_kopecks=base_price_kopecks,
         distance_price_kopecks=distance_price,
         time_price_kopecks=time_price,
+        fare_limit_adjustment_kopecks=fare_limit_adjustment,
         anonymous_surcharge_kopecks=anonymous_surcharge,
         total_price_kopecks=total,
     )
