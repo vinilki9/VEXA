@@ -80,6 +80,60 @@ def order_to_response(order: Order, city: City) -> dict:
         "updated_at": order.updated_at,
     }
 
+def get_dispatcher_profile(
+    db: Session,
+    dispatcher: User,
+) -> DispatcherProfile:
+    profile = db.get(DispatcherProfile, dispatcher.id)
+
+    if profile is None or not profile.is_active:
+        raise HTTPException(403, "Доступ диспетчера запрещён")
+
+    if profile.role == "dispatcher":
+        if profile.branch_id is None:
+            raise HTTPException(
+                403,
+                "Диспетчер не привязан к филиалу",
+            )
+
+        branch = db.get(Branch, profile.branch_id)
+
+        if branch is None or not branch.is_active:
+            raise HTTPException(
+                403,
+                "Филиал диспетчера неактивен или не найден",
+            )
+
+    elif profile.role != "chief_dispatcher":
+        raise HTTPException(403, "Неизвестная роль диспетчера")
+
+    return profile
+
+
+def ensure_dispatcher_can_access_order(
+    db: Session,
+    dispatcher: User,
+    order: Order,
+) -> DispatcherProfile:
+    profile = get_dispatcher_profile(db, dispatcher)
+
+    if profile.role == "chief_dispatcher":
+        return profile
+
+    if profile.branch_id != order.branch_id:
+        raise HTTPException(404, "Order not found")
+
+    branch = db.get(Branch, order.branch_id)
+
+    if (
+        branch is None
+        or not branch.is_active
+        or branch.city_id != order.city_id
+    ):
+        raise HTTPException(404, "Order not found")
+
+    return profile
+
 
 def next_order_number(db: Session, city: City) -> str:
     dialect = db.bind.dialect.name
