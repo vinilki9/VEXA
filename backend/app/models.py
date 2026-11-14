@@ -70,6 +70,28 @@ class City(Base):
         DateTime(timezone=True), default=now_utc, nullable=False
     )
 
+class CityOrderCounter(Base):
+    __tablename__ = "city_order_counters"
+
+    city_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("cities.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    last_number: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        onupdate=now_utc,
+        nullable=False,
+    )
+
 
 class Branch(Base):
     __tablename__ = "branches"
