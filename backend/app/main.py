@@ -246,14 +246,6 @@ def get_tariffs(
         ],
     }
 
-
-
-@app.post(
-    "/api/v1/orders",
-    response_model=OrderResponse,
-    status_code=201,
-)
-
 @app.post(
     "/api/v1/orders",
     response_model=OrderResponse,
