@@ -74,7 +74,10 @@ class OrderResponse(APIModel):
     pickup_longitude: float | None = None
     destination_latitude: float | None = None
     destination_longitude: float | None = None
-
+    route_distance_meters: int | None = None
+    route_duration_seconds: int | None = None
+    routing_provider: str | None = None
+    
     status: str
     payment_method: PaymentMethod
 
