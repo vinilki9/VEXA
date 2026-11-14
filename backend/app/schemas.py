@@ -55,8 +55,7 @@ class OrderResponse(APIModel):
 
     # UUID города в базе данных.
     city_id: UUID
-
-    # Публичный код города, например obolensk.
+    branch_id: UUID | None = None
     city_code: str
 
     passenger_user_id: UUID | None = None
