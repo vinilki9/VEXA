@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -22,6 +22,7 @@ from app.models import (
     Order,
     OrderStatusHistory,
     Tariff,
+    TariffChangeHistory,
     User,
 )
 from app.schemas import (
@@ -31,6 +32,8 @@ from app.schemas import (
     OrderCreate,
     OrderResponse,
     TokenResponse,
+    TariffCreate,
+    TariffUpdate,
 )
 from app.security import (
     create_access_token,
@@ -38,7 +41,7 @@ from app.security import (
     verify_password,
 )
 
-app = FastAPI(title="VEXA API", version="0.4.0")
+app = FastAPI(title="VEXA API", version="0.5.0")
 
 
 ORDER_STATUSES = {
@@ -55,6 +58,10 @@ CITY_PREFIXES = {
     "obolensk": "OB",
 }
 
+
+# ============================================================
+# COMMON HELPERS
+# ============================================================
 
 def order_to_response(order: Order, city: City) -> dict:
     return {
@@ -87,6 +94,7 @@ def order_to_response(order: Order, city: City) -> dict:
         "created_at": order.created_at,
         "updated_at": order.updated_at,
     }
+
 
 def get_dispatcher_profile(
     db: Session,
@@ -143,6 +151,67 @@ def ensure_dispatcher_can_access_order(
     return profile
 
 
+# ============================================================
+# TARIFF PERMISSIONS AND HISTORY
+# ============================================================
+
+def require_chief_dispatcher(
+    db: Session,
+    dispatcher: User,
+) -> DispatcherProfile:
+    profile = get_dispatcher_profile(db, dispatcher)
+
+    if profile.role != "chief_dispatcher":
+        raise HTTPException(
+            403,
+            "Изменять тарифы может только главный диспетчер",
+        )
+
+    return profile
+
+
+def ensure_dispatcher_can_access_tariff(
+    db: Session,
+    dispatcher: User,
+    tariff: Tariff,
+) -> DispatcherProfile:
+    profile = get_dispatcher_profile(db, dispatcher)
+
+    if profile.role == "chief_dispatcher":
+        return profile
+
+    branch = db.get(Branch, profile.branch_id)
+
+    if (
+        branch is None
+        or not branch.is_active
+        or branch.city_id != tariff.city_id
+    ):
+        raise HTTPException(404, "Tariff not found")
+
+    return profile
+
+
+def tariff_snapshot(tariff: Tariff) -> dict:
+    return {
+        "id": str(tariff.id),
+        "city_id": str(tariff.city_id),
+        "code": tariff.code,
+        "name": tariff.name,
+        "vehicle_class": tariff.vehicle_class,
+        "base_price_kopecks": tariff.base_price_kopecks,
+        "price_per_km_kopecks": tariff.price_per_km_kopecks,
+        "price_per_minute_kopecks": tariff.price_per_minute_kopecks,
+        "minimum_fare_kopecks": tariff.minimum_fare_kopecks,
+        "maximum_fare_kopecks": tariff.maximum_fare_kopecks,
+        "is_active": tariff.is_active,
+    }
+
+
+# ============================================================
+# ORDER NUMBER GENERATION
+# ============================================================
+
 def next_order_number(db: Session, city: City) -> str:
     dialect = db.bind.dialect.name
 
@@ -156,7 +225,9 @@ def next_order_number(db: Session, city: City) -> str:
     elif dialect == "sqlite":
         statement = sqlite_insert(CityOrderCounter).values(**values)
     else:
-        raise RuntimeError("Unsupported database dialect for order counter")
+        raise RuntimeError(
+            "Unsupported database dialect for order counter"
+        )
 
     statement = statement.on_conflict_do_update(
         index_elements=[CityOrderCounter.city_id],
@@ -168,10 +239,17 @@ def next_order_number(db: Session, city: City) -> str:
 
     number = db.scalar(statement)
 
-    prefix = CITY_PREFIXES.get(city.code, city.code[:2].upper())
+    prefix = CITY_PREFIXES.get(
+        city.code,
+        city.code[:2].upper(),
+    )
 
     return f"VEXA-{prefix}-{number:06d}"
 
+
+# ============================================================
+# HEALTH
+# ============================================================
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
@@ -191,6 +269,10 @@ def health(db: Session = Depends(get_db)):
     }
 
 
+# ============================================================
+# CITIES
+# ============================================================
+
 @app.get("/api/v1/cities")
 def list_cities(db: Session = Depends(get_db)):
     cities = db.scalars(
@@ -206,6 +288,10 @@ def list_cities(db: Session = Depends(get_db)):
         ]
     }
 
+
+# ============================================================
+# PUBLIC TARIFFS
+# ============================================================
 
 @app.get("/api/v1/tariffs/{city_code}")
 def get_tariffs(
@@ -249,6 +335,291 @@ def get_tariffs(
         ],
     }
 
+
+# ============================================================
+# DISPATCHER TARIFF MANAGEMENT
+# ============================================================
+
+@app.get("/api/v1/dispatch/tariffs")
+def list_dispatch_tariffs(
+    city_code: str | None = None,
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    profile = get_dispatcher_profile(db, dispatcher)
+
+    query = (
+        select(Tariff)
+        .join(City, City.id == Tariff.city_id)
+        .where(City.is_active.is_(True))
+    )
+
+    if profile.role == "dispatcher":
+        branch = db.get(Branch, profile.branch_id)
+
+        if branch is None or not branch.is_active:
+            raise HTTPException(403, "Филиал недоступен")
+
+        if city_code:
+            city = db.get(City, branch.city_id)
+
+            if city is None or city.code != city_code:
+                raise HTTPException(404, "City not found")
+
+        query = query.where(
+            Tariff.city_id == branch.city_id
+        )
+
+    elif city_code:
+        city = db.scalar(
+            select(City).where(
+                City.code == city_code,
+                City.is_active.is_(True),
+            )
+        )
+
+        if city is None:
+            raise HTTPException(404, "City not found")
+
+        query = query.where(Tariff.city_id == city.id)
+
+    tariffs = db.scalars(
+        query.order_by(Tariff.city_id, Tariff.name)
+    ).all()
+
+    return {
+        "tariffs": [
+            tariff_snapshot(tariff)
+            for tariff in tariffs
+        ]
+    }
+
+
+@app.post(
+    "/api/v1/dispatch/tariffs",
+    status_code=201,
+)
+def create_tariff(
+    payload: TariffCreate,
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    require_chief_dispatcher(db, dispatcher)
+
+    city = db.scalar(
+        select(City).where(
+            City.code == payload.city_code,
+            City.is_active.is_(True),
+        )
+    )
+
+    if city is None:
+        raise HTTPException(404, "City not found")
+
+    if (
+        payload.minimum_fare_kopecks is not None
+        and payload.maximum_fare_kopecks is not None
+        and payload.maximum_fare_kopecks
+        < payload.minimum_fare_kopecks
+    ):
+        raise HTTPException(
+            422,
+            "Максимальная стоимость меньше минимальной",
+        )
+
+    data = payload.model_dump(
+        exclude={"city_code"}
+    )
+
+    tariff = Tariff(
+        city_id=city.id,
+        **data,
+    )
+
+    db.add(tariff)
+
+    try:
+        db.flush()
+
+        db.add(
+            TariffChangeHistory(
+                tariff_id=tariff.id,
+                city_id=city.id,
+                changed_by_user_id=dispatcher.id,
+                action="created",
+                old_values=None,
+                new_values=tariff_snapshot(tariff),
+            )
+        )
+
+        db.commit()
+        db.refresh(tariff)
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            409,
+            "Тариф с таким кодом уже существует в городе",
+        )
+
+    return tariff_snapshot(tariff)
+
+
+@app.patch(
+    "/api/v1/dispatch/tariffs/{tariff_id}"
+)
+def update_tariff(
+    tariff_id: UUID,
+    payload: TariffUpdate,
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    require_chief_dispatcher(db, dispatcher)
+
+    tariff = db.get(Tariff, tariff_id)
+
+    if tariff is None:
+        raise HTTPException(404, "Tariff not found")
+
+    old_values = tariff_snapshot(tariff)
+
+    changes = payload.model_dump(
+        exclude_unset=True
+    )
+
+    if not changes:
+        raise HTTPException(
+            400,
+            "Нет данных для изменения",
+        )
+
+    required_fields = {
+        "code",
+        "name",
+        "vehicle_class",
+        "base_price_kopecks",
+        "price_per_km_kopecks",
+        "price_per_minute_kopecks",
+        "is_active",
+    }
+
+    for field in required_fields:
+        if field in changes and changes[field] is None:
+            raise HTTPException(
+                422,
+                f"Поле {field} не может быть пустым",
+            )
+
+    for field, value in changes.items():
+        setattr(tariff, field, value)
+
+    if (
+        tariff.minimum_fare_kopecks is not None
+        and tariff.maximum_fare_kopecks is not None
+        and tariff.maximum_fare_kopecks
+        < tariff.minimum_fare_kopecks
+    ):
+        db.rollback()
+
+        raise HTTPException(
+            422,
+            "Максимальная стоимость меньше минимальной",
+        )
+
+    new_values = tariff_snapshot(tariff)
+
+    db.add(
+        TariffChangeHistory(
+            tariff_id=tariff.id,
+            city_id=tariff.city_id,
+            changed_by_user_id=dispatcher.id,
+            action="updated",
+            old_values=old_values,
+            new_values=new_values,
+        )
+    )
+
+    try:
+        db.commit()
+        db.refresh(tariff)
+
+    except IntegrityError:
+        db.rollback()
+
+        raise HTTPException(
+            409,
+            "Не удалось сохранить изменения тарифа",
+        )
+
+    return tariff_snapshot(tariff)
+
+
+@app.get(
+    "/api/v1/dispatch/tariffs/{tariff_id}/history"
+)
+def get_tariff_history(
+    tariff_id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    tariff = db.get(Tariff, tariff_id)
+
+    if tariff is None:
+        raise HTTPException(404, "Tariff not found")
+
+    ensure_dispatcher_can_access_tariff(
+        db,
+        dispatcher,
+        tariff,
+    )
+
+    rows = db.execute(
+        select(
+            TariffChangeHistory,
+            User.username,
+        )
+        .join(
+            User,
+            User.id == TariffChangeHistory.changed_by_user_id,
+        )
+        .where(
+            TariffChangeHistory.tariff_id == tariff.id,
+            TariffChangeHistory.city_id == tariff.city_id,
+        )
+        .order_by(
+            TariffChangeHistory.changed_at.desc(),
+            TariffChangeHistory.id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    return {
+        "tariff_id": str(tariff.id),
+        "history": [
+            {
+                "id": str(history.id),
+                "action": history.action,
+                "changed_by_user_id": str(
+                    history.changed_by_user_id
+                ),
+                "changed_by_username": username,
+                "old_values": history.old_values,
+                "new_values": history.new_values,
+                "changed_at": history.changed_at,
+            }
+            for history, username in rows
+        ],
+    }
+
+
+# ============================================================
+# CREATE ORDER
+# ============================================================
+
 @app.post(
     "/api/v1/orders",
     response_model=OrderResponse,
@@ -274,8 +645,6 @@ def create_order(
     if city is None:
         raise HTTPException(400, "City is not enabled")
 
-    # Повторный запрос не создаёт новый заказ
-    # и не запускает повторный расчёт маршрута.
     existing = db.scalar(
         select(Order).where(
             Order.city_id == city.id,
@@ -332,7 +701,6 @@ def create_order(
         or not (payload.customer_name or "").strip()
     )
 
-    # Для автоматического расчёта нужны все координаты.
     coordinates = (
         payload.pickup_latitude,
         payload.pickup_longitude,
@@ -343,10 +711,12 @@ def create_order(
     if any(value is None for value in coordinates):
         raise HTTPException(
             status_code=400,
-            detail="Для расчёта стоимости необходимы координаты подачи и назначения",
+            detail=(
+                "Для расчёта стоимости необходимы координаты "
+                "подачи и назначения"
+            ),
         )
 
-    # Расстояние, время и стоимость определяются только сервером.
     try:
         route_pricing = calculate_order_route_price(
             pickup_latitude=payload.pickup_latitude,
@@ -366,16 +736,17 @@ def create_order(
         ) from exc
 
     total_kopecks = route_pricing.fare.total_price_kopecks
+
     route_distance_meters = int(
         route_pricing.route.distance_meters.to_integral_value()
     )
+
     route_duration_seconds = int(
         route_pricing.route.duration_seconds.to_integral_value()
     )
 
-    # Округление до целого рубля для совместимости
-    # с прежним полем price_rub.
     total_rubles = (total_kopecks + 50) // 100
+
     order = Order(
         public_number=next_order_number(db, city),
         city_id=city.id,
@@ -432,6 +803,10 @@ def create_order(
     return order_to_response(order, city)
 
 
+# ============================================================
+# DISPATCHER AUTHENTICATION
+# ============================================================
+
 @app.post(
     "/api/v1/dispatch/auth/login",
     response_model=TokenResponse,
@@ -441,14 +816,19 @@ def dispatcher_login(
     db: Session = Depends(get_db),
 ):
     user = db.scalar(
-        select(User).where(User.username == payload.username)
+        select(User).where(
+            User.username == payload.username
+        )
     )
 
     if (
         user is None
         or not user.is_active
         or not user.password_hash
-        or not verify_password(payload.password, user.password_hash)
+        or not verify_password(
+            payload.password,
+            user.password_hash,
+        )
     ):
         raise HTTPException(
             status_code=401,
@@ -472,7 +852,6 @@ def dispatcher_login(
     "/api/v1/dispatch/auth/me",
     response_model=DispatcherResponse,
 )
-
 def dispatcher_me(
     user: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
@@ -489,12 +868,14 @@ def dispatcher_me(
     }
 
 
+# ============================================================
+# DISPATCHER ORDERS
+# ============================================================
 
 @app.get(
     "/api/v1/dispatch/orders",
     response_model=list[OrderResponse],
 )
-
 def list_orders(
     city_code: str = "obolensk",
     dispatcher: User = Depends(get_current_dispatcher),
@@ -502,12 +883,15 @@ def list_orders(
 ):
     profile = get_dispatcher_profile(db, dispatcher)
 
-    query = select(Order).order_by(Order.created_at.desc())
+    query = select(Order).order_by(
+        Order.created_at.desc()
+    )
 
     if profile.role == "dispatcher":
         query = query.where(
             Order.branch_id == profile.branch_id
         )
+
     elif profile.role == "chief_dispatcher":
         if city_code:
             city = db.scalar(
@@ -518,9 +902,14 @@ def list_orders(
             )
 
             if city is None:
-                raise HTTPException(404, "City is not enabled")
+                raise HTTPException(
+                    404,
+                    "City is not enabled",
+                )
 
-            query = query.where(Order.city_id == city.id)
+            query = query.where(
+                Order.city_id == city.id
+            )
 
     orders = db.scalars(query).all()
 
@@ -530,17 +919,17 @@ def list_orders(
         city = db.get(City, order.city_id)
 
         if city is not None:
-            result.append(order_to_response(order, city))
+            result.append(
+                order_to_response(order, city)
+            )
 
     return result
-
 
 
 @app.patch(
     "/api/v1/dispatch/orders/{order_id}/status",
     response_model=OrderResponse,
 )
-
 def update_order_status(
     order_id: UUID,
     new_status: str,
@@ -550,9 +939,11 @@ def update_order_status(
     order = db.get(Order, order_id)
 
     if order is None:
-        raise HTTPException(404, "Order not found")
+        raise HTTPException(
+            404,
+            "Order not found",
+        )
 
-    # Проверяем права до любого изменения заказа.
     ensure_dispatcher_can_access_order(
         db,
         dispatcher,
@@ -562,17 +953,27 @@ def update_order_status(
     city = db.get(City, order.city_id)
 
     if city is None or not city.is_active:
-        raise HTTPException(404, "Order not found")
+        raise HTTPException(
+            404,
+            "Order not found",
+        )
 
-    allowed = ORDER_STATUSES.get(order.status, set())
+    allowed = ORDER_STATUSES.get(
+        order.status,
+        set(),
+    )
 
     if new_status not in allowed:
         raise HTTPException(
             409,
-            f"Invalid status transition: {order.status} -> {new_status}",
+            (
+                f"Invalid status transition: "
+                f"{order.status} -> {new_status}"
+            ),
         )
 
     old_status = order.status
+
     order.status = new_status
     order.updated_at = datetime.now(timezone.utc)
 
