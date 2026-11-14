@@ -1,7 +1,7 @@
 
 import uuid
 from datetime import datetime, timezone
-
+from decimal import Decimal
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -199,7 +199,7 @@ class PassengerProfile(Base):
     )
 
 
-class DriverProfile(Base):
+class Commission(Base):
     __tablename__ = "driver_profiles"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -213,12 +213,12 @@ class DriverProfile(Base):
     branch_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("branches.id")
     )
-    rating: Mapped[float] = mapped_column(
-        Numeric(3, 2), default=5.00, nullable=False
+    rating: Mapped[Decimal] = mapped_column(
+        Numeric(3, 2), default=Decimal("5.00"), nullable=False
     )
-    commission_rate: Mapped[float] = mapped_column(
-        Numeric(5, 2), default=10.00, nullable=False
-    )
+    commission_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("10.00"), nullable=False
+)
     is_online: Mapped[bool] = mapped_column(Boolean, default=False)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -511,13 +511,8 @@ class Commission(Base):
     driver_user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("driver_profiles.user_id"), nullable=False
     )
-    rate_percent: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    amount_kopecks: Mapped[int] = mapped_column(Integer, nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(30), default="pending", nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=now_utc
+    rate_percent: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False
     )
 
 
