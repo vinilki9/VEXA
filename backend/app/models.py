@@ -78,7 +78,12 @@ class CityOrderCounter(Base):
         ForeignKey("cities.id", ondelete="CASCADE"),
         primary_key=True,
     )
-
+    tariff_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("tariffs.id"),
+        nullable=True,
+        index=True,
+    )
     last_number: Mapped[int] = mapped_column(
         Integer,
         default=0,
