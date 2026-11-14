@@ -565,7 +565,21 @@ class Order(Base):
     pickup_longitude: Mapped[float | None] = mapped_column(Float)
     destination_latitude: Mapped[float | None] = mapped_column(Float)
     destination_longitude: Mapped[float | None] = mapped_column(Float)
+    # Параметры маршрута, рассчитанные сервером.
+    route_distance_meters: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
 
+    route_duration_seconds: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    routing_provider: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
+    )
     status: Mapped[str] = mapped_column(
         String(40),
         default="new",
