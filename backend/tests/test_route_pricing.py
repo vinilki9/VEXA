@@ -51,23 +51,21 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
         self.assertEqual(result.fare.time_price_kopecks, 1000)
         self.assertEqual(result.fare.anonymous_surcharge_kopecks, 10000)
         self.assertEqual(result.fare.total_price_kopecks, 21000)
-
         get_provider.assert_called_once()
         provider.get_route.assert_called_once()
         get_provider.assert_called_once_with(
-    provider_name="osrm",
-    osrm_base_url="http://localhost:5000",
-    timeout_seconds=8.0,
-    two_gis_api_key="",
-    yandex_api_key="",
-)
-
-provider.get_route.assert_called_once_with(
-    pickup_latitude=54.9,
-    pickup_longitude=37.2,
-    destination_latitude=54.91,
-    destination_longitude=37.21,
-)
+            provider_name="osrm",
+            osrm_base_url="http://localhost:5000",
+            timeout_seconds=8.0,
+            two_gis_api_key="",
+            yandex_api_key="",
+        )
+        provider.get_route.assert_called_once_with(
+            pickup_latitude=54.9,
+            pickup_longitude=37.2,
+            destination_latitude=54.91,
+            destination_longitude=37.21,
+        )
 
     @patch("app.route_pricing.get_routing_provider")
     @patch(
