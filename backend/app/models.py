@@ -234,11 +234,11 @@ class DispatcherProfile(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
     )
-branch_id: Mapped[uuid.UUID | None] = mapped_column(
-    Uuid(as_uuid=True), ForeignKey("branches.id")
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("branches.id")
     )
-role: Mapped[str] = mapped_column(
-    String(30), default="dispatcher", nullable=False
+    role: Mapped[str] = mapped_column(
+        String(30), default="dispatcher", nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -334,7 +334,7 @@ class Order(Base):
     city_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("cities.id"), nullable=False, index=True
     )
-        branch_id: Mapped[uuid.UUID | None] = mapped_column(
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("branches.id"),
         nullable=True,
