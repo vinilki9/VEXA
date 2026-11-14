@@ -330,6 +330,8 @@ def get_tariffs(
                 "base_price_kopecks": tariff.base_price_kopecks,
                 "price_per_km_kopecks": tariff.price_per_km_kopecks,
                 "price_per_minute_kopecks": tariff.price_per_minute_kopecks,
+                "minimum_fare_kopecks": tariff.minimum_fare_kopecks,
+                "maximum_fare_kopecks": tariff.maximum_fare_kopecks,
             }
             for tariff in tariffs
         ],
@@ -727,6 +729,8 @@ def create_order(
             price_per_km_kopecks=selected_tariff.price_per_km_kopecks,
             price_per_minute_kopecks=selected_tariff.price_per_minute_kopecks,
             anonymous=is_anonymous,
+            minimum_fare_kopecks=selected_tariff.minimum_fare_kopecks,
+            maximum_fare_kopecks=selected_tariff.maximum_fare_kopecks,
         )
 
     except RoutingError as exc:
