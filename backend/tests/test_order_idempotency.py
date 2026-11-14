@@ -7,7 +7,7 @@ from unittest.mock import patch
 from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
+from sqlalchemy.exc import IntegrityError
 from app.database import Base
 from app.main import create_order
 from app.models import (
@@ -200,6 +200,60 @@ class OrderIdempotencyTests(unittest.TestCase):
 
         calculate_route.assert_called()
         self.assertEqual(calculate_route.call_count, 2)
+
+    @patch("app.main.calculate_order_route_price")
+    def test_database_rejects_duplicate_idempotency_key(
+        self,
+        calculate_route,
+    ):
+        calculate_route.return_value = SimpleNamespace(
+            route=RouteResult(
+                distance_meters=Decimal("2500"),
+                duration_seconds=Decimal("600"),
+            ),
+            fare=SimpleNamespace(
+                total_price_kopecks=21000,
+            ),
+            provider_name="osrm",
+        )
+
+        create_order(
+            payload=self.payload,
+            idempotency_key="vexa-race-test-001",
+            db=self.db,
+        )
+
+        original = self.db.scalar(
+            select(Order).where(
+                Order.city_id == self.city.id,
+                Order.idempotency_key == "vexa-race-test-001",
+            )
+        )
+
+        duplicate_data = {
+            column.key: getattr(original, column.key)
+            for column in Order.__table__.columns
+            if column.key not in ("id", "created_at", "updated_at")
+        }
+        duplicate_data["public_number"] = "VEXA-OB-DUPLICATE"
+
+        duplicate = Order(**duplicate_data)
+        self.db.add(duplicate)
+
+        with self.assertRaises(IntegrityError) as context:
+            self.db.commit()
+
+        self.assertIn(
+            "idempotency_key",
+            str(context.exception),
+        )
+
+        self.db.rollback()
+
+        order_count = self.db.scalar(
+            select(func.count()).select_from(Order)
+        )
+        self.assertEqual(order_count, 1)
 
 
 if __name__ == "__main__":
