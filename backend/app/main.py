@@ -1,15 +1,26 @@
 
 from datetime import datetime, timezone
+from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
-from sqlalchemy import select, text
+from fastapi import Depends, FastAPI, Header, HTTPException
+from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import Dispatcher, Order
+from app.models import (
+    City,
+    CityOrderCounter,
+    DispatcherProfile,
+    Order,
+    OrderStatusHistory,
+    User,
+)
 from app.schemas import (
+    CityResponse,
     DispatcherLogin,
     DispatcherResponse,
     OrderCreate,
@@ -22,11 +33,8 @@ from app.security import (
     verify_password,
 )
 
-app = FastAPI(title="VEXA API", version="0.3.0")
+app = FastAPI(title="VEXA API", version="0.4.0")
 
-ACTIVE_CITIES = [
-    {"city_id": "obolensk", "name": "Оболенск", "enabled": True}
-]
 
 ORDER_STATUSES = {
     "new": {"accepted", "cancelled"},
@@ -37,6 +45,68 @@ ORDER_STATUSES = {
     "completed": set(),
     "cancelled": set(),
 }
+
+CITY_PREFIXES = {
+    "obolensk": "OB",
+}
+
+
+def order_to_response(order: Order, city: City) -> dict:
+    return {
+        "id": order.id,
+        "public_number": order.public_number,
+        "city_id": order.city_id,
+        "city_code": city.code,
+        "passenger_user_id": order.passenger_user_id,
+        "driver_user_id": order.driver_user_id,
+        "vehicle_id": order.vehicle_id,
+        "customer_name": order.customer_name,
+        "customer_phone": order.customer_phone,
+        "anonymous": order.anonymous,
+        "pickup_address": order.pickup_address,
+        "destination_address": order.destination_address,
+        "pickup_latitude": order.pickup_latitude,
+        "pickup_longitude": order.pickup_longitude,
+        "destination_latitude": order.destination_latitude,
+        "destination_longitude": order.destination_longitude,
+        "status": order.status,
+        "payment_method": order.payment_method,
+        "price_rub": order.price_rub,
+        "price_kopecks": order.price_kopecks,
+        "comment": order.comment,
+        "created_at": order.created_at,
+        "updated_at": order.updated_at,
+    }
+
+
+def next_order_number(db: Session, city: City) -> str:
+    dialect = db.bind.dialect.name
+
+    values = {
+        "city_id": city.id,
+        "last_number": 1,
+    }
+
+    if dialect == "postgresql":
+        statement = pg_insert(CityOrderCounter).values(**values)
+    elif dialect == "sqlite":
+        statement = sqlite_insert(CityOrderCounter).values(**values)
+    else:
+        raise RuntimeError("Unsupported database dialect for order counter")
+
+    statement = statement.on_conflict_do_update(
+        index_elements=[CityOrderCounter.city_id],
+        set_={
+            "last_number": CityOrderCounter.last_number + 1,
+            "updated_at": func.now(),
+        },
+    ).returning(CityOrderCounter.last_number)
+
+    number = db.scalar(statement)
+
+    prefix = CITY_PREFIXES.get(city.code, city.code[:2].upper())
+
+    return f"VEXA-{prefix}-{number:06d}"
 
 
 @app.get("/health")
@@ -58,17 +128,39 @@ def health(db: Session = Depends(get_db)):
 
 
 @app.get("/api/v1/cities")
-def list_cities():
-    return {"cities": ACTIVE_CITIES}
+def list_cities(db: Session = Depends(get_db)):
+    cities = db.scalars(
+        select(City)
+        .where(City.is_active.is_(True))
+        .order_by(City.name)
+    ).all()
+
+    return {
+        "cities": [
+            CityResponse.model_validate(city).model_dump(mode="json")
+            for city in cities
+        ]
+    }
 
 
-@app.get("/api/v1/tariffs/{city_id}")
-def get_tariffs(city_id: str):
-    if city_id != settings.default_city_id or city_id != "obolensk":
+@app.get("/api/v1/tariffs/{city_code}")
+def get_tariffs(
+    city_code: str,
+    db: Session = Depends(get_db),
+):
+    city = db.scalar(
+        select(City).where(
+            City.code == city_code,
+            City.is_active.is_(True),
+        )
+    )
+
+    if city is None:
         raise HTTPException(404, "City is not enabled")
 
     return {
-        "city_id": city_id,
+        "city_id": city.id,
+        "city_code": city.code,
         "currency": "RUB",
         "configured": False,
         "tariffs": [],
@@ -90,23 +182,29 @@ def create_order(
     ),
     db: Session = Depends(get_db),
 ):
-    city_id = payload.city_id.strip()
+    city = db.scalar(
+        select(City).where(
+            City.code == payload.city_code,
+            City.is_active.is_(True),
+        )
+    )
 
-    if city_id != settings.default_city_id or city_id != "obolensk":
+    if city is None:
         raise HTTPException(400, "City is not enabled")
 
     existing = db.scalar(
         select(Order).where(
-            Order.city_id == city_id,
+            Order.city_id == city.id,
             Order.idempotency_key == idempotency_key,
         )
     )
 
     if existing:
-        return existing
+        return order_to_response(existing, city)
 
     order = Order(
-        city_id=city_id,
+        public_number=next_order_number(db, city),
+        city_id=city.id,
         customer_name=payload.customer_name,
         customer_phone=payload.customer_phone,
         anonymous=payload.anonymous,
@@ -118,7 +216,9 @@ def create_order(
         destination_longitude=payload.destination_longitude,
         status="new",
         payment_method=payload.payment_method,
-        price_rub=payload.price_rub,
+        # Цена от клиента не считается доверенной.
+        price_rub=None,
+        price_kopecks=None,
         comment=payload.comment,
         idempotency_key=idempotency_key,
     )
@@ -133,17 +233,17 @@ def create_order(
 
         existing = db.scalar(
             select(Order).where(
-                Order.city_id == city_id,
+                Order.city_id == city.id,
                 Order.idempotency_key == idempotency_key,
             )
         )
 
         if existing:
-            return existing
+            return order_to_response(existing, city)
 
         raise HTTPException(409, "Could not create order")
 
-    return order
+    return order_to_response(order, city)
 
 
 @app.post(
@@ -154,27 +254,31 @@ def dispatcher_login(
     payload: DispatcherLogin,
     db: Session = Depends(get_db),
 ):
-    dispatcher = db.scalar(
-        select(Dispatcher).where(
-            Dispatcher.username == payload.username
-        )
+    user = db.scalar(
+        select(User).where(User.username == payload.username)
     )
 
     if (
-        dispatcher is None
-        or not dispatcher.is_active
-        or not verify_password(
-            payload.password,
-            dispatcher.password_hash,
-        )
+        user is None
+        or not user.is_active
+        or not user.password_hash
+        or not verify_password(payload.password, user.password_hash)
     ):
         raise HTTPException(
             status_code=401,
             detail="Неверный логин или пароль",
         )
 
+    profile = db.get(DispatcherProfile, user.id)
+
+    if profile is None or not profile.is_active:
+        raise HTTPException(
+            status_code=401,
+            detail="Неверный логин или пароль",
+        )
+
     return TokenResponse(
-        access_token=create_access_token(dispatcher.id)
+        access_token=create_access_token(user.id)
     )
 
 
@@ -183,9 +287,18 @@ def dispatcher_login(
     response_model=DispatcherResponse,
 )
 def dispatcher_me(
-    dispatcher: Dispatcher = Depends(get_current_dispatcher),
+    user: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
 ):
-    return dispatcher
+    profile = db.get(DispatcherProfile, user.id)
+
+    return {
+        "id": user.id,
+        "username": user.username,
+        "is_active": user.is_active and profile.is_active,
+        "role": profile.role,
+        "created_at": user.created_at,
+    }
 
 
 @app.get(
@@ -193,20 +306,27 @@ def dispatcher_me(
     response_model=list[OrderResponse],
 )
 def list_orders(
-    city_id: str = "obolensk",
-    dispatcher: Dispatcher = Depends(get_current_dispatcher),
+    city_code: str = "obolensk",
+    dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    if city_id != settings.default_city_id or city_id != "obolensk":
+    city = db.scalar(
+        select(City).where(
+            City.code == city_code,
+            City.is_active.is_(True),
+        )
+    )
+
+    if city is None:
         raise HTTPException(404, "City is not enabled")
 
-    return list(
-        db.scalars(
-            select(Order)
-            .where(Order.city_id == city_id)
-            .order_by(Order.created_at.desc())
-        ).all()
-    )
+    orders = db.scalars(
+        select(Order)
+        .where(Order.city_id == city.id)
+        .order_by(Order.created_at.desc())
+    ).all()
+
+    return [order_to_response(order, city) for order in orders]
 
 
 @app.patch(
@@ -214,14 +334,19 @@ def list_orders(
     response_model=OrderResponse,
 )
 def update_order_status(
-    order_id: int,
+    order_id: UUID,
     new_status: str,
-    dispatcher: Dispatcher = Depends(get_current_dispatcher),
+    dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
     order = db.get(Order, order_id)
 
-    if order is None or order.city_id != "obolensk":
+    if order is None:
+        raise HTTPException(404, "Order not found")
+
+    city = db.get(City, order.city_id)
+
+    if city is None or city.code != settings.default_city_id:
         raise HTTPException(404, "Order not found")
 
     allowed = ORDER_STATUSES.get(order.status, set())
@@ -232,10 +357,20 @@ def update_order_status(
             f"Invalid status transition: {order.status} -> {new_status}",
         )
 
+    old_status = order.status
     order.status = new_status
     order.updated_at = datetime.now(timezone.utc)
+
+    db.add(
+        OrderStatusHistory(
+            order_id=order.id,
+            old_status=old_status,
+            new_status=new_status,
+            changed_by_user_id=dispatcher.id,
+        )
+    )
 
     db.commit()
     db.refresh(order)
 
-    return order
+    return order_to_response(order, city)
