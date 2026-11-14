@@ -18,6 +18,7 @@ from app.models import (
     DispatcherProfile,
     Order,
     OrderStatusHistory,
+    Tariff,
     User,
 )
 from app.schemas import (
@@ -214,12 +215,30 @@ def get_tariffs(
     if city is None:
         raise HTTPException(404, "City is not enabled")
 
+    tariffs = db.scalars(
+        select(Tariff)
+        .where(
+            Tariff.city_id == city.id,
+            Tariff.is_active.is_(True),
+        )
+        .order_by(Tariff.name)
+    ).all()
+
     return {
         "city_id": city.id,
         "city_code": city.code,
         "currency": "RUB",
-        "configured": False,
-        "tariffs": [],
+        "configured": bool(tariffs),
+        "tariffs": [
+            {
+                "id": tariff.id,
+                "name": tariff.name,
+                "base_price_kopecks": tariff.base_price_kopecks,
+                "price_per_km_kopecks": tariff.price_per_km_kopecks,
+                "price_per_minute_kopecks": tariff.price_per_minute_kopecks,
+            }
+            for tariff in tariffs
+        ],
     }
 
 
