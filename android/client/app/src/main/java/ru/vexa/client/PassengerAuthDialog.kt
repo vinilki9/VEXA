@@ -25,7 +25,7 @@ import org.json.JSONObject
 
 @Composable
 fun PassengerAuthDialog(
-    onAuthenticated: (String) -> Unit,
+    onAuthenticated: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var phone by remember { mutableStateOf("") }
@@ -48,7 +48,8 @@ fun PassengerAuthDialog(
 
             if (token.isNotBlank()) {
                 ApiClient.setAccessToken(token)
-                onAuthenticated(phone.trim())
+                ApiClient.setPassengerPhone(phone.trim())
+                onAuthenticated()
             } else {
                 authStatus = "failed"
                 errorMessage = "Сервер не вернул токен авторизации"
@@ -196,7 +197,8 @@ fun PassengerAuthDialog(
         confirmButton = {
             if (sessionId == null) {
                 Button(
-                    enabled = !loading && phone.count { it.isDigit() } >= 10,
+                    enabled = !loading &&
+                        phone.count { it.isDigit() } >= 10,
                     onClick = {
                         loading = true
                         errorMessage = null
