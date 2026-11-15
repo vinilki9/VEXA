@@ -90,6 +90,18 @@ def order_to_response(order: Order, city: City) -> dict:
         "payment_method": order.payment_method,
         "price_rub": order.price_rub,
         "price_kopecks": order.price_kopecks,
+
+        # Сохранённая расшифровка стоимости заказа.
+        "fare_base_price_kopecks": order.fare_base_price_kopecks,
+        "fare_distance_price_kopecks": order.fare_distance_price_kopecks,
+        "fare_time_price_kopecks": order.fare_time_price_kopecks,
+        "fare_limit_adjustment_kopecks": (
+            order.fare_limit_adjustment_kopecks
+        ),
+        "anonymous_surcharge_kopecks": (
+            order.anonymous_surcharge_kopecks
+        ),
+
         "comment": order.comment,
         "created_at": order.created_at,
         "updated_at": order.updated_at,
@@ -776,6 +788,24 @@ def create_order(
         payment_method=payload.payment_method,
         price_rub=total_rubles,
         price_kopecks=total_kopecks,
+
+        # Сохраняем снимок расчёта в момент создания заказа.
+        fare_base_price_kopecks=(
+            route_pricing.fare.base_price_kopecks
+        ),
+        fare_distance_price_kopecks=(
+            route_pricing.fare.distance_price_kopecks
+        ),
+        fare_time_price_kopecks=(
+            route_pricing.fare.time_price_kopecks
+        ),
+        fare_limit_adjustment_kopecks=(
+            route_pricing.fare.fare_limit_adjustment_kopecks
+        ),
+        anonymous_surcharge_kopecks=(
+            route_pricing.fare.anonymous_surcharge_kopecks
+        ),
+
         comment=payload.comment,
         idempotency_key=idempotency_key,
     )
