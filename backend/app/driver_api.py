@@ -21,9 +21,10 @@ from app.security import (
     verify_password,
 )
 
+from app.dispatch_driver_api import router as dispatch_driver_router
+
 
 router = APIRouter(
-    prefix="/api/v1/driver",
     tags=["Driver"],
 )
 
@@ -165,7 +166,7 @@ def driver_profile_response(
     }
 
 
-@router.post("/auth/login")
+@router.post("/api/v1/driver/auth/login")
 def driver_login(
     payload: DriverLoginRequest,
     db: Session = Depends(get_db),
@@ -225,7 +226,7 @@ def driver_login(
     }
 
 
-@router.get("/me")
+@router.get("/api/v1/driver/me")
 def driver_me(
     driver: User = Depends(get_current_driver),
     db: Session = Depends(get_db),
@@ -242,7 +243,7 @@ def driver_me(
     )
 
 
-@router.post("/online")
+@router.post("/api/v1/driver/online")
 def set_driver_online(
     payload: DriverOnlineRequest,
     driver: User = Depends(get_current_driver),
@@ -264,7 +265,7 @@ def set_driver_online(
     }
 
 
-@router.post("/location")
+@router.post("/api/v1/driver/location")
 def update_driver_location(
     payload: DriverLocationRequest,
     driver: User = Depends(get_current_driver),
@@ -309,3 +310,7 @@ def update_driver_location(
         "accuracy_meters": location.accuracy_meters,
         "recorded_at": location.recorded_at,
     }
+
+
+# Подключаем диспетчерские маршруты без изменения их URL.
+router.include_router(dispatch_driver_router)
