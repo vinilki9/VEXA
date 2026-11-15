@@ -55,6 +55,7 @@ def upgrade() -> None:
             AND fare_time_price_kopecks IS NOT NULL
             AND fare_limit_adjustment_kopecks IS NOT NULL
             AND anonymous_surcharge_kopecks IS NOT NULL
+            AND price_kopecks IS NOT NULL
             AND fare_base_price_kopecks >= 0
             AND fare_distance_price_kopecks >= 0
             AND fare_time_price_kopecks >= 0
