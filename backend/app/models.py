@@ -270,7 +270,6 @@ class Tariff(Base):
         nullable=True,
     )
 
-    # Дополнительные услуги и параметры грузового тарифа.
     child_seat_surcharge_kopecks: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -387,6 +386,69 @@ class DriverProfile(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# DRIVER LOCATIONS
+# Последнее известное местоположение водителя
+# ============================================================
+
+class DriverLocation(Base):
+    __tablename__ = "driver_locations"
+
+    __table_args__ = (
+        CheckConstraint(
+            "latitude >= -90 AND latitude <= 90",
+            name="driver_locations_latitude_range",
+        ),
+        CheckConstraint(
+            "longitude >= -180 AND longitude <= 180",
+            name="driver_locations_longitude_range",
+        ),
+        CheckConstraint(
+            "accuracy_meters IS NULL OR accuracy_meters >= 0",
+            name="driver_locations_accuracy_nonnegative",
+        ),
+        Index(
+            "ix_driver_locations_recorded_at",
+            "recorded_at",
+        ),
+    )
+
+    driver_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "driver_profiles.user_id",
+            ondelete="CASCADE",
+        ),
+        primary_key=True,
+        nullable=False,
+    )
+
+    latitude: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )
+
+    longitude: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )
+
+    accuracy_meters: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
     )
 
@@ -681,7 +743,6 @@ class Order(Base):
     destination_latitude: Mapped[float | None] = mapped_column(Float)
     destination_longitude: Mapped[float | None] = mapped_column(Float)
 
-    # Параметры маршрута, рассчитанные сервером.
     route_distance_meters: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -720,7 +781,6 @@ class Order(Base):
         nullable=True,
     )
 
-    # Неизменяемый снимок расчёта стоимости заказа.
     fare_base_price_kopecks: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -746,7 +806,6 @@ class Order(Base):
         nullable=True,
     )
 
-    # Выбранные дополнительные услуги и параметры грузового заказа.
     child_seat: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -775,7 +834,6 @@ class Order(Base):
         default=0,
     )
 
-    # Неизменяемый снимок стоимости дополнительных услуг.
     child_seat_surcharge_kopecks: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
