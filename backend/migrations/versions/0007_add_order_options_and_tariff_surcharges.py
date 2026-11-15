@@ -16,10 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # --------------------------------------------------------
-    # TARIFFS: configurable additional service prices
-    # --------------------------------------------------------
-
+    # Новые параметры тарифов.
     op.add_column(
         "tariffs",
         sa.Column(
@@ -29,7 +26,6 @@ def upgrade() -> None:
             server_default="10000",
         ),
     )
-
     op.add_column(
         "tariffs",
         sa.Column(
@@ -39,7 +35,6 @@ def upgrade() -> None:
             server_default="10000",
         ),
     )
-
     op.add_column(
         "tariffs",
         sa.Column(
@@ -49,7 +44,6 @@ def upgrade() -> None:
             server_default=sa.text("'{}'"),
         ),
     )
-
     op.add_column(
         "tariffs",
         sa.Column(
@@ -60,132 +54,131 @@ def upgrade() -> None:
         ),
     )
 
-    with op.batch_alter_table("tariffs") as batch_op:
-        batch_op.create_check_constraint(
+    with op.batch_alter_table("tariffs") as batch:
+        batch.create_check_constraint(
             "tariffs_child_seat_surcharge_nonnegative",
             "child_seat_surcharge_kopecks >= 0",
         )
-
-        batch_op.create_check_constraint(
+        batch.create_check_constraint(
             "tariffs_animal_surcharge_nonnegative",
             "animal_transport_surcharge_kopecks >= 0",
         )
-
-        batch_op.create_check_constraint(
+        batch.create_check_constraint(
             "tariffs_cargo_loader_price_nonnegative",
             "cargo_loader_price_per_person_kopecks >= 0",
         )
 
-    # --------------------------------------------------------
-    # ORDERS: selected additional services and cargo details
-    # --------------------------------------------------------
-
-    with op.batch_alter_table("orders") as batch_op:
-        batch_op.drop_constraint(
-            "orders_fare_breakdown_consistent",
-            type_="check",
-        )
-
-        batch_op.add_column(
-            sa.Column(
-                "child_seat",
-                sa.Boolean(),
-                nullable=False,
-                server_default=sa.false(),
-            )
-        )
-
-        batch_op.add_column(
-            sa.Column(
-                "animal_transport",
-                sa.Boolean(),
-                nullable=False,
-                server_default=sa.false(),
-            )
-        )
-
-        batch_op.add_column(
-            sa.Column(
-                "cargo_vehicle",
-                sa.String(length=80),
-                nullable=True,
-            )
-        )
-
-        batch_op.add_column(
-            sa.Column(
-                "cargo_description",
-                sa.Text(),
-                nullable=True,
-            )
-        )
-
-        batch_op.add_column(
-            sa.Column(
-                "cargo_loaders",
-                sa.Integer(),
-                nullable=False,
-                server_default="0",
-            )
-        )
-
-        # Immutable additional-service price snapshots.
-        batch_op.add_column(
-            sa.Column(
-                "child_seat_surcharge_kopecks",
-                sa.Integer(),
-                nullable=True,
-            )
-        )
-
-        batch_op.add_column(
-            sa.Column(
-                "animal_transport_surcharge_kopecks",
-                sa.Integer(),
-                nullable=True,
-            )
-        )
-
-        batch_op.add_column(
-            sa.Column(
-                "cargo_vehicle_surcharge_kopecks",
-                sa.Integer(),
-                nullable=True,
-            )
-        )
-
-        batch_op.add_column(
-            sa.Column(
-                "cargo_loaders_surcharge_kopecks",
-                sa.Integer(),
-                nullable=True,
-            )
-        )
-
-    # Existing orders already have the original fare breakdown.
-    # Set the newly introduced components to zero for those orders.
-    # Orders without a fare breakdown remain entirely NULL.
-    op.execute(
-        sa.text(
-            """
-            UPDATE orders
-            SET
-                child_seat_surcharge_kopecks = 0,
-                animal_transport_surcharge_kopecks = 0,
-                cargo_vehicle_surcharge_kopecks = 0,
-                cargo_loaders_surcharge_kopecks = 0
-            WHERE fare_base_price_kopecks IS NOT NULL
-            """
-        )
+    # Дополнительные параметры заказа.
+    op.add_column(
+        "orders",
+        sa.Column(
+            "child_seat",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.false(),
+        ),
+    )
+    op.add_column(
+        "orders",
+        sa.Column(
+            "animal_transport",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.false(),
+        ),
+    )
+    op.add_column(
+        "orders",
+        sa.Column(
+            "cargo_vehicle",
+            sa.String(length=80),
+            nullable=True,
+        ),
+    )
+    op.add_column(
+        "orders",
+        sa.Column(
+            "cargo_description",
+            sa.Text(),
+            nullable=True,
+        ),
+    )
+    op.add_column(
+        "orders",
+        sa.Column(
+            "cargo_loaders",
+            sa.Integer(),
+            nullable=False,
+            server_default="0",
+        ),
     )
 
-    with op.batch_alter_table("orders") as batch_op:
-        batch_op.create_check_constraint(
+    # Сохранённые суммы дополнительных услуг.
+    op.add_column(
+        "orders",
+        sa.Column(
+            "child_seat_surcharge_kopecks",
+            sa.Integer(),
+            nullable=True,
+        ),
+    )
+    op.add_column(
+        "orders",
+        sa.Column(
+            "animal_transport_surcharge_kopecks",
+            sa.Integer(),
+            nullable=True,
+        ),
+    )
+    op.add_column(
+        "orders",
+        sa.Column(
+            "cargo_vehicle_surcharge_kopecks",
+            sa.Integer(),
+            nullable=True,
+        ),
+    )
+    op.add_column(
+        "orders",
+        sa.Column(
+            "cargo_loaders_surcharge_kopecks",
+            sa.Integer(),
+            nullable=True,
+        ),
+    )
+
+    # Старые заказы с полной расшифровкой получают нулевые
+    # значения новых компонентов. Старые заказы без расшифровки
+    # сохраняют NULL во всех компонентах.
+    op.execute(
+        """
+        UPDATE orders
+        SET
+            child_seat_surcharge_kopecks = 0,
+            animal_transport_surcharge_kopecks = 0,
+            cargo_vehicle_surcharge_kopecks = 0,
+            cargo_loaders_surcharge_kopecks = 0
+        WHERE
+            fare_base_price_kopecks IS NOT NULL
+            AND fare_distance_price_kopecks IS NOT NULL
+            AND fare_time_price_kopecks IS NOT NULL
+            AND fare_limit_adjustment_kopecks IS NOT NULL
+            AND anonymous_surcharge_kopecks IS NOT NULL
+        """
+    )
+
+    with op.batch_alter_table("orders") as batch:
+        batch.create_check_constraint(
             "orders_cargo_loaders_range",
             "cargo_loaders >= 0 AND cargo_loaders <= 4",
         )
 
-        batch_op.create_check_constraint(
+        batch.drop_constraint(
+            "orders_fare_breakdown_consistent",
+            type_="check",
+        )
+
+        batch.create_check_constraint(
             "orders_fare_breakdown_consistent",
             """
             (
@@ -235,19 +228,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Restore the original fare breakdown constraint.
-    with op.batch_alter_table("orders") as batch_op:
-        batch_op.drop_constraint(
+    with op.batch_alter_table("orders") as batch:
+        batch.drop_constraint(
             "orders_fare_breakdown_consistent",
             type_="check",
         )
 
-        batch_op.drop_constraint(
-            "orders_cargo_loaders_range",
-            type_="check",
-        )
-
-        batch_op.create_check_constraint(
+        batch.create_check_constraint(
             "orders_fare_breakdown_consistent",
             """
             (
@@ -279,44 +266,36 @@ def downgrade() -> None:
             """,
         )
 
-        batch_op.drop_column("cargo_loaders_surcharge_kopecks")
-        batch_op.drop_column("cargo_vehicle_surcharge_kopecks")
-        batch_op.drop_column("animal_transport_surcharge_kopecks")
-        batch_op.drop_column("child_seat_surcharge_kopecks")
-        batch_op.drop_column("cargo_loaders")
-        batch_op.drop_column("cargo_description")
-        batch_op.drop_column("cargo_vehicle")
-        batch_op.drop_column("animal_transport")
-        batch_op.drop_column("child_seat")
+        batch.drop_constraint(
+            "orders_cargo_loaders_range",
+            type_="check",
+        )
 
-    with op.batch_alter_table("tariffs") as batch_op:
-        batch_op.drop_constraint(
+    op.drop_column("orders", "cargo_loaders_surcharge_kopecks")
+    op.drop_column("orders", "cargo_vehicle_surcharge_kopecks")
+    op.drop_column("orders", "animal_transport_surcharge_kopecks")
+    op.drop_column("orders", "child_seat_surcharge_kopecks")
+    op.drop_column("orders", "cargo_loaders")
+    op.drop_column("orders", "cargo_description")
+    op.drop_column("orders", "cargo_vehicle")
+    op.drop_column("orders", "animal_transport")
+    op.drop_column("orders", "child_seat")
+
+    with op.batch_alter_table("tariffs") as batch:
+        batch.drop_constraint(
             "tariffs_cargo_loader_price_nonnegative",
             type_="check",
         )
-
-        batch_op.drop_constraint(
+        batch.drop_constraint(
             "tariffs_animal_surcharge_nonnegative",
             type_="check",
         )
-
-        batch_op.drop_constraint(
+        batch.drop_constraint(
             "tariffs_child_seat_surcharge_nonnegative",
             type_="check",
         )
 
-        batch_op.drop_column(
-            "cargo_loader_price_per_person_kopecks"
-        )
-
-        batch_op.drop_column(
-            "cargo_vehicle_surcharges"
-        )
-
-        batch_op.drop_column(
-            "animal_transport_surcharge_kopecks"
-        )
-
-        batch_op.drop_column(
-            "child_seat_surcharge_kopecks"
-        )
+    op.drop_column("tariffs", "cargo_loader_price_per_person_kopecks")
+    op.drop_column("tariffs", "cargo_vehicle_surcharges")
+    op.drop_column("tariffs", "animal_transport_surcharge_kopecks")
+    op.drop_column("tariffs", "child_seat_surcharge_kopecks")
