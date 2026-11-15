@@ -9,6 +9,14 @@ object PassengerOrderRepository {
 
     private const val CITY_CODE = "obolensk"
 
+    private val activeStatuses = setOf(
+        "new",
+        "accepted",
+        "assigned",
+        "arrived",
+        "in_progress"
+    )
+
     /**
      * Создать заказ пассажира через API VEXA.
      *
@@ -142,6 +150,46 @@ object PassengerOrderRepository {
         )
 
         return JSONObject(response)
+    }
+
+    /**
+     * Получить последний заказ пассажира с сервера.
+     *
+     * Сервер возвращает заказы в порядке от новых к старым.
+     * Поэтому первый элемент — последний созданный заказ.
+     */
+    suspend fun getLatestOrder(): JSONObject? {
+        val response = ApiClient.getPassengerOrders()
+        val orders = JSONArray(response)
+
+        if (orders.length() == 0) {
+            return null
+        }
+
+        return orders.optJSONObject(0)
+    }
+
+    /**
+     * Получить последний активный заказ пассажира.
+     *
+     * Если активного заказа нет, возвращается null.
+     */
+    suspend fun getActiveOrder(): JSONObject? {
+        val response = ApiClient.getPassengerOrders()
+        val orders = JSONArray(response)
+
+        for (index in 0 until orders.length()) {
+            val order = orders.optJSONObject(index)
+                ?: continue
+
+            val status = order.optString("status")
+
+            if (status in activeStatuses) {
+                return order
+            }
+        }
+
+        return null
     }
 
     /**
