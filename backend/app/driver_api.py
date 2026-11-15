@@ -12,6 +12,7 @@ from app.models import (
     City,
     DriverLocation,
     DriverProfile,
+    Order,
     User,
     Vehicle,
 )
@@ -166,6 +167,71 @@ def driver_profile_response(
     }
 
 
+def driver_order_response(
+    order: Order,
+    vehicle: Vehicle | None,
+) -> dict:
+    return {
+        "id": str(order.id),
+        "public_number": order.public_number,
+        "city_id": str(order.city_id),
+        "branch_id": (
+            str(order.branch_id)
+            if order.branch_id is not None
+            else None
+        ),
+        "status": order.status,
+        "customer_name": order.customer_name,
+        "customer_phone": order.customer_phone,
+        "anonymous": order.anonymous,
+        "pickup": {
+            "address": order.pickup_address,
+            "latitude": order.pickup_latitude,
+            "longitude": order.pickup_longitude,
+        },
+        "destination": {
+            "address": order.destination_address,
+            "latitude": order.destination_latitude,
+            "longitude": order.destination_longitude,
+        },
+        "route": {
+            "distance_meters": order.route_distance_meters,
+            "duration_seconds": order.route_duration_seconds,
+        },
+        "payment_method": order.payment_method,
+        "price_rub": order.price_rub,
+        "price_kopecks": order.price_kopecks,
+        "cargo": (
+            {
+                "vehicle": order.cargo_vehicle,
+                "description": order.cargo_description,
+                "loaders": order.cargo_loaders,
+                "vehicle_surcharge_kopecks": (
+                    order.cargo_vehicle_surcharge_kopecks
+                ),
+                "loaders_surcharge_kopecks": (
+                    order.cargo_loaders_surcharge_kopecks
+                ),
+            }
+            if order.cargo_vehicle is not None
+            else None
+        ),
+        "vehicle": (
+            {
+                "id": str(vehicle.id),
+                "make": vehicle.make,
+                "model": vehicle.model,
+                "color": vehicle.color,
+                "license_plate": vehicle.license_plate,
+            }
+            if vehicle is not None
+            else None
+        ),
+        "created_at": order.created_at,
+        "updated_at": order.updated_at,
+    }
+
+
 @router.post("/api/v1/driver/auth/login")
 def driver_login(
     payload: DriverLoginRequest,
@@ -207,16 +273,10 @@ def driver_login(
             "Учётная запись водителя недоступна",
         )
 
-    try:
-        get_driver_profile(
-            db,
-            driver,
-        )
-    except HTTPException:
-        raise HTTPException(
-            403,
-            "Город или филиал водителя недоступен",
-        )
+    get_driver_profile(
+        db,
+        driver,
+    )
 
     return {
         "access_token": create_driver_access_token(
@@ -241,6 +301,54 @@ def driver_me(
         driver,
         profile,
     )
+
+
+@router.get("/api/v1/driver/orders/active")
+def driver_active_orders(
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    profile = get_driver_profile(
+        db,
+        driver,
+    )
+
+    orders = db.scalars(
+        select(Order)
+        .where(
+            Order.driver_user_id == driver.id,
+            Order.city_id == profile.city_id,
+            Order.status.in_(
+                [
+                    "assigned",
+                    "arrived",
+                    "in_progress",
+                ]
+            ),
+        )
+        .order_by(Order.created_at.asc())
+    ).all()
+
+    result = []
+
+    for order in orders:
+        vehicle = (
+            db.get(Vehicle, order.vehicle_id)
+            if order.vehicle_id is not None
+            else None
+        )
+
+        result.append(
+            driver_order_response(
+                order,
+                vehicle,
+            )
+        )
+
+    return {
+        "orders_count": len(result),
+        "orders": result,
+    }
 
 
 @router.post("/api/v1/driver/online")
