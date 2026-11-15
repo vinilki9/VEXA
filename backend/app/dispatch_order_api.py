@@ -1,5 +1,6 @@
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from math import asin, cos, radians, sin, sqrt
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,6 +13,7 @@ from app.models import (
     Branch,
     City,
     DispatcherProfile,
+    DriverLocation,
     DriverProfile,
     Order,
     OrderStatusHistory,
@@ -25,6 +27,15 @@ router = APIRouter(
     prefix="/api/v1/dispatch",
     tags=["Dispatcher Orders"],
 )
+
+ACTIVE_ORDER_STATUSES = (
+    "assigned",
+    "arrived",
+    "in_progress",
+)
+
+GPS_MAX_AGE = timedelta(minutes=10)
+GPS_FUTURE_TOLERANCE = timedelta(minutes=1)
 
 
 class AssignDriverRequest(BaseModel):
@@ -74,6 +85,149 @@ def get_dispatcher_profile(
     return profile
 
 
+def ensure_order_access(
+    profile: DispatcherProfile,
+    order: Order,
+) -> None:
+    if profile.role == "dispatcher":
+        if order.branch_id != profile.branch_id:
+            raise HTTPException(
+                404,
+                "Заказ не найден",
+            )
+
+
+def normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+
+    return value.astimezone(timezone.utc)
+
+
+def calculate_distance_meters(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+) -> float:
+    earth_radius_meters = 6_371_000
+
+    lat1_rad = radians(lat1)
+    lat2_rad = radians(lat2)
+
+    delta_lat = radians(lat2 - lat1)
+    delta_lon = radians(lon2 - lon1)
+
+    a = (
+        sin(delta_lat / 2) ** 2
+        + cos(lat1_rad)
+        * cos(lat2_rad)
+        * sin(delta_lon / 2) ** 2
+    )
+
+    return (
+        2
+        * earth_radius_meters
+        * asin(sqrt(min(1.0, a)))
+    )
+
+
+def validate_order_for_assignment(
+    db: Session,
+    order: Order,
+) -> City:
+    city = db.get(
+        City,
+        order.city_id,
+    )
+
+    if city is None or not city.is_active:
+        raise HTTPException(
+            409,
+            "Город заказа недоступен",
+        )
+
+    if order.status != "accepted":
+        raise HTTPException(
+            409,
+            "Заказ должен иметь статус accepted",
+        )
+
+    if order.driver_user_id is not None:
+        raise HTTPException(
+            409,
+            "К заказу уже назначен водитель",
+        )
+
+    return city
+
+
+def get_busy_driver_ids(
+    db: Session,
+) -> set[UUID]:
+    rows = db.scalars(
+        select(Order.driver_user_id).where(
+            Order.driver_user_id.is_not(None),
+            Order.status.in_(ACTIVE_ORDER_STATUSES),
+        )
+    ).all()
+
+    return set(rows)
+
+
+def save_driver_assignment(
+    db: Session,
+    order: Order,
+    driver_profile: DriverProfile,
+    vehicle: Vehicle,
+    dispatcher: User,
+    city: City,
+    distance_meters: float | None = None,
+) -> dict:
+    old_status = order.status
+    now = datetime.now(timezone.utc)
+
+    order.driver_user_id = driver_profile.user_id
+    order.vehicle_id = vehicle.id
+    order.status = "assigned"
+    order.updated_at = now
+
+    db.add(
+        OrderStatusHistory(
+            order_id=order.id,
+            old_status=old_status,
+            new_status="assigned",
+            changed_by_user_id=dispatcher.id,
+        )
+    )
+
+    try:
+        db.commit()
+        db.refresh(order)
+
+    except Exception:
+        db.rollback()
+        raise
+
+    result = {
+        "success": True,
+        "message": "Водитель назначен на заказ",
+        "order_id": str(order.id),
+        "public_number": order.public_number,
+        "status": order.status,
+        "driver_user_id": str(order.driver_user_id),
+        "vehicle_id": str(order.vehicle_id),
+        "city_code": city.code,
+    }
+
+    if distance_meters is not None:
+        result["distance_to_pickup_meters"] = round(
+            distance_meters
+        )
+
+    return result
+
+
 @router.post("/orders/{order_id}/assign")
 def assign_order_to_driver(
     order_id: UUID,
@@ -98,35 +252,12 @@ def assign_order_to_driver(
             "Заказ не найден",
         )
 
-    if profile.role == "dispatcher":
-        if order.branch_id != profile.branch_id:
-            raise HTTPException(
-                404,
-                "Заказ не найден",
-            )
+    ensure_order_access(profile, order)
 
-    city = db.get(
-        City,
-        order.city_id,
+    city = validate_order_for_assignment(
+        db,
+        order,
     )
-
-    if city is None or not city.is_active:
-        raise HTTPException(
-            409,
-            "Город заказа недоступен",
-        )
-
-    if order.status != "accepted":
-        raise HTTPException(
-            409,
-            "Сначала необходимо принять заказ диспетчером",
-        )
-
-    if order.driver_user_id is not None:
-        raise HTTPException(
-            409,
-            "К заказу уже назначен водитель",
-        )
 
     driver_profile = db.get(
         DriverProfile,
@@ -182,38 +313,170 @@ def assign_order_to_driver(
             "Автомобиль недоступен или не принадлежит водителю",
         )
 
-    old_status = order.status
+    busy_driver_ids = get_busy_driver_ids(db)
+
+    if payload.driver_user_id in busy_driver_ids:
+        raise HTTPException(
+            409,
+            "У водителя уже есть активный заказ",
+        )
+
+    return save_driver_assignment(
+        db=db,
+        order=order,
+        driver_profile=driver_profile,
+        vehicle=vehicle,
+        dispatcher=dispatcher,
+        city=city,
+    )
+
+
+@router.post("/orders/{order_id}/auto-assign")
+def auto_assign_order(
+    order_id: UUID,
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    profile = get_dispatcher_profile(
+        db,
+        dispatcher,
+    )
+
+    order = db.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .with_for_update()
+    )
+
+    if order is None:
+        raise HTTPException(
+            404,
+            "Заказ не найден",
+        )
+
+    ensure_order_access(profile, order)
+
+    city = validate_order_for_assignment(
+        db,
+        order,
+    )
+
+    if (
+        order.pickup_latitude is None
+        or order.pickup_longitude is None
+    ):
+        raise HTTPException(
+            409,
+            "У заказа отсутствуют GPS-координаты подачи",
+        )
+
     now = datetime.now(timezone.utc)
+    oldest_allowed = now - GPS_MAX_AGE
+    newest_allowed = now + GPS_FUTURE_TOLERANCE
 
-    order.driver_user_id = driver_profile.user_id
-    order.vehicle_id = vehicle.id
-    order.status = "assigned"
-    order.updated_at = now
+    busy_driver_ids = get_busy_driver_ids(db)
 
-    db.add(
-        OrderStatusHistory(
-            order_id=order.id,
-            old_status=old_status,
-            new_status="assigned",
-            changed_by_user_id=dispatcher.id,
+    driver_profiles = db.scalars(
+        select(DriverProfile).where(
+            DriverProfile.is_active.is_(True),
+            DriverProfile.is_online.is_(True),
+            DriverProfile.city_id == order.city_id,
+            DriverProfile.branch_id == order.branch_id,
+        )
+    ).all()
+
+    candidates = []
+
+    for driver_profile in driver_profiles:
+        driver_id = driver_profile.user_id
+
+        if driver_id in busy_driver_ids:
+            continue
+
+        driver_user = db.get(
+            User,
+            driver_id,
+        )
+
+        if driver_user is None or not driver_user.is_active:
+            continue
+
+        location = db.get(
+            DriverLocation,
+            driver_id,
+        )
+
+        if location is None:
+            continue
+
+        recorded_at = normalize_datetime(
+            location.recorded_at
+        )
+
+        if recorded_at < oldest_allowed:
+            continue
+
+        if recorded_at > newest_allowed:
+            continue
+
+        vehicles = db.scalars(
+            select(Vehicle)
+            .where(
+                Vehicle.driver_user_id == driver_id,
+                Vehicle.city_id == order.city_id,
+                Vehicle.is_active.is_(True),
+            )
+            .order_by(Vehicle.id)
+        ).all()
+
+        if not vehicles:
+            continue
+
+        vehicle = vehicles[0]
+
+        distance = calculate_distance_meters(
+            order.pickup_latitude,
+            order.pickup_longitude,
+            location.latitude,
+            location.longitude,
+        )
+
+        rating = float(driver_profile.rating or 0)
+
+        candidates.append(
+            (
+                distance,
+                -rating,
+                str(driver_id),
+                driver_profile,
+                vehicle,
+            )
+        )
+
+    if not candidates:
+        raise HTTPException(
+            409,
+            "Нет свободных водителей с актуальным GPS и подходящим автомобилем",
+        )
+
+    candidates.sort(
+        key=lambda item: (
+            item[0],
+            item[1],
+            item[2],
         )
     )
 
-    try:
-        db.commit()
-        db.refresh(order)
+    distance, _, _, selected_driver, selected_vehicle = (
+        candidates[0]
+    )
 
-    except Exception:
-        db.rollback()
-        raise
-
-    return {
-        "success": True,
-        "message": "Водитель назначен на заказ",
-        "order_id": str(order.id),
-        "public_number": order.public_number,
-        "status": order.status,
-        "driver_user_id": str(order.driver_user_id),
-        "vehicle_id": str(order.vehicle_id),
-        "city_code": city.code,
-    }
+    return save_driver_assignment(
+        db=db,
+        order=order,
+        driver_profile=selected_driver,
+        vehicle=selected_vehicle,
+        dispatcher=dispatcher,
+        city=city,
+        distance_meters=distance,
+    )
