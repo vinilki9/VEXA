@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 from app.passenger_auth import router as passenger_auth_router
+from app.phone_utils import normalize_phone
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -38,6 +39,7 @@ from app.schemas import (
 from app.security import (
     create_access_token,
     get_current_dispatcher,
+    get_current_passenger,
     verify_password,
 )
 
@@ -647,8 +649,22 @@ def create_order(
         min_length=1,
         max_length=128,
     ),
+    passenger: User = Depends(get_current_passenger),
     db: Session = Depends(get_db),
 ):
+    if not passenger.phone:
+        raise HTTPException(
+            403,
+            "У аккаунта пассажира не подтверждён номер телефона",
+        )
+
+    request_phone = normalize_phone(payload.customer_phone)
+
+    if request_phone != passenger.phone:
+        raise HTTPException(
+            403,
+            "Номер заказа не совпадает с подтверждённым номером аккаунта",
+        )
     city = db.scalar(
         select(City).where(
             City.code == payload.city_code,
@@ -667,6 +683,12 @@ def create_order(
     )
 
     if existing is not None:
+        if existing.passenger_user_id != passenger.id:
+            raise HTTPException(
+                404,
+                "Заказ не найден",
+            )
+
         return order_to_response(existing, city)
 
     if payload.tariff_id is None:
@@ -768,12 +790,13 @@ def create_order(
         city_id=city.id,
         tariff_id=selected_tariff.id,
         branch_id=selected_branch.id,
+        passenger_user_id=passenger.id,
         customer_name=(
             None
             if is_anonymous
             else payload.customer_name.strip()
         ),
-        customer_phone=payload.customer_phone,
+        customer_phone=passenger.phone,
         anonymous=is_anonymous,
         pickup_address=payload.pickup_address,
         destination_address=payload.destination_address,
