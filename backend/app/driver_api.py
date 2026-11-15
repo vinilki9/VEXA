@@ -1,5 +1,5 @@
 
-from uuid import UUID
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models import (
     Branch,
     City,
+    DriverLocation,
     DriverProfile,
     User,
     Vehicle,
@@ -41,6 +42,23 @@ class DriverLoginRequest(BaseModel):
 
 class DriverOnlineRequest(BaseModel):
     is_online: bool
+
+
+class DriverLocationRequest(BaseModel):
+    latitude: float = Field(
+        ge=-90,
+        le=90,
+    )
+
+    longitude: float = Field(
+        ge=-180,
+        le=180,
+    )
+
+    accuracy_meters: float | None = Field(
+        default=None,
+        ge=0,
+    )
 
 
 def get_driver_profile(
@@ -243,4 +261,51 @@ def set_driver_online(
     return {
         "success": True,
         "is_online": profile.is_online,
+    }
+
+
+@router.post("/location")
+def update_driver_location(
+    payload: DriverLocationRequest,
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    get_driver_profile(
+        db,
+        driver,
+    )
+
+    now = datetime.now(timezone.utc)
+
+    location = db.get(
+        DriverLocation,
+        driver.id,
+    )
+
+    if location is None:
+        location = DriverLocation(
+            driver_user_id=driver.id,
+            latitude=payload.latitude,
+            longitude=payload.longitude,
+            accuracy_meters=payload.accuracy_meters,
+            recorded_at=now,
+            updated_at=now,
+        )
+        db.add(location)
+    else:
+        location.latitude = payload.latitude
+        location.longitude = payload.longitude
+        location.accuracy_meters = payload.accuracy_meters
+        location.recorded_at = now
+        location.updated_at = now
+
+    db.commit()
+    db.refresh(location)
+
+    return {
+        "success": True,
+        "latitude": location.latitude,
+        "longitude": location.longitude,
+        "accuracy_meters": location.accuracy_meters,
+        "recorded_at": location.recorded_at,
     }
