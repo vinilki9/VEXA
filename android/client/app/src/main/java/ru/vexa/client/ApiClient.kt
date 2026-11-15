@@ -15,7 +15,6 @@ import kotlinx.coroutines.withContext
 object ApiClient {
 
     private const val BASE_URL = "https://109.120.184.20"
-
     private const val DEFAULT_CITY_CODE = "obolensk"
 
     private val JSON_MEDIA_TYPE =
@@ -23,6 +22,9 @@ object ApiClient {
 
     @Volatile
     private var accessToken: String? = null
+
+    @Volatile
+    private var passengerPhone: String? = null
 
     val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -45,10 +47,25 @@ object ApiClient {
     }
 
     /**
+     * Сохранить подтверждённый номер телефона пассажира.
+     */
+    fun setPassengerPhone(phone: String) {
+        passengerPhone = phone.trim().takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Получить номер телефона авторизованного пассажира.
+     */
+    fun getPassengerPhone(): String? {
+        return passengerPhone
+    }
+
+    /**
      * Завершить текущую авторизацию в памяти приложения.
      */
     fun clearAccessToken() {
         accessToken = null
+        passengerPhone = null
     }
 
     /**
@@ -92,9 +109,6 @@ object ApiClient {
      * Получить список активных тарифов города.
      *
      * GET /api/v1/tariffs/{city_code}
-     *
-     * По умолчанию используется пилотный город Оболенск.
-     * Возвращает JSON сервера без изменения структуры.
      */
     suspend fun getTariffs(
         cityCode: String = DEFAULT_CITY_CODE
@@ -106,9 +120,7 @@ object ApiClient {
         }
 
         val request = Request.Builder()
-            .url(
-                "$BASE_URL/api/v1/tariffs/$normalizedCityCode"
-            )
+            .url("$BASE_URL/api/v1/tariffs/$normalizedCityCode")
             .get()
             .build()
 
@@ -133,8 +145,6 @@ object ApiClient {
      * Запросить SMS-авторизацию пассажира.
      *
      * POST /api/v1/auth/passenger/request
-     *
-     * Возвращает JSON с session_id и status.
      */
     suspend fun requestPassengerAuth(
         phone: String
@@ -147,9 +157,7 @@ object ApiClient {
 
         val request = Request.Builder()
             .url("$BASE_URL/api/v1/auth/passenger/request")
-            .post(
-                json.toRequestBody(JSON_MEDIA_TYPE)
-            )
+            .post(json.toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         return executeRequest(request)
@@ -159,16 +167,12 @@ object ApiClient {
      * Проверить состояние SMS-авторизации.
      *
      * GET /api/v1/auth/passenger/sessions/{session_id}
-     *
-     * При подтверждённой авторизации сервер возвращает access_token.
      */
     suspend fun getPassengerAuthStatus(
         sessionId: String
     ): String {
         val request = Request.Builder()
-            .url(
-                "$BASE_URL/api/v1/auth/passenger/sessions/$sessionId"
-            )
+            .url("$BASE_URL/api/v1/auth/passenger/sessions/$sessionId")
             .get()
             .build()
 
@@ -181,7 +185,6 @@ object ApiClient {
      * POST /api/v1/auth/passenger/verify
      *
      * После проверки необходимо отдельно запросить статус сессии.
-     * Сам ответ verify не считается подтверждением авторизации.
      */
     suspend fun verifyPassengerAuth(
         sessionId: String,
@@ -196,9 +199,7 @@ object ApiClient {
 
         val request = Request.Builder()
             .url("$BASE_URL/api/v1/auth/passenger/verify")
-            .post(
-                json.toRequestBody(JSON_MEDIA_TYPE)
-            )
+            .post(json.toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         return executeRequest(request)
@@ -210,10 +211,7 @@ object ApiClient {
      * POST /api/v1/orders
      *
      * Требуется подтверждённая авторизация пассажира.
-     * Цена рассчитывается сервером, а не приложением.
-     *
-     * Для защиты от повторной отправки используется
-     * Idempotency-Key.
+     * Для защиты от повторной отправки используется Idempotency-Key.
      */
     suspend fun sendOrder(
         json: String,
@@ -228,14 +226,8 @@ object ApiClient {
 
         val request = Request.Builder()
             .url("$BASE_URL/api/v1/orders")
-            .header(
-                "Authorization",
-                "Bearer $token"
-            )
-            .header(
-                "Idempotency-Key",
-                idempotencyKey
-            )
+            .header("Authorization", "Bearer $token")
+            .header("Idempotency-Key", idempotencyKey)
             .post(body)
             .build()
 
@@ -255,10 +247,7 @@ object ApiClient {
 
         val request = Request.Builder()
             .url("$BASE_URL/api/v1/passenger/orders")
-            .header(
-                "Authorization",
-                "Bearer $token"
-            )
+            .header("Authorization", "Bearer $token")
             .get()
             .build()
 
