@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  UserCheck,
+  X,
 } from 'lucide-react';
 import './style.css';
 
@@ -41,6 +43,28 @@ type DispatcherProfile = {
   username: string;
   role: string;
   branch_id?: string | null;
+};
+
+type AvailableVehicle = {
+  id: string;
+  make: string;
+  model: string;
+  color: string;
+  license_plate: string;
+};
+
+type AvailableDriver = {
+  driver_user_id: string;
+  username: string;
+  phone?: string | null;
+  rating: string;
+  is_online: boolean;
+  location?: {
+    latitude: number;
+    longitude: number;
+    recorded_at: string;
+  } | null;
+  vehicle: AvailableVehicle;
 };
 
 async function apiRequest(
@@ -119,6 +143,51 @@ function getPaymentLabel(method: string) {
 
   return labels[method] || method || 'Не указан';
 }
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  height: 43,
+  border: '1px solid #dfe6eb',
+  borderRadius: 8,
+  padding: '0 12px',
+  fontSize: 13,
+  outline: 'none',
+  background: '#fff',
+};
+
+const primaryButtonStyle: React.CSSProperties = {
+  border: 0,
+  borderRadius: 8,
+  background: '#20b8aa',
+  color: '#fff',
+  padding: '11px 15px',
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  border: '1px solid #dfe6eb',
+  borderRadius: 8,
+  background: '#fff',
+  color: '#526174',
+  padding: '10px 14px',
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+const errorStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  color: '#b42318',
+  background: '#fff0ee',
+  borderRadius: 8,
+  padding: 10,
+  fontSize: 11,
+  marginTop: 15,
+};
 
 function LoginScreen({
   onLogin,
@@ -250,40 +319,6 @@ function LoginScreen({
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  height: 43,
-  border: '1px solid #dfe6eb',
-  borderRadius: 8,
-  padding: '0 12px',
-  fontSize: 13,
-  outline: 'none',
-  background: '#fff',
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  border: 0,
-  borderRadius: 8,
-  background: '#20b8aa',
-  color: '#fff',
-  padding: '11px 15px',
-  fontSize: 12,
-  fontWeight: 700,
-  cursor: 'pointer',
-};
-
-const errorStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  color: '#b42318',
-  background: '#fff0ee',
-  borderRadius: 8,
-  padding: 10,
-  fontSize: 11,
-  marginTop: 15,
-};
-
 function App() {
   const [token, setToken] = useState<string | null>(null);
   const [dispatcher, setDispatcher] = useState<DispatcherProfile | null>(null);
@@ -292,6 +327,13 @@ function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+
+  const [assignmentOrder, setAssignmentOrder] = useState<VexaOrder | null>(null);
+  const [availableDrivers, setAvailableDrivers] = useState<AvailableDriver[]>([]);
+  const [selectedDriver, setSelectedDriver] = useState<AvailableDriver | null>(null);
+  const [loadingDrivers, setLoadingDrivers] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [assignmentError, setAssignmentError] = useState('');
 
   const loadOrders = useCallback(async (accessToken: string) => {
     setLoading(true);
@@ -380,6 +422,16 @@ function App() {
     setOrders([]);
     setError('');
     setNotice('');
+    closeAssignment();
+  }
+
+  function closeAssignment() {
+    setAssignmentOrder(null);
+    setAvailableDrivers([]);
+    setSelectedDriver(null);
+    setAssignmentError('');
+    setLoadingDrivers(false);
+    setAssigning(false);
   }
 
   async function acceptOrder(order: VexaOrder) {
@@ -413,6 +465,80 @@ function App() {
       );
     } finally {
       setAcceptingId(null);
+    }
+  }
+
+  async function openManualAssignment(order: VexaOrder) {
+    if (!token) return;
+
+    setAssignmentOrder(order);
+    setAvailableDrivers([]);
+    setSelectedDriver(null);
+    setAssignmentError('');
+    setLoadingDrivers(true);
+
+    try {
+      const result = await apiRequest(
+        `/api/v1/dispatch/orders/${order.id}/available-drivers`,
+        token,
+      );
+
+      const drivers: AvailableDriver[] = Array.isArray(result?.drivers)
+        ? result.drivers
+        : [];
+
+      setAvailableDrivers(drivers);
+
+      if (drivers.length === 0) {
+        setAssignmentError(
+          'Сейчас нет свободных водителей с подходящим автомобилем в этом филиале.',
+        );
+      }
+    } catch (err) {
+      setAssignmentError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить список водителей',
+      );
+    } finally {
+      setLoadingDrivers(false);
+    }
+  }
+
+  async function assignSelectedDriver() {
+    if (!token || !assignmentOrder || !selectedDriver || assigning) return;
+
+    setAssigning(true);
+    setAssignmentError('');
+    setError('');
+
+    try {
+      await apiRequest(
+        `/api/v1/dispatch/orders/${assignmentOrder.id}/assign`,
+        token,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            driver_user_id: selectedDriver.driver_user_id,
+            vehicle_id: selectedDriver.vehicle.id,
+          }),
+        },
+      );
+
+      setNotice(
+        `Заказ ${assignmentOrder.public_number}: водитель ${selectedDriver.username} назначен вручную.`,
+      );
+
+      closeAssignment();
+      await loadOrders(token);
+    } catch (err) {
+      setAssignmentError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось назначить водителя',
+      );
+    } finally {
+      setAssigning(false);
     }
   }
 
@@ -545,7 +671,7 @@ function App() {
           <article>
             <label>Ожидают водителя</label>
             <strong>{acceptedOrders.length}</strong>
-            <small>Нуждается в назначении</small>
+            <small>Нуждаются в назначении</small>
           </article>
 
           <article>
@@ -606,9 +732,7 @@ function App() {
             <div className="cardhead">
               <div>
                 <h2>Заказы</h2>
-                <p>
-                  {orders.length} заказов в текущем списке
-                </p>
+                <p>{orders.length} заказов в текущем списке</p>
               </div>
 
               <button onClick={() => loadOrders(token)}>
@@ -685,9 +809,20 @@ function App() {
                   )}
 
                   {order.status === 'accepted' && (
-                    <small style={{ color: '#ad7b1d', marginTop: 5 }}>
-                      Требуется назначить водителя вручную
-                    </small>
+                    <button
+                      onClick={() => openManualAssignment(order)}
+                      style={{
+                        ...primaryButtonStyle,
+                        marginTop: 8,
+                        width: 'fit-content',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 7,
+                      }}
+                    >
+                      <UserCheck size={15} />
+                      Назначить водителя
+                    </button>
                   )}
                 </div>
               </div>
@@ -706,6 +841,161 @@ function App() {
           </div>
         </section>
       </main>
+
+      {assignmentOrder && (
+        <div style={modalOverlayStyle}>
+          <div style={modalStyle}>
+            <div style={modalHeaderStyle}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18 }}>
+                  Назначение водителя
+                </h2>
+                <p style={{ margin: '6px 0 0', color: '#8994a3', fontSize: 12 }}>
+                  Заказ {assignmentOrder.public_number}
+                </p>
+              </div>
+
+              <button
+                onClick={closeAssignment}
+                disabled={assigning}
+                style={iconButtonStyle}
+                title="Закрыть"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ margin: '16px 0', fontSize: 12, color: '#526174' }}>
+              <div>
+                <b>Откуда:</b> {assignmentOrder.pickup_address}
+              </div>
+              <div style={{ marginTop: 5 }}>
+                <b>Куда:</b> {assignmentOrder.destination_address}
+              </div>
+            </div>
+
+            <div style={modalDividerStyle} />
+
+            <h3 style={{ fontSize: 13, margin: '15px 0 10px' }}>
+              Свободные водители
+            </h3>
+
+            {loadingDrivers && (
+              <p style={{ color: '#8994a3', fontSize: 12 }}>
+                Загружаем список водителей...
+              </p>
+            )}
+
+            {!loadingDrivers && availableDrivers.length === 0 && (
+              <div style={emptyDriversStyle}>
+                <Users size={25} />
+                <p style={{ margin: '9px 0 0' }}>
+                  Подходящих свободных водителей пока нет.
+                </p>
+              </div>
+            )}
+
+            {availableDrivers.length > 0 && (
+              <div style={driverListStyle}>
+                {availableDrivers.map((driver) => {
+                  const isSelected =
+                    selectedDriver?.driver_user_id === driver.driver_user_id &&
+                    selectedDriver?.vehicle.id === driver.vehicle.id;
+
+                  return (
+                    <button
+                      key={`${driver.driver_user_id}-${driver.vehicle.id}`}
+                      onClick={() => setSelectedDriver(driver)}
+                      style={{
+                        ...driverCardStyle,
+                        border: isSelected
+                          ? '2px solid #20b8aa'
+                          : '1px solid #e4eaf0',
+                        background: isSelected ? '#effbf9' : '#fff',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={driverAvatarStyle}>
+                          <CarFront size={19} />
+                        </div>
+
+                        <div style={{ flex: 1, textAlign: 'left' }}>
+                          <b style={{ display: 'block', fontSize: 13, color: '#172033' }}>
+                            {driver.username}
+                          </b>
+                          <span style={{ fontSize: 11, color: '#8994a3' }}>
+                            {driver.phone || 'Телефон не указан'}
+                          </span>
+                        </div>
+
+                        <span style={ratingStyle}>
+                          ★ {Number(driver.rating || 0).toFixed(1)}
+                        </span>
+                      </div>
+
+                      <div style={vehicleInfoStyle}>
+                        <b>
+                          {[driver.vehicle.make, driver.vehicle.model]
+                            .filter(Boolean)
+                            .join(' ') || 'Автомобиль'}
+                        </b>
+                        <span>
+                          {[driver.vehicle.color, driver.vehicle.license_plate]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </div>
+
+                      {driver.location && (
+                        <small style={{ display: 'block', color: '#8994a3', marginTop: 7 }}>
+                          GPS: {Number(driver.location.latitude).toFixed(5)},{' '}
+                          {Number(driver.location.longitude).toFixed(5)}
+                        </small>
+                      )}
+
+                      {isSelected && (
+                        <span style={selectedLabelStyle}>
+                          <CheckCircle2 size={14} />
+                          Выбран
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {assignmentError && (
+              <div style={errorStyle}>
+                <AlertCircle size={16} />
+                {assignmentError}
+              </div>
+            )}
+
+            <div style={modalActionsStyle}>
+              <button
+                onClick={closeAssignment}
+                disabled={assigning}
+                style={secondaryButtonStyle}
+              >
+                Отмена
+              </button>
+
+              <button
+                onClick={assignSelectedDriver}
+                disabled={!selectedDriver || assigning || loadingDrivers}
+                style={{
+                  ...primaryButtonStyle,
+                  opacity: !selectedDriver || assigning ? 0.55 : 1,
+                  cursor: !selectedDriver || assigning ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {assigning ? 'Назначаем...' : 'Подтвердить назначение'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -730,6 +1020,107 @@ const successStyle: React.CSSProperties = {
   padding: 12,
   fontSize: 11,
   marginBottom: 15,
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 1000,
+  background: 'rgba(15, 23, 42, 0.55)',
+  display: 'grid',
+  placeItems: 'center',
+  padding: 16,
+};
+
+const modalStyle: React.CSSProperties = {
+  width: '100%',
+  maxWidth: 540,
+  maxHeight: '90vh',
+  overflowY: 'auto',
+  background: '#fff',
+  borderRadius: 16,
+  padding: 22,
+  boxShadow: '0 20px 60px #0003',
+};
+
+const modalHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+};
+
+const modalDividerStyle: React.CSSProperties = {
+  height: 1,
+  background: '#edf0f3',
+};
+
+const driverListStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: 9,
+  maxHeight: 340,
+  overflowY: 'auto',
+};
+
+const driverCardStyle: React.CSSProperties = {
+  width: '100%',
+  textAlign: 'left',
+  padding: 13,
+  borderRadius: 11,
+  cursor: 'pointer',
+};
+
+const driverAvatarStyle: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: 9,
+  background: '#e7f8f6',
+  color: '#159b8f',
+  display: 'grid',
+  placeItems: 'center',
+};
+
+const ratingStyle: React.CSSProperties = {
+  color: '#ad7b1d',
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const vehicleInfoStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: 3,
+  marginTop: 11,
+  paddingTop: 9,
+  borderTop: '1px solid #edf0f3',
+  fontSize: 11,
+  color: '#526174',
+};
+
+const selectedLabelStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 5,
+  color: '#087e70',
+  fontSize: 11,
+  fontWeight: 700,
+  marginTop: 9,
+};
+
+const emptyDriversStyle: React.CSSProperties = {
+  padding: 25,
+  textAlign: 'center',
+  color: '#8994a3',
+  background: '#f7f9fb',
+  borderRadius: 10,
+  fontSize: 12,
+};
+
+const modalActionsStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 9,
+  marginTop: 20,
+  paddingTop: 15,
+  borderTop: '1px solid #edf0f3',
 };
 
 createRoot(document.getElementById('root')!).render(<App />);
