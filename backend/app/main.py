@@ -1,7 +1,7 @@
 
 from datetime import datetime, timezone
 from uuid import UUID
-
+from app.passenger_auth import router as passenger_auth_router
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -42,7 +42,7 @@ from app.security import (
 )
 
 app = FastAPI(title="VEXA API", version="0.5.0")
-
+app.include_router(passenger_auth_router)
 
 ORDER_STATUSES = {
     "new": {"accepted", "cancelled"},
