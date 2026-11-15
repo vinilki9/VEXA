@@ -1,3 +1,4 @@
+
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +13,25 @@ class Settings(BaseSettings):
     secret_key: str = "CHANGE_ME_BEFORE_DEPLOYMENT"
 
     access_token_minutes: int = Field(default=60, gt=0)
+
+    # Настройки маршрутизации
+    routing_provider: str = "osrm"
+
+    osrm_base_url: str = ""
+    osrm_timeout_seconds: float = Field(
+        default=8.0,
+        gt=0,
+        le=30,
+    )
+
+    routing_timeout_seconds: float = Field(
+        default=8.0,
+        gt=0,
+        le=30,
+    )
+
+    two_gis_api_key: str = ""
+    yandex_api_key: str = ""
 
     default_city_id: str = "obolensk"
 
@@ -33,7 +53,8 @@ class Settings(BaseSettings):
                 or len(self.secret_key) < 32
             ):
                 raise ValueError(
-                    "Production requires a SECRET_KEY of at least 32 characters."
+                    "Production requires a SECRET_KEY "
+                    "of at least 32 characters."
                 )
 
             if self.database_url.startswith("sqlite"):
@@ -42,7 +63,26 @@ class Settings(BaseSettings):
                 )
 
         if not self.default_city_id.strip():
-            raise ValueError("DEFAULT_CITY_ID cannot be empty.")
+            raise ValueError(
+                "DEFAULT_CITY_ID cannot be empty."
+            )
+
+        provider = self.routing_provider.strip().lower()
+
+        allowed_providers = {
+            "osrm",
+            "2gis",
+            "two_gis",
+            "2гис",
+            "yandex",
+            "yandex_maps",
+            "яндекс",
+        }
+
+        if provider not in allowed_providers:
+            raise ValueError(
+                f"Unsupported ROUTING_PROVIDER: {provider}"
+            )
 
         return self
 
