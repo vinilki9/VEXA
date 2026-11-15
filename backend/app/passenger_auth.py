@@ -1,10 +1,10 @@
-
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.auth_providers import (
 from app.config import settings
 from app.database import get_db
 from app.models import PassengerProfile, User
+from app.phone_utils import normalize_phone
 from app.security import create_passenger_access_token
 
 
@@ -44,23 +45,6 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def normalize_phone(value: str) -> str:
-    digits = "".join(ch for ch in value if ch.isdigit())
-
-    if len(digits) == 10:
-        digits = "7" + digits
-    elif len(digits) == 11 and digits.startswith("8"):
-        digits = "7" + digits[1:]
-
-    if len(digits) != 11 or not digits.startswith("7"):
-        raise HTTPException(
-            status_code=422,
-            detail="Укажите корректный российский номер телефона",
-        )
-
-    return digits
-
-
 def callback_url(path: str) -> str:
     secret = settings.sms_auth_callback_secret.strip()
 
@@ -72,7 +56,10 @@ def callback_url(path: str) -> str:
 
     base = settings.public_api_base_url.rstrip("/")
 
-    return f"{base}/api/v1/auth/passenger/callback/{secret}/{path}"
+    return (
+        f"{base}/api/v1/auth/passenger/"
+        f"callback/{secret}/{path}"
+    )
 
 
 def get_session(
@@ -82,21 +69,35 @@ def get_session(
     session = db.get(PassengerAuthSession, session_id)
 
     if session is None:
-        raise HTTPException(404, "Сессия авторизации не найдена")
-
-    if session.status in {"verified", "failed", "expired"}:
-        return session
+        raise HTTPException(
+            404,
+            "Сессия авторизации не найдена",
+        )
 
     expires_at = session.expires_at
 
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(
+            tzinfo=timezone.utc
+        )
 
+    # Срок проверяется раньше терминального статуса.
     if expires_at <= now_utc():
-        session.status = "expired"
-        db.commit()
+        if session.status != "expired":
+            session.status = "expired"
+            session.updated_at = now_utc()
+            db.commit()
 
-        raise HTTPException(410, "Срок авторизации истёк")
+        raise HTTPException(
+            410,
+            "Срок авторизации истёк",
+        )
+
+    if session.status == "expired":
+        raise HTTPException(
+            410,
+            "Срок авторизации истёк",
+        )
 
     return session
 
@@ -159,26 +160,24 @@ def complete_authentication(
     db: Session,
     session: PassengerAuthSession,
 ) -> dict:
+    session_id = session.id
+    phone = session.phone
+
     try:
-        user = create_or_get_passenger(
-            db,
-            session.phone,
-        )
+        user = create_or_get_passenger(db, phone)
 
         session.status = "verified"
         session.verified_at = now_utc()
         session.updated_at = now_utc()
 
         db.commit()
-        db.refresh(user)
 
     except IntegrityError:
         db.rollback()
 
+        # Повторно читаем записи после отката транзакции.
         user = db.scalar(
-            select(User).where(
-                User.phone == session.phone
-            )
+            select(User).where(User.phone == phone)
         )
 
         if user is None or not user.is_active:
@@ -197,11 +196,18 @@ def complete_authentication(
 
         session = db.get(
             PassengerAuthSession,
-            session.id,
+            session_id,
         )
+
+        if session is None:
+            raise HTTPException(
+                404,
+                "Сессия авторизации не найдена",
+            )
 
         session.status = "verified"
         session.verified_at = now_utc()
+        session.updated_at = now_utc()
         db.commit()
 
     return {
@@ -233,14 +239,17 @@ def refresh_provider_status(
 
             if provider_status in {"2", "16"}:
                 session.status = "failed"
+                session.updated_at = now_utc()
                 db.commit()
 
                 return {"status": "failed"}
 
             if provider_status == "3":
                 session.status = "otp_required"
-
+            elif provider_status in {"0", "8"}:
+                session.status = "pending"
             else:
+                # Неизвестный статус не является успехом.
                 session.status = "pending"
 
         elif session.provider == "smsgold":
@@ -260,8 +269,10 @@ def refresh_provider_status(
 
             if provider_status == "SMS_CODE_REQUESTED":
                 session.status = "otp_required"
+            elif provider_status == "AWAITING_CLIENT_ACTION":
+                session.status = "pending"
             else:
-                # Неизвестные статусы не считаются успехом.
+                # Неизвестные статусы остаются неподтверждёнными.
                 session.status = "pending"
 
         else:
@@ -278,7 +289,7 @@ def refresh_provider_status(
             "provider": session.provider,
         }
 
-    except ProviderError:
+    except (ProviderError, httpx.HTTPError):
         db.rollback()
 
         raise HTTPException(
@@ -290,7 +301,6 @@ def refresh_provider_status(
 @router.post("/request")
 def request_authentication(
     payload: PhoneRequest,
-    request: Request,
     db: Session = Depends(get_db),
 ):
     phone = normalize_phone(payload.phone)
@@ -314,8 +324,6 @@ def request_authentication(
 
     provider = settings.sms_auth_primary_provider
 
-    base = settings.public_api_base_url.rstrip("/")
-
     try:
         if provider == "sms_aero":
             try:
@@ -325,8 +333,7 @@ def request_authentication(
                 )
 
             except ProviderRejected:
-                # Резервный провайдер включается только при
-                # однозначном отказе основного до создания сессии.
+                # Только однозначный отказ до создания сессии.
                 if (
                     not settings.smsgold_user
                     or not settings.smsgold_pass
@@ -354,9 +361,8 @@ def request_authentication(
             "Провайдер отклонил запрос авторизации",
         )
 
-    except ProviderError:
-        # При неоднозначной ошибке резервный провайдер
-        # не вызывается: первая сессия могла быть создана.
+    except (ProviderError, httpx.HTTPError):
+        # При неоднозначной ошибке резерв не вызывается.
         raise HTTPException(
             502,
             "Временная ошибка SMS-провайдера",
@@ -399,12 +405,18 @@ def get_authentication_status(
         )
 
         if user is None or not user.is_active:
-            raise HTTPException(401, "Профиль недоступен")
+            raise HTTPException(
+                401,
+                "Профиль недоступен",
+            )
 
         profile = db.get(PassengerProfile, user.id)
 
         if profile is None or not profile.is_active:
-            raise HTTPException(403, "Профиль недоступен")
+            raise HTTPException(
+                403,
+                "Профиль недоступен",
+            )
 
         return {
             "status": "verified",
@@ -412,8 +424,8 @@ def get_authentication_status(
             "token_type": "bearer",
         }
 
-    if session.status in {"failed", "expired"}:
-        return {"status": session.status}
+    if session.status == "failed":
+        return {"status": "failed"}
 
     return refresh_provider_status(db, session)
 
@@ -427,11 +439,11 @@ def verify_authentication_code(
 
     if session.status == "verified":
         return get_authentication_status(
-            session.id,
+            payload.session_id,
             db,
         )
 
-    if session.status in {"failed", "expired"}:
+    if session.status == "failed":
         raise HTTPException(
             410,
             "Сессия авторизации недействительна",
@@ -439,6 +451,7 @@ def verify_authentication_code(
 
     if session.attempts >= settings.sms_auth_max_attempts:
         session.status = "failed"
+        session.updated_at = now_utc()
         db.commit()
 
         raise HTTPException(
@@ -447,6 +460,7 @@ def verify_authentication_code(
         )
 
     session.attempts += 1
+    session.updated_at = now_utc()
     db.commit()
 
     try:
@@ -469,22 +483,27 @@ def verify_authentication_code(
             )
 
     except ProviderRejected:
+        if session.attempts >= settings.sms_auth_max_attempts:
+            session.status = "failed"
+            db.commit()
+
         raise HTTPException(
             400,
             "Неверный или просроченный код",
         )
 
-    except ProviderError:
+    except (ProviderError, httpx.HTTPError):
         raise HTTPException(
             502,
             "Ошибка проверки кода у провайдера",
         )
 
     session.status = "checking"
+    session.updated_at = now_utc()
     db.commit()
 
-    # Сам факт успешного ответа verify не выдаёт токен.
-    # Окончательный успех подтверждается отдельным status API.
+    # Ответ verify сам по себе не выдаёт токен.
+    # Итог подтверждается отдельным запросом статуса.
     return {
         "status": "checking",
         "message": "Проверяем подтверждение у провайдера",
@@ -494,30 +513,76 @@ def verify_authentication_code(
 @router.post("/callback/{secret}/sms-aero")
 async def sms_aero_callback(
     secret: str,
+    request: Request,
+    db: Session = Depends(get_db),
 ):
-    if secret != settings.sms_auth_callback_secret:
+    if (
+        not settings.sms_auth_callback_secret
+        or secret != settings.sms_auth_callback_secret
+    ):
         raise HTTPException(404, "Not found")
 
-    # Callback не является доказательством авторизации.
-    # Клиент получает итоговый статус через status API.
+    try:
+        body = await request.json()
+    except ValueError:
+        return {"accepted": True}
+
+    if not isinstance(body, dict):
+        return {"accepted": True}
+
+    provider_id = body.get("id")
+    provider_status = body.get("status")
+    provider_phone = body.get("number")
+
+    if (
+        provider_id is None
+        or provider_status is None
+        or provider_phone is None
+    ):
+        return {"accepted": True}
+
+    try:
+        phone = normalize_phone(str(provider_phone))
+    except HTTPException:
+        return {"accepted": True}
+
+    session = db.scalar(
+        select(PassengerAuthSession).where(
+            PassengerAuthSession.provider == "sms_aero",
+            PassengerAuthSession.provider_session_id == str(provider_id),
+            PassengerAuthSession.phone == phone,
+        )
+    )
+
+    if session is not None:
+        # Callback только сохраняет диагностический статус.
+        # Он никогда самостоятельно не выдаёт токен.
+        session.provider_status = str(provider_status)[:80]
+        session.updated_at = now_utc()
+        db.commit()
+
     return {"accepted": True}
 
 
 @router.post("/callback/{secret}/smsgold-status")
-async def smsgold_status_callback(
-    secret: str,
-):
-    if secret != settings.sms_auth_callback_secret:
+async def smsgold_status_callback(secret: str):
+    if (
+        not settings.sms_auth_callback_secret
+        or secret != settings.sms_auth_callback_secret
+    ):
         raise HTTPException(404, "Not found")
 
+    # Формат callback SMSGold не предполагаем.
+    # Итог проверяется отдельным запросом status API.
     return {"accepted": True}
 
 
 @router.post("/callback/{secret}/smsgold-sms")
-async def smsgold_sms_callback(
-    secret: str,
-):
-    if secret != settings.sms_auth_callback_secret:
+async def smsgold_sms_callback(secret: str):
+    if (
+        not settings.sms_auth_callback_secret
+        or secret != settings.sms_auth_callback_secret
+    ):
         raise HTTPException(404, "Not found")
 
     return {"accepted": True}
