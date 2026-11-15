@@ -232,6 +232,138 @@ def save_driver_assignment(
     return result
 
 
+@router.get("/orders/{order_id}/available-drivers")
+def list_available_drivers_for_order(
+    order_id: UUID,
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    profile = get_dispatcher_profile(
+        db,
+        dispatcher,
+    )
+
+    order = db.get(
+        Order,
+        order_id,
+    )
+
+    if order is None:
+        raise HTTPException(
+            404,
+            "Заказ не найден",
+        )
+
+    ensure_order_access(profile, order)
+
+    if order.status != "accepted":
+        raise HTTPException(
+            409,
+            "Список водителей доступен для принятого заказа",
+        )
+
+    if order.driver_user_id is not None:
+        raise HTTPException(
+            409,
+            "К заказу уже назначен водитель",
+        )
+
+    city = db.get(
+        City,
+        order.city_id,
+    )
+
+    if city is None or not city.is_active:
+        raise HTTPException(
+            409,
+            "Город заказа недоступен",
+        )
+
+    busy_driver_ids = get_busy_driver_ids(db)
+
+    driver_profiles = db.scalars(
+        select(DriverProfile).where(
+            DriverProfile.is_active.is_(True),
+            DriverProfile.is_online.is_(True),
+            DriverProfile.city_id == order.city_id,
+            DriverProfile.branch_id == order.branch_id,
+        )
+    ).all()
+
+    drivers = []
+
+    for driver_profile in driver_profiles:
+        driver_id = driver_profile.user_id
+
+        if driver_id in busy_driver_ids:
+            continue
+
+        driver_user = db.get(
+            User,
+            driver_id,
+        )
+
+        if driver_user is None or not driver_user.is_active:
+            continue
+
+        vehicles = db.scalars(
+            select(Vehicle)
+            .where(
+                Vehicle.driver_user_id == driver_id,
+                Vehicle.city_id == order.city_id,
+                Vehicle.is_active.is_(True),
+            )
+            .order_by(Vehicle.id)
+        ).all()
+
+        for vehicle in vehicles:
+            location = db.get(
+                DriverLocation,
+                driver_id,
+            )
+
+            drivers.append(
+                {
+                    "driver_user_id": str(driver_id),
+                    "username": driver_user.username,
+                    "phone": driver_user.phone,
+                    "rating": str(driver_profile.rating),
+                    "is_online": driver_profile.is_online,
+                    "location": (
+                        {
+                            "latitude": location.latitude,
+                            "longitude": location.longitude,
+                            "recorded_at": location.recorded_at,
+                        }
+                        if location is not None
+                        else None
+                    ),
+                    "vehicle": {
+                        "id": str(vehicle.id),
+                        "make": vehicle.make,
+                        "model": vehicle.model,
+                        "color": vehicle.color,
+                        "license_plate": vehicle.license_plate,
+                    },
+                }
+            )
+
+    drivers.sort(
+        key=lambda item: (
+            -float(item["rating"]),
+            item["username"] or "",
+        )
+    )
+
+    return {
+        "order_id": str(order.id),
+        "public_number": order.public_number,
+        "city_code": city.code,
+        "drivers_count": len(drivers),
+        "drivers": drivers,
+    }
+
+
 @router.post("/orders/{order_id}/assign")
 def assign_order_to_driver(
     order_id: UUID,
