@@ -1,4 +1,3 @@
-
 package ru.vexa.client
 
 import ru.dgis.sdk.geometry.ComplexGeometry
@@ -699,7 +698,7 @@ fun ClientScreen(
                             }
 
                             pickupError?.let {
-                                Text(
+                                                                Text(
                                     it,
                                     color = CancelRed,
                                     fontSize = 11.sp
@@ -1074,6 +1073,10 @@ fun ClientScreen(
                             text = "Номер заказа: $number",
                             color = Teal,
                             style = MaterialTheme.typography.titleMedium
+                        )
+
+                        PassengerOrderStatusPanel(
+                            orderIdentifier = number
                         )
                     }
 
