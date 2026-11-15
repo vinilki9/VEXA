@@ -82,6 +82,13 @@ fun DriverScreen() {
     var errorMessage by remember { mutableStateOf("") }
     var infoMessage by remember { mutableStateOf("") }
 
+    DriverGpsReporter(
+        enabled = authorized,
+        onMessage = { message ->
+            infoMessage = message
+        }
+    )
+
     var theme by remember { mutableStateOf("Системная") }
     var sound by remember { mutableStateOf("classic") }
 
