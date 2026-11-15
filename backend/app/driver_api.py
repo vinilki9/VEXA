@@ -13,6 +13,7 @@ from app.models import (
     DriverLocation,
     DriverProfile,
     Order,
+    OrderStatusHistory,
     User,
     Vehicle,
 )
@@ -26,21 +27,19 @@ from app.dispatch_driver_api import router as dispatch_driver_router
 from app.dispatch_order_api import router as dispatch_order_router
 
 
-router = APIRouter(
-    tags=["Driver"],
-)
+router = APIRouter(tags=["Driver"])
+
+
+DRIVER_ORDER_STATUS_TRANSITIONS = {
+    "assigned": "arrived",
+    "arrived": "in_progress",
+    "in_progress": "completed",
+}
 
 
 class DriverLoginRequest(BaseModel):
-    login: str = Field(
-        min_length=3,
-        max_length=80,
-    )
-
-    password: str = Field(
-        min_length=1,
-        max_length=128,
-    )
+    login: str = Field(min_length=3, max_length=80)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class DriverOnlineRequest(BaseModel):
@@ -48,63 +47,38 @@ class DriverOnlineRequest(BaseModel):
 
 
 class DriverLocationRequest(BaseModel):
-    latitude: float = Field(
-        ge=-90,
-        le=90,
-    )
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    accuracy_meters: float | None = Field(default=None, ge=0)
 
-    longitude: float = Field(
-        ge=-180,
-        le=180,
-    )
 
-    accuracy_meters: float | None = Field(
-        default=None,
-        ge=0,
-    )
+class DriverOrderStatusRequest(BaseModel):
+    status: str = Field(min_length=1, max_length=30)
 
 
 def get_driver_profile(
     db: Session,
     driver: User,
 ) -> DriverProfile:
-    profile = db.get(
-        DriverProfile,
-        driver.id,
-    )
+    profile = db.get(DriverProfile, driver.id)
 
     if profile is None or not profile.is_active:
-        raise HTTPException(
-            403,
-            "Профиль водителя недоступен",
-        )
+        raise HTTPException(403, "Профиль водителя недоступен")
 
-    city = db.get(
-        City,
-        profile.city_id,
-    )
+    city = db.get(City, profile.city_id)
 
     if city is None or not city.is_active:
-        raise HTTPException(
-            403,
-            "Город водителя неактивен",
-        )
+        raise HTTPException(403, "Город водителя неактивен")
 
     if profile.branch_id is not None:
-        branch = db.get(
-            Branch,
-            profile.branch_id,
-        )
+        branch = db.get(Branch, profile.branch_id)
 
         if (
             branch is None
             or not branch.is_active
             or branch.city_id != profile.city_id
         ):
-            raise HTTPException(
-                403,
-                "Филиал водителя недоступен",
-            )
+            raise HTTPException(403, "Филиал водителя недоступен")
 
     return profile
 
@@ -114,10 +88,7 @@ def driver_profile_response(
     driver: User,
     profile: DriverProfile,
 ) -> dict:
-    city = db.get(
-        City,
-        profile.city_id,
-    )
+    city = db.get(City, profile.city_id)
 
     branch = (
         db.get(Branch, profile.branch_id)
@@ -258,15 +229,9 @@ def driver_login(
             driver.password_hash,
         )
     ):
-        raise HTTPException(
-            401,
-            "Неверный логин или пароль",
-        )
+        raise HTTPException(401, "Неверный логин или пароль")
 
-    profile = db.get(
-        DriverProfile,
-        driver.id,
-    )
+    profile = db.get(DriverProfile, driver.id)
 
     if profile is None or not profile.is_active:
         raise HTTPException(
@@ -274,15 +239,10 @@ def driver_login(
             "Учётная запись водителя недоступна",
         )
 
-    get_driver_profile(
-        db,
-        driver,
-    )
+    get_driver_profile(db, driver)
 
     return {
-        "access_token": create_driver_access_token(
-            driver.id
-        ),
+        "access_token": create_driver_access_token(driver.id),
         "token_type": "bearer",
     }
 
@@ -292,16 +252,9 @@ def driver_me(
     driver: User = Depends(get_current_driver),
     db: Session = Depends(get_db),
 ):
-    profile = get_driver_profile(
-        db,
-        driver,
-    )
+    profile = get_driver_profile(db, driver)
 
-    return driver_profile_response(
-        db,
-        driver,
-        profile,
-    )
+    return driver_profile_response(db, driver, profile)
 
 
 @router.get("/api/v1/driver/orders/active")
@@ -309,10 +262,7 @@ def driver_active_orders(
     driver: User = Depends(get_current_driver),
     db: Session = Depends(get_db),
 ):
-    profile = get_driver_profile(
-        db,
-        driver,
-    )
+    profile = get_driver_profile(db, driver)
 
     orders = db.scalars(
         select(Order)
@@ -320,11 +270,7 @@ def driver_active_orders(
             Order.driver_user_id == driver.id,
             Order.city_id == profile.city_id,
             Order.status.in_(
-                [
-                    "assigned",
-                    "arrived",
-                    "in_progress",
-                ]
+                ["assigned", "arrived", "in_progress"]
             ),
         )
         .order_by(Order.created_at.asc())
@@ -339,16 +285,91 @@ def driver_active_orders(
             else None
         )
 
-        result.append(
-            driver_order_response(
-                order,
-                vehicle,
-            )
-        )
+        result.append(driver_order_response(order, vehicle))
 
     return {
         "orders_count": len(result),
         "orders": result,
+    }
+
+
+@router.post("/api/v1/driver/orders/{order_id}/status")
+def update_driver_order_status(
+    order_id: str,
+    payload: DriverOrderStatusRequest,
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    profile = get_driver_profile(db, driver)
+
+    order = db.scalar(
+        select(Order)
+        .where(
+            Order.id == order_id,
+            Order.driver_user_id == driver.id,
+            Order.city_id == profile.city_id,
+        )
+        .with_for_update()
+    )
+
+    if order is None:
+        raise HTTPException(
+            404,
+            "Активный заказ водителя не найден",
+        )
+
+    expected_status = DRIVER_ORDER_STATUS_TRANSITIONS.get(
+        order.status
+    )
+
+    if expected_status is None:
+        raise HTTPException(
+            409,
+            "Для этого заказа изменение статуса водителем запрещено",
+        )
+
+    if payload.status != expected_status:
+        raise HTTPException(
+            409,
+            (
+                f"Недопустимый переход статуса: "
+                f"{order.status} -> {payload.status}. "
+                f"Следующий статус: {expected_status}"
+            ),
+        )
+
+    old_status = order.status
+    now = datetime.now(timezone.utc)
+
+    order.status = payload.status
+    order.updated_at = now
+
+    db.add(
+        OrderStatusHistory(
+            order_id=order.id,
+            old_status=old_status,
+            new_status=payload.status,
+            changed_by_user_id=driver.id,
+        )
+    )
+
+    try:
+        db.commit()
+        db.refresh(order)
+    except Exception:
+        db.rollback()
+        raise
+
+    vehicle = (
+        db.get(Vehicle, order.vehicle_id)
+        if order.vehicle_id is not None
+        else None
+    )
+
+    return {
+        "success": True,
+        "message": "Статус заказа обновлён",
+        "order": driver_order_response(order, vehicle),
     }
 
 
@@ -358,10 +379,7 @@ def set_driver_online(
     driver: User = Depends(get_current_driver),
     db: Session = Depends(get_db),
 ):
-    profile = get_driver_profile(
-        db,
-        driver,
-    )
+    profile = get_driver_profile(db, driver)
 
     profile.is_online = payload.is_online
 
@@ -380,17 +398,11 @@ def update_driver_location(
     driver: User = Depends(get_current_driver),
     db: Session = Depends(get_db),
 ):
-    get_driver_profile(
-        db,
-        driver,
-    )
+    get_driver_profile(db, driver)
 
     now = datetime.now(timezone.utc)
 
-    location = db.get(
-        DriverLocation,
-        driver.id,
-    )
+    location = db.get(DriverLocation, driver.id)
 
     if location is None:
         location = DriverLocation(
