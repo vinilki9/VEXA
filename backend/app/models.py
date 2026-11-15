@@ -200,6 +200,18 @@ class Tariff(Base):
             """,
             name="tariffs_maximum_fare_gte_minimum",
         ),
+        CheckConstraint(
+            "child_seat_surcharge_kopecks >= 0",
+            name="tariffs_child_seat_surcharge_nonnegative",
+        ),
+        CheckConstraint(
+            "animal_transport_surcharge_kopecks >= 0",
+            name="tariffs_animal_surcharge_nonnegative",
+        ),
+        CheckConstraint(
+            "cargo_loader_price_per_person_kopecks >= 0",
+            name="tariffs_cargo_loader_price_nonnegative",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -256,6 +268,31 @@ class Tariff(Base):
     maximum_fare_kopecks: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
+    )
+
+    # Дополнительные услуги и параметры грузового тарифа.
+    child_seat_surcharge_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=10_000,
+    )
+
+    animal_transport_surcharge_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=10_000,
+    )
+
+    cargo_vehicle_surcharges: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+    )
+
+    cargo_loader_price_per_person_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
     )
 
     is_active: Mapped[bool] = mapped_column(
@@ -507,6 +544,10 @@ class Order(Base):
             name="orders_price_kopecks_nonnegative",
         ),
         CheckConstraint(
+            "cargo_loaders >= 0 AND cargo_loaders <= 4",
+            name="orders_cargo_loaders_range",
+        ),
+        CheckConstraint(
             """
             (
                 fare_base_price_kopecks IS NULL
@@ -514,6 +555,10 @@ class Order(Base):
                 AND fare_time_price_kopecks IS NULL
                 AND fare_limit_adjustment_kopecks IS NULL
                 AND anonymous_surcharge_kopecks IS NULL
+                AND child_seat_surcharge_kopecks IS NULL
+                AND animal_transport_surcharge_kopecks IS NULL
+                AND cargo_vehicle_surcharge_kopecks IS NULL
+                AND cargo_loaders_surcharge_kopecks IS NULL
             )
             OR
             (
@@ -522,17 +567,29 @@ class Order(Base):
                 AND fare_time_price_kopecks IS NOT NULL
                 AND fare_limit_adjustment_kopecks IS NOT NULL
                 AND anonymous_surcharge_kopecks IS NOT NULL
+                AND child_seat_surcharge_kopecks IS NOT NULL
+                AND animal_transport_surcharge_kopecks IS NOT NULL
+                AND cargo_vehicle_surcharge_kopecks IS NOT NULL
+                AND cargo_loaders_surcharge_kopecks IS NOT NULL
                 AND price_kopecks IS NOT NULL
                 AND fare_base_price_kopecks >= 0
                 AND fare_distance_price_kopecks >= 0
                 AND fare_time_price_kopecks >= 0
                 AND anonymous_surcharge_kopecks >= 0
+                AND child_seat_surcharge_kopecks >= 0
+                AND animal_transport_surcharge_kopecks >= 0
+                AND cargo_vehicle_surcharge_kopecks >= 0
+                AND cargo_loaders_surcharge_kopecks >= 0
                 AND price_kopecks =
                     fare_base_price_kopecks
                     + fare_distance_price_kopecks
                     + fare_time_price_kopecks
                     + fare_limit_adjustment_kopecks
                     + anonymous_surcharge_kopecks
+                    + child_seat_surcharge_kopecks
+                    + animal_transport_surcharge_kopecks
+                    + cargo_vehicle_surcharge_kopecks
+                    + cargo_loaders_surcharge_kopecks
             )
             """,
             name="orders_fare_breakdown_consistent",
@@ -685,6 +742,56 @@ class Order(Base):
     )
 
     anonymous_surcharge_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    # Выбранные дополнительные услуги и параметры грузового заказа.
+    child_seat: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    animal_transport: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    cargo_vehicle: Mapped[str | None] = mapped_column(
+        String(80),
+        nullable=True,
+    )
+
+    cargo_description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    cargo_loaders: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    # Неизменяемый снимок стоимости дополнительных услуг.
+    child_seat_surcharge_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    animal_transport_surcharge_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    cargo_vehicle_surcharge_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    cargo_loaders_surcharge_kopecks: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
     )
