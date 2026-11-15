@@ -6,6 +6,7 @@ import {
   RefreshCw, LogOut, CheckCircle2, Clock, AlertCircle, UserCheck, X,
   MapPin, Radio,
 } from 'lucide-react';
+import VexaMap from './components/VexaMap';
 import './style.css';
 
 const API_BASE = 'https://109.120.184.20';
@@ -101,6 +102,7 @@ async function apiRequest(
 
 function formatDate(value?: string | null) {
   if (!value) return '—';
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
 
@@ -122,6 +124,7 @@ function getStatusLabel(status: string) {
     completed: 'Завершён',
     cancelled: 'Отменён',
   };
+
   return labels[status] || status;
 }
 
@@ -139,6 +142,7 @@ function getPaymentLabel(method: string) {
     card: 'Банковская карта',
     sbp: 'СБП',
   };
+
   return labels[method] || method || 'Не указан';
 }
 
@@ -213,24 +217,39 @@ function LoginScreen({
 
   return (
     <div style={{
-      minHeight: '100vh', display: 'grid', placeItems: 'center',
-      padding: 20, background: '#f5f7fa',
+      minHeight: '100vh',
+      display: 'grid',
+      placeItems: 'center',
+      padding: 20,
+      background: '#f5f7fa',
     }}>
       <form onSubmit={submit} style={{
-        width: '100%', maxWidth: 390, background: '#fff',
-        border: '1px solid #e8edf2', borderRadius: 18,
-        padding: 30, boxShadow: '0 10px 35px #1d293912',
+        width: '100%',
+        maxWidth: 390,
+        background: '#fff',
+        border: '1px solid #e8edf2',
+        borderRadius: 18,
+        padding: 30,
+        boxShadow: '0 10px 35px #1d293912',
       }}>
         <div className="brand" style={{ margin: '0 0 28px' }}>
-          <span className="mark">V</span><b>VEXA</b><small>DISPATCH</small>
+          <span className="mark">V</span>
+          <b>VEXA</b>
+          <small>DISPATCH</small>
         </div>
-        <h1 style={{ fontSize: 23, marginBottom: 8 }}>Вход диспетчера</h1>
+
+        <h1 style={{ fontSize: 23, marginBottom: 8 }}>
+          Вход диспетчера
+        </h1>
+
         <p style={{ color: '#8994a3', fontSize: 13, marginBottom: 24 }}>
           Войдите в панель управления VEXA
         </p>
+
         <label style={{ display: 'block', fontSize: 12, marginBottom: 7 }}>
           Логин
         </label>
+
         <input
           value={username}
           onChange={e => setUsername(e.target.value)}
@@ -239,9 +258,15 @@ function LoginScreen({
           style={inputStyle}
           placeholder="Введите логин"
         />
-        <label style={{ display: 'block', fontSize: 12, margin: '16px 0 7px' }}>
+
+        <label style={{
+          display: 'block',
+          fontSize: 12,
+          margin: '16px 0 7px',
+        }}>
           Пароль
         </label>
+
         <input
           type="password"
           value={password}
@@ -251,15 +276,28 @@ function LoginScreen({
           style={inputStyle}
           placeholder="Введите пароль"
         />
-        {error && <div style={errorStyle}><AlertCircle size={16} />{error}</div>}
+
+        {error && (
+          <div style={errorStyle}>
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
+
         <button type="submit" disabled={loading} style={{
-          ...primaryButtonStyle, width: '100%', marginTop: 22,
+          ...primaryButtonStyle,
+          width: '100%',
+          marginTop: 22,
           opacity: loading ? 0.65 : 1,
         }}>
           {loading ? 'Выполняется вход...' : 'Войти'}
         </button>
+
         <p style={{
-          color: '#a0aab7', fontSize: 10, textAlign: 'center', marginTop: 20,
+          color: '#a0aab7',
+          fontSize: 10,
+          textAlign: 'center',
+          marginTop: 20,
         }}>
           VEXA · Система управления заказами
         </p>
@@ -297,9 +335,12 @@ function App() {
         `/api/v1/dispatch/orders?city_code=${CITY_CODE}`,
         accessToken,
       );
+
       setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить заказы');
+      setError(
+        err instanceof Error ? err.message : 'Не удалось загрузить заказы',
+      );
     } finally {
       setLoading(false);
     }
@@ -314,10 +355,13 @@ function App() {
         `/api/v1/dispatch/drivers/locations?city_code=${CITY_CODE}`,
         accessToken,
       );
+
       setDrivers(Array.isArray(data?.drivers) ? data.drivers : []);
     } catch (err) {
       setDriversError(
-        err instanceof Error ? err.message : 'Не удалось загрузить водителей',
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить водителей',
       );
     } finally {
       setDriversLoading(false);
@@ -325,7 +369,11 @@ function App() {
   }, []);
 
   const loadProfile = useCallback(async (accessToken: string) => {
-    const profile = await apiRequest('/api/v1/dispatch/auth/me', accessToken);
+    const profile = await apiRequest(
+      '/api/v1/dispatch/auth/me',
+      accessToken,
+    );
+
     setDispatcher(profile);
   }, []);
 
@@ -334,6 +382,7 @@ function App() {
     if (!savedToken) return;
 
     setToken(savedToken);
+
     Promise.all([
       loadProfile(savedToken),
       loadOrders(savedToken),
@@ -357,19 +406,26 @@ function App() {
   }, [token, loadOrders, loadDriverLocations]);
 
   async function login(username: string, password: string) {
-    const result = await apiRequest('/api/v1/dispatch/auth/login', undefined, {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
+    const result = await apiRequest(
+      '/api/v1/dispatch/auth/login',
+      undefined,
+      {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      },
+    );
 
     if (!result?.access_token) {
       throw new Error('Сервер не вернул токен авторизации');
     }
 
     const accessToken = result.access_token;
+
     await loadProfile(accessToken);
+
     localStorage.setItem(TOKEN_KEY, accessToken);
     setToken(accessToken);
+
     await Promise.all([
       loadOrders(accessToken),
       loadDriverLocations(accessToken),
@@ -410,14 +466,20 @@ function App() {
         { method: 'POST' },
       );
 
-      setNotice(result.assigned
-        ? `Заказ ${order.public_number}: водитель назначен автоматически.`
-        : `Заказ ${order.public_number} принят. Свободных водителей нет — требуется ручное назначение.`,
+      setNotice(
+        result.assigned
+          ? `Заказ ${order.public_number}: водитель назначен автоматически.`
+          : `Заказ ${order.public_number} принят. Свободных водителей нет — требуется ручное назначение.`,
       );
 
-      await Promise.all([loadOrders(token), loadDriverLocations(token)]);
+      await Promise.all([
+        loadOrders(token),
+        loadDriverLocations(token),
+      ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось принять заказ');
+      setError(
+        err instanceof Error ? err.message : 'Не удалось принять заказ',
+      );
     } finally {
       setAcceptingId(null);
     }
@@ -437,9 +499,11 @@ function App() {
         `/api/v1/dispatch/orders/${order.id}/available-drivers`,
         token,
       );
+
       const list: AvailableDriver[] = Array.isArray(result?.drivers)
         ? result.drivers
         : [];
+
       setAvailableDrivers(list);
 
       if (list.length === 0) {
@@ -449,7 +513,9 @@ function App() {
       }
     } catch (err) {
       setAssignmentError(
-        err instanceof Error ? err.message : 'Не удалось загрузить список водителей',
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить список водителей',
       );
     } finally {
       setLoadingDrivers(false);
@@ -479,24 +545,35 @@ function App() {
       setNotice(
         `Заказ ${assignmentOrder.public_number}: водитель ${selectedDriver.username} назначен вручную.`,
       );
+
       closeAssignment();
-      await Promise.all([loadOrders(token), loadDriverLocations(token)]);
+
+      await Promise.all([
+        loadOrders(token),
+        loadDriverLocations(token),
+      ]);
     } catch (err) {
       setAssignmentError(
-        err instanceof Error ? err.message : 'Не удалось назначить водителя',
+        err instanceof Error
+          ? err.message
+          : 'Не удалось назначить водителя',
       );
     } finally {
       setAssigning(false);
     }
   }
 
-  if (!token) return <LoginScreen onLogin={login} />;
+  if (!token) {
+    return <LoginScreen onLogin={login} />;
+  }
 
   const newOrders = orders.filter(o => o.status === 'new');
   const acceptedOrders = orders.filter(o => o.status === 'accepted');
+
   const activeOrders = orders.filter(o =>
     ['assigned', 'arrived', 'in_progress'].includes(o.status),
   );
+
   const completedOrders = orders.filter(o => o.status === 'completed');
   const onlineDrivers = drivers.filter(d => d.is_online);
   const offlineDrivers = drivers.filter(d => !d.is_online);
@@ -505,8 +582,11 @@ function App() {
     <div className="shell">
       <aside>
         <div className="brand">
-          <span className="mark">V</span><b>VEXA</b><small>DISPATCH</small>
+          <span className="mark">V</span>
+          <b>VEXA</b>
+          <small>DISPATCH</small>
         </div>
+
         <nav>
           <a className="active"><LayoutDashboard />Обзор</a>
           <a><Map />Карта</a>
@@ -515,6 +595,7 @@ function App() {
           <a><Wallet />Финансы</a>
           <a><Settings />Настройки</a>
         </nav>
+
         <div className="branch">
           <span className="dot" />
           Оболенск · Пилотный город
@@ -526,42 +607,92 @@ function App() {
           <div>
             <p className="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</p>
             <h1>Обзор диспетчера</h1>
-            <p style={{ color: '#8994a3', fontSize: 11, marginTop: 7 }}>
+            <p style={{
+              color: '#8994a3',
+              fontSize: 11,
+              marginTop: 7,
+            }}>
               {dispatcher?.username || 'Диспетчер'} · Оболенск
             </p>
           </div>
+
           <div className="headright">
             <span className="online"><i />Сервер подключён</span>
-            <button onClick={() => {
-              loadOrders(token);
-              loadDriverLocations(token);
-            }} title="Обновить данные" style={iconButtonStyle}>
+
+            <button
+              onClick={() => {
+                loadOrders(token);
+                loadDriverLocations(token);
+              }}
+              title="Обновить данные"
+              style={iconButtonStyle}
+            >
               <RefreshCw size={17} />
             </button>
+
             <Bell />
-            <button onClick={logout} title="Выйти из системы" style={iconButtonStyle}>
+
+            <button
+              onClick={logout}
+              title="Выйти из системы"
+              style={iconButtonStyle}
+            >
               <LogOut size={17} />
             </button>
           </div>
         </header>
 
-        {error && <div style={errorStyle}><AlertCircle size={16} />{error}</div>}
+        {error && (
+          <div style={errorStyle}>
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
+
         {notice && (
           <div style={successStyle}>
             <CheckCircle2 size={16} />
             {notice}
-            <button onClick={() => setNotice('')} style={{
-              marginLeft: 'auto', border: 0, background: 'transparent',
-              cursor: 'pointer', color: 'inherit',
-            }}>×</button>
+
+            <button
+              onClick={() => setNotice('')}
+              style={{
+                marginLeft: 'auto',
+                border: 0,
+                background: 'transparent',
+                cursor: 'pointer',
+                color: 'inherit',
+              }}
+            >
+              ×
+            </button>
           </div>
         )}
 
         <section className="stats">
-          <article><label>Новые заказы</label><strong>{newOrders.length}</strong><small>Ожидают принятия</small></article>
-          <article><label>Ожидают водителя</label><strong>{acceptedOrders.length}</strong><small>Нуждаются в назначении</small></article>
-          <article><label>Активные поездки</label><strong>{activeOrders.length}</strong><small>Назначены водители</small></article>
-          <article><label>Завершённые</label><strong>{completedOrders.length}</strong><small>В загруженном списке</small></article>
+          <article>
+            <label>Новые заказы</label>
+            <strong>{newOrders.length}</strong>
+            <small>Ожидают принятия</small>
+          </article>
+
+          <article>
+            <label>Ожидают водителя</label>
+            <strong>{acceptedOrders.length}</strong>
+            <small>Нуждаются в назначении</small>
+          </article>
+
+          <article>
+            <label>Активные поездки</label>
+            <strong>{activeOrders.length}</strong>
+            <small>Назначены водители</small>
+          </article>
+
+          <article>
+            <label>Завершённые</label>
+            <strong>{completedOrders.length}</strong>
+            <small>В загруженном списке</small>
+          </article>
         </section>
 
         <section style={panelStyle}>
@@ -572,12 +703,16 @@ function App() {
                 Последние сохранённые сведения о водителях · Оболенск
               </p>
             </div>
+
             <button
               onClick={() => loadDriverLocations(token)}
               disabled={driversLoading}
               style={secondaryButtonStyle}
             >
-              <RefreshCw size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+              <RefreshCw
+                size={14}
+                style={{ marginRight: 6, verticalAlign: 'middle' }}
+              />
               {driversLoading ? 'Обновление...' : 'Обновить'}
             </button>
           </div>
@@ -585,26 +720,40 @@ function App() {
           <div style={driverStatsStyle}>
             <div style={driverStatCardStyle}>
               <span style={statLabelStyle}>На линии</span>
-              <strong style={{ ...statNumberStyle, color: '#07866f' }}>
+              <strong style={{
+                ...statNumberStyle,
+                color: '#07866f',
+              }}>
                 {onlineDrivers.length}
               </strong>
             </div>
+
             <div style={driverStatCardStyle}>
               <span style={statLabelStyle}>Не на линии</span>
-              <strong style={statNumberStyle}>{offlineDrivers.length}</strong>
+              <strong style={statNumberStyle}>
+                {offlineDrivers.length}
+              </strong>
             </div>
+
             <div style={driverStatCardStyle}>
               <span style={statLabelStyle}>Всего водителей</span>
-              <strong style={statNumberStyle}>{drivers.length}</strong>
+              <strong style={statNumberStyle}>
+                {drivers.length}
+              </strong>
             </div>
           </div>
 
           {driversError && (
-            <div style={errorStyle}><AlertCircle size={16} />{driversError}</div>
+            <div style={errorStyle}>
+              <AlertCircle size={16} />
+              {driversError}
+            </div>
           )}
 
           {driversLoading && drivers.length === 0 && (
-            <p style={mutedTextStyle}>Загрузка списка водителей...</p>
+            <p style={mutedTextStyle}>
+              Загрузка списка водителей...
+            </p>
           )}
 
           {!driversLoading && drivers.length === 0 && !driversError && (
@@ -616,39 +765,61 @@ function App() {
 
           {onlineDrivers.length > 0 && (
             <>
-              <h3 style={subheadingStyle}>На линии ({onlineDrivers.length})</h3>
+              <h3 style={subheadingStyle}>
+                На линии ({onlineDrivers.length})
+              </h3>
+
               <div style={onlineListStyle}>
                 {onlineDrivers.map(driver => (
-                  <div key={driver.user_id} style={onlineDriverCardStyle}>
+                  <div
+                    key={driver.user_id}
+                    style={onlineDriverCardStyle}
+                  >
                     <div style={onlineDriverTopStyle}>
-                      <div style={driverAvatarStyle}><CarFront size={19} /></div>
+                      <div style={driverAvatarStyle}>
+                        <CarFront size={19} />
+                      </div>
+
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <b style={driverNameStyle}>{driver.username}</b>
+                        <b style={driverNameStyle}>
+                          {driver.username}
+                        </b>
+
                         <span style={driverPhoneStyle}>
                           {driver.phone || 'Телефон не указан'}
                         </span>
                       </div>
-                      <span style={onlineBadgeStyle}><i />На линии</span>
+
+                      <span style={onlineBadgeStyle}>
+                        <i />
+                        На линии
+                      </span>
                     </div>
 
                     <div style={driverMetaStyle}>
-                      <span>Рейтинг: ★ {Number(driver.rating || 0).toFixed(1)}</span>
+                      <span>
+                        Рейтинг: ★ {Number(driver.rating || 0).toFixed(1)}
+                      </span>
                       <span>Город: {driver.city?.name || '—'}</span>
                       <span>Филиал: {driver.branch?.name || 'Не указан'}</span>
                     </div>
 
                     <div style={locationInfoStyle}>
                       <MapPin size={15} />
+
                       {driver.location ? (
                         <div>
                           <b>
                             {Number(driver.location.latitude).toFixed(5)},{' '}
                             {Number(driver.location.longitude).toFixed(5)}
                           </b>
+
                           <small>
                             Последние координаты: {formatDate(
-                              driver.location.recorded_at || driver.location.updated_at,
+                              driver.location.recorded_at ||
+                              driver.location.updated_at,
                             )}
+
                             {driver.location.accuracy_meters != null
                               ? ` · точность ±${Math.round(driver.location.accuracy_meters)} м`
                               : ''}
@@ -672,41 +843,66 @@ function App() {
               <summary style={offlineSummaryStyle}>
                 Не на линии ({offlineDrivers.length})
               </summary>
+
               <div style={onlineListStyle}>
                 {offlineDrivers.map(driver => (
-                  <div key={driver.user_id} style={{ ...onlineDriverCardStyle, opacity: 0.72 }}>
+                  <div
+                    key={driver.user_id}
+                    style={{
+                      ...onlineDriverCardStyle,
+                      opacity: 0.72,
+                    }}
+                  >
                     <div style={onlineDriverTopStyle}>
-                      <div style={{ ...driverAvatarStyle, background: '#f0f2f5', color: '#8994a3' }}>
+                      <div style={{
+                        ...driverAvatarStyle,
+                        background: '#f0f2f5',
+                        color: '#8994a3',
+                      }}>
                         <CarFront size={19} />
                       </div>
+
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <b style={driverNameStyle}>{driver.username}</b>
+                        <b style={driverNameStyle}>
+                          {driver.username}
+                        </b>
+
                         <span style={driverPhoneStyle}>
                           {driver.phone || 'Телефон не указан'}
                         </span>
                       </div>
-                      <span style={offlineBadgeStyle}>Не на линии</span>
+
+                      <span style={offlineBadgeStyle}>
+                        Не на линии
+                      </span>
                     </div>
+
                     <div style={driverMetaStyle}>
                       <span>Город: {driver.city?.name || '—'}</span>
                       <span>Филиал: {driver.branch?.name || 'Не указан'}</span>
                     </div>
+
                     <div style={locationInfoStyle}>
                       <MapPin size={15} />
+
                       {driver.location ? (
                         <div>
                           <b>
                             {Number(driver.location.latitude).toFixed(5)},{' '}
                             {Number(driver.location.longitude).toFixed(5)}
                           </b>
+
                           <small>
                             Последние сохранённые координаты: {formatDate(
-                              driver.location.recorded_at || driver.location.updated_at,
+                              driver.location.recorded_at ||
+                              driver.location.updated_at,
                             )}
                           </small>
                         </div>
                       ) : (
-                        <div><b>Координаты не получены</b></div>
+                        <div>
+                          <b>Координаты не получены</b>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -717,8 +913,8 @@ function App() {
 
           <p style={gpsNoticeStyle}>
             <Radio size={13} />
-            Панель показывает последние сохранённые координаты. Сам факт нахождения
-            водителя на линии не означает непрерывную передачу GPS.
+            Панель показывает последние сохранённые координаты. Сам факт
+            нахождения водителя на линии не означает непрерывную передачу GPS.
           </p>
         </section>
 
@@ -727,21 +923,23 @@ function App() {
             <div className="cardhead">
               <div>
                 <h2>Карта города</h2>
-                <p>Географическое отображение будет подключено отдельно</p>
+                <p>Карта 2ГИС · Местоположение водителей</p>
               </div>
-              <span className="live"><i />ОБОЛЕНСК</span>
+
+              <span className="live">
+                <i />
+                ОБОЛЕНСК
+              </span>
             </div>
+
             <div className="maparea" style={{
-              display: 'grid', placeItems: 'center', padding: 25, textAlign: 'center',
+              padding: 0,
+              minHeight: 300,
             }}>
-              <div style={{ color: '#63756e', maxWidth: 280 }}>
-                <Map size={38} style={{ margin: '0 auto 13px', color: '#159b8f' }} />
-                <b style={{ display: 'block', fontSize: 14 }}>Географическая карта</b>
-                <p style={{ fontSize: 11, lineHeight: 1.6 }}>
-                  Здесь будет отображаться карта Оболенска, местоположение автомобилей
-                  и активные заказы.
-                </p>
-              </div>
+              <VexaMap
+                drivers={drivers}
+                height={430}
+              />
             </div>
           </article>
 
@@ -751,33 +949,54 @@ function App() {
                 <h2>Заказы</h2>
                 <p>{orders.length} заказов в текущем списке</p>
               </div>
-              <button onClick={() => loadOrders(token)}>Обновить</button>
+
+              <button onClick={() => loadOrders(token)}>
+                Обновить
+              </button>
             </div>
 
             {loading && orders.length === 0 && (
               <p style={mutedTextStyle}>Загрузка заказов...</p>
             )}
+
             {!loading && orders.length === 0 && (
               <p style={mutedTextStyle}>Заказов пока нет.</p>
             )}
 
             {orders.map(order => (
               <div className="order" key={order.id}>
-                <div className="ordericon"><CarFront /></div>
+                <div className="ordericon">
+                  <CarFront />
+                </div>
+
                 <div className="orderinfo">
                   <b>{order.public_number}</b>
-                  <span>{order.pickup_address} → {order.destination_address}</span>
+
+                  <span>
+                    {order.pickup_address} → {order.destination_address}
+                  </span>
+
                   <small>
-                    {formatDate(order.created_at)} · {getPaymentLabel(order.payment_method)}
-                    {' · '}{Number(order.price_rub || 0).toLocaleString('ru-RU')} ₽
+                    {formatDate(order.created_at)}
+                    {' · '}
+                    {getPaymentLabel(order.payment_method)}
+                    {' · '}
+                    {Number(order.price_rub || 0).toLocaleString('ru-RU')} ₽
                   </small>
+
                   <small>
                     Клиент: {order.customer_name || 'Анонимный заказ'}
                     {order.customer_phone ? ` · ${order.customer_phone}` : ''}
                   </small>
-                  <span className={`status ${getStatusClass(order.status)}`} style={{
-                    display: 'inline-block', width: 'fit-content', marginTop: 5,
-                  }}>
+
+                  <span
+                    className={`status ${getStatusClass(order.status)}`}
+                    style={{
+                      display: 'inline-block',
+                      width: 'fit-content',
+                      marginTop: 5,
+                    }}
+                  >
                     {getStatusLabel(order.status)}
                   </span>
 
@@ -786,11 +1005,15 @@ function App() {
                       onClick={() => acceptOrder(order)}
                       disabled={acceptingId !== null}
                       style={{
-                        ...primaryButtonStyle, marginTop: 8, width: 'fit-content',
+                        ...primaryButtonStyle,
+                        marginTop: 8,
+                        width: 'fit-content',
                         opacity: acceptingId !== null ? 0.6 : 1,
                       }}
                     >
-                      {acceptingId === order.id ? 'Принимаем...' : 'Принять и найти водителя'}
+                      {acceptingId === order.id
+                        ? 'Принимаем...'
+                        : 'Принять и найти водителя'}
                     </button>
                   )}
 
@@ -798,11 +1021,16 @@ function App() {
                     <button
                       onClick={() => openManualAssignment(order)}
                       style={{
-                        ...primaryButtonStyle, marginTop: 8, width: 'fit-content',
-                        display: 'flex', alignItems: 'center', gap: 7,
+                        ...primaryButtonStyle,
+                        marginTop: 8,
+                        width: 'fit-content',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 7,
                       }}
                     >
-                      <UserCheck size={15} />Назначить водителя
+                      <UserCheck size={15} />
+                      Назначить водителя
                     </button>
                   )}
                 </div>
@@ -827,30 +1055,54 @@ function App() {
           <div style={modalStyle}>
             <div style={modalHeaderStyle}>
               <div>
-                <h2 style={{ margin: 0, fontSize: 18 }}>Назначение водителя</h2>
-                <p style={{ margin: '6px 0 0', color: '#8994a3', fontSize: 12 }}>
+                <h2 style={{ margin: 0, fontSize: 18 }}>
+                  Назначение водителя
+                </h2>
+
+                <p style={{
+                  margin: '6px 0 0',
+                  color: '#8994a3',
+                  fontSize: 12,
+                }}>
                   Заказ {assignmentOrder.public_number}
                 </p>
               </div>
-              <button onClick={closeAssignment} disabled={assigning}
-                style={iconButtonStyle} title="Закрыть">
+
+              <button
+                onClick={closeAssignment}
+                disabled={assigning}
+                style={iconButtonStyle}
+                title="Закрыть"
+              >
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ margin: '16px 0', fontSize: 12, color: '#526174' }}>
-              <div><b>Откуда:</b> {assignmentOrder.pickup_address}</div>
+            <div style={{
+              margin: '16px 0',
+              fontSize: 12,
+              color: '#526174',
+            }}>
+              <div>
+                <b>Откуда:</b> {assignmentOrder.pickup_address}
+              </div>
+
               <div style={{ marginTop: 5 }}>
                 <b>Куда:</b> {assignmentOrder.destination_address}
               </div>
             </div>
 
             <div style={modalDividerStyle} />
+
             <h3 style={{ fontSize: 13, margin: '15px 0 10px' }}>
               Свободные водители
             </h3>
 
-            {loadingDrivers && <p style={mutedTextStyle}>Загружаем список водителей...</p>}
+            {loadingDrivers && (
+              <p style={mutedTextStyle}>
+                Загружаем список водителей...
+              </p>
+            )}
 
             {!loadingDrivers && availableDrivers.length === 0 && (
               <div style={emptyDriversStyle}>
@@ -872,43 +1124,77 @@ function App() {
                       onClick={() => setSelectedDriver(driver)}
                       style={{
                         ...driverCardStyle,
-                        border: selected ? '2px solid #20b8aa' : '1px solid #e4eaf0',
+                        border: selected
+                          ? '2px solid #20b8aa'
+                          : '1px solid #e4eaf0',
                         background: selected ? '#effbf9' : '#fff',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={driverAvatarStyle}><CarFront size={19} /></div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                      }}>
+                        <div style={driverAvatarStyle}>
+                          <CarFront size={19} />
+                        </div>
+
                         <div style={{ flex: 1, textAlign: 'left' }}>
-                          <b style={{ display: 'block', fontSize: 13, color: '#172033' }}>
+                          <b style={{
+                            display: 'block',
+                            fontSize: 13,
+                            color: '#172033',
+                          }}>
                             {driver.username}
                           </b>
-                          <span style={{ fontSize: 11, color: '#8994a3' }}>
+
+                          <span style={{
+                            fontSize: 11,
+                            color: '#8994a3',
+                          }}>
                             {driver.phone || 'Телефон не указан'}
                           </span>
                         </div>
+
                         <span style={ratingStyle}>
                           ★ {Number(driver.rating || 0).toFixed(1)}
                         </span>
                       </div>
+
                       <div style={vehicleInfoStyle}>
                         <b>
-                          {[driver.vehicle.make, driver.vehicle.model].filter(Boolean).join(' ')
-                            || 'Автомобиль'}
+                          {[
+                            driver.vehicle.make,
+                            driver.vehicle.model,
+                          ].filter(Boolean).join(' ') || 'Автомобиль'}
                         </b>
+
                         <span>
-                          {[driver.vehicle.color, driver.vehicle.license_plate]
-                            .filter(Boolean).join(' · ')}
+                          {[
+                            driver.vehicle.color,
+                            driver.vehicle.license_plate,
+                          ].filter(Boolean).join(' · ')}
                         </span>
                       </div>
+
                       {driver.location && (
-                        <small style={{ display: 'block', color: '#8994a3', marginTop: 7 }}>
-                          GPS: {Number(driver.location.latitude).toFixed(5)},{' '}
+                        <small style={{
+                          display: 'block',
+                          color: '#8994a3',
+                          marginTop: 7,
+                        }}>
+                          GPS: {Number(driver.location.latitude).toFixed(5)},
+                          {' '}
                           {Number(driver.location.longitude).toFixed(5)}
                         </small>
                       )}
-                      {selected && <span style={selectedLabelStyle}>
-                        <CheckCircle2 size={14} />Выбран
-                      </span>}
+
+                      {selected && (
+                        <span style={selectedLabelStyle}>
+                          <CheckCircle2 size={14} />
+                          Выбран
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -916,22 +1202,35 @@ function App() {
             )}
 
             {assignmentError && (
-              <div style={errorStyle}><AlertCircle size={16} />{assignmentError}</div>
+              <div style={errorStyle}>
+                <AlertCircle size={16} />
+                {assignmentError}
+              </div>
             )}
 
             <div style={modalActionsStyle}>
-              <button onClick={closeAssignment} disabled={assigning}
-                style={secondaryButtonStyle}>Отмена</button>
+              <button
+                onClick={closeAssignment}
+                disabled={assigning}
+                style={secondaryButtonStyle}
+              >
+                Отмена
+              </button>
+
               <button
                 onClick={assignSelectedDriver}
                 disabled={!selectedDriver || assigning || loadingDrivers}
                 style={{
                   ...primaryButtonStyle,
                   opacity: !selectedDriver || assigning ? 0.55 : 1,
-                  cursor: !selectedDriver || assigning ? 'not-allowed' : 'pointer',
+                  cursor: !selectedDriver || assigning
+                    ? 'not-allowed'
+                    : 'pointer',
                 }}
               >
-                {assigning ? 'Назначаем...' : 'Подтвердить назначение'}
+                {assigning
+                  ? 'Назначаем...'
+                  : 'Подтвердить назначение'}
               </button>
             </div>
           </div>
@@ -942,170 +1241,280 @@ function App() {
 }
 
 const iconButtonStyle: React.CSSProperties = {
-  border: 0, background: 'transparent', color: '#64748b',
-  padding: 5, cursor: 'pointer', display: 'grid', placeItems: 'center',
+  border: 0,
+  background: 'transparent',
+  color: '#64748b',
+  padding: 5,
+  cursor: 'pointer',
+  display: 'grid',
+  placeItems: 'center',
 };
 
 const successStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8, color: '#087e70',
-  background: '#e8f8f4', borderRadius: 9, padding: 12,
-  fontSize: 11, marginBottom: 15,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  color: '#087e70',
+  background: '#e8f8f4',
+  borderRadius: 9,
+  padding: 12,
+  fontSize: 11,
+  marginBottom: 15,
 };
 
 const panelStyle: React.CSSProperties = {
-  background: '#fff', border: '1px solid #e8edf2',
-  borderRadius: 14, padding: 20, marginBottom: 20,
+  background: '#fff',
+  border: '1px solid #e8edf2',
+  borderRadius: 14,
+  padding: 20,
+  marginBottom: 20,
 };
 
 const panelHeaderStyle: React.CSSProperties = {
-  display: 'flex', justifyContent: 'space-between',
-  alignItems: 'center', gap: 12, flexWrap: 'wrap',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 12,
+  flexWrap: 'wrap',
 };
 
 const panelTitleStyle: React.CSSProperties = {
-  margin: 0, fontSize: 17, color: '#172033',
+  margin: 0,
+  fontSize: 17,
+  color: '#172033',
 };
 
 const mutedTextStyle: React.CSSProperties = {
-  color: '#8994a3', fontSize: 12,
+  color: '#8994a3',
+  fontSize: 12,
 };
 
 const driverStatsStyle: React.CSSProperties = {
-  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-  gap: 10, margin: '17px 0',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+  gap: 10,
+  margin: '17px 0',
 };
 
 const driverStatCardStyle: React.CSSProperties = {
-  background: '#f7f9fb', borderRadius: 10, padding: 13,
-  display: 'grid', gap: 5,
+  background: '#f7f9fb',
+  borderRadius: 10,
+  padding: 13,
+  display: 'grid',
+  gap: 5,
 };
 
 const statLabelStyle: React.CSSProperties = {
-  fontSize: 11, color: '#8994a3',
+  fontSize: 11,
+  color: '#8994a3',
 };
 
 const statNumberStyle: React.CSSProperties = {
-  fontSize: 24, color: '#172033',
+  fontSize: 24,
+  color: '#172033',
 };
 
 const subheadingStyle: React.CSSProperties = {
-  fontSize: 13, color: '#344054', margin: '18px 0 10px',
+  fontSize: 13,
+  color: '#344054',
+  margin: '18px 0 10px',
 };
 
 const onlineListStyle: React.CSSProperties = {
-  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
   gap: 10,
 };
 
 const onlineDriverCardStyle: React.CSSProperties = {
-  border: '1px solid #e8edf2', borderRadius: 11, padding: 13,
-  background: '#fff', minWidth: 0,
+  border: '1px solid #e8edf2',
+  borderRadius: 11,
+  padding: 13,
+  background: '#fff',
+  minWidth: 0,
 };
 
 const onlineDriverTopStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 9,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 9,
 };
 
 const driverAvatarStyle: React.CSSProperties = {
-  width: 36, height: 36, flexShrink: 0, borderRadius: 9,
-  background: '#e7f8f6', color: '#159b8f',
-  display: 'grid', placeItems: 'center',
+  width: 36,
+  height: 36,
+  flexShrink: 0,
+  borderRadius: 9,
+  background: '#e7f8f6',
+  color: '#159b8f',
+  display: 'grid',
+  placeItems: 'center',
 };
 
 const driverNameStyle: React.CSSProperties = {
-  display: 'block', fontSize: 13, color: '#172033',
-  overflow: 'hidden', textOverflow: 'ellipsis',
+  display: 'block',
+  fontSize: 13,
+  color: '#172033',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
 };
 
 const driverPhoneStyle: React.CSSProperties = {
-  display: 'block', fontSize: 11, color: '#8994a3', marginTop: 3,
+  display: 'block',
+  fontSize: 11,
+  color: '#8994a3',
+  marginTop: 3,
 };
 
 const onlineBadgeStyle: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 5,
-  color: '#07866f', background: '#e8f8f4',
-  borderRadius: 20, padding: '5px 8px', fontSize: 10,
-  fontWeight: 700, whiteSpace: 'nowrap',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  color: '#07866f',
+  background: '#e8f8f4',
+  borderRadius: 20,
+  padding: '5px 8px',
+  fontSize: 10,
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
 };
 
 const offlineBadgeStyle: React.CSSProperties = {
-  color: '#667085', background: '#f0f2f5',
-  borderRadius: 20, padding: '5px 8px', fontSize: 10,
+  color: '#667085',
+  background: '#f0f2f5',
+  borderRadius: 20,
+  padding: '5px 8px',
+  fontSize: 10,
   whiteSpace: 'nowrap',
 };
 
 const driverMetaStyle: React.CSSProperties = {
-  display: 'flex', flexWrap: 'wrap', gap: '6px 12px',
-  color: '#667085', fontSize: 10, marginTop: 12,
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '6px 12px',
+  color: '#667085',
+  fontSize: 10,
+  marginTop: 12,
 };
 
 const locationInfoStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'flex-start', gap: 7,
-  borderTop: '1px solid #edf0f3', marginTop: 11,
-  paddingTop: 10, color: '#159b8f', fontSize: 11,
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 7,
+  borderTop: '1px solid #edf0f3',
+  marginTop: 11,
+  paddingTop: 10,
+  color: '#159b8f',
+  fontSize: 11,
 };
 
 const gpsNoticeStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 6,
-  color: '#8994a3', fontSize: 10, lineHeight: 1.5, marginTop: 16,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  color: '#8994a3',
+  fontSize: 10,
+  lineHeight: 1.5,
+  marginTop: 16,
 };
 
 const offlineSummaryStyle: React.CSSProperties = {
-  cursor: 'pointer', color: '#667085', fontSize: 12,
-  fontWeight: 600, padding: '8px 0',
+  cursor: 'pointer',
+  color: '#667085',
+  fontSize: 12,
+  fontWeight: 600,
+  padding: '8px 0',
 };
 
 const emptyDriversStyle: React.CSSProperties = {
-  padding: 25, textAlign: 'center', color: '#8994a3',
-  background: '#f7f9fb', borderRadius: 10, fontSize: 12,
+  padding: 25,
+  textAlign: 'center',
+  color: '#8994a3',
+  background: '#f7f9fb',
+  borderRadius: 10,
+  fontSize: 12,
 };
 
 const modalOverlayStyle: React.CSSProperties = {
-  position: 'fixed', inset: 0, zIndex: 1000,
+  position: 'fixed',
+  inset: 0,
+  zIndex: 1000,
   background: 'rgba(15, 23, 42, 0.55)',
-  display: 'grid', placeItems: 'center', padding: 16,
+  display: 'grid',
+  placeItems: 'center',
+  padding: 16,
 };
 
 const modalStyle: React.CSSProperties = {
-  width: '100%', maxWidth: 540, maxHeight: '90vh',
-  overflowY: 'auto', background: '#fff', borderRadius: 16,
-  padding: 22, boxShadow: '0 20px 60px #0003',
+  width: '100%',
+  maxWidth: 540,
+  maxHeight: '90vh',
+  overflowY: 'auto',
+  background: '#fff',
+  borderRadius: 16,
+  padding: 22,
+  boxShadow: '0 20px 60px #0003',
 };
 
 const modalHeaderStyle: React.CSSProperties = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
 };
 
 const modalDividerStyle: React.CSSProperties = {
-  height: 1, background: '#edf0f3',
+  height: 1,
+  background: '#edf0f3',
 };
 
 const driverListStyle: React.CSSProperties = {
-  display: 'grid', gap: 9, maxHeight: 340, overflowY: 'auto',
+  display: 'grid',
+  gap: 9,
+  maxHeight: 340,
+  overflowY: 'auto',
 };
 
 const driverCardStyle: React.CSSProperties = {
-  width: '100%', textAlign: 'left', padding: 13,
-  borderRadius: 11, cursor: 'pointer',
+  width: '100%',
+  textAlign: 'left',
+  padding: 13,
+  borderRadius: 11,
+  cursor: 'pointer',
 };
 
 const ratingStyle: React.CSSProperties = {
-  color: '#ad7b1d', fontSize: 12, fontWeight: 700,
+  color: '#ad7b1d',
+  fontSize: 12,
+  fontWeight: 700,
 };
 
 const vehicleInfoStyle: React.CSSProperties = {
-  display: 'grid', gap: 3, marginTop: 11, paddingTop: 9,
-  borderTop: '1px solid #edf0f3', fontSize: 11, color: '#526174',
+  display: 'grid',
+  gap: 3,
+  marginTop: 11,
+  paddingTop: 9,
+  borderTop: '1px solid #edf0f3',
+  fontSize: 11,
+  color: '#526174',
 };
 
 const selectedLabelStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 5,
-  color: '#087e70', fontSize: 11, fontWeight: 700, marginTop: 9,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 5,
+  color: '#087e70',
+  fontSize: 11,
+  fontWeight: 700,
+  marginTop: 9,
 };
 
 const modalActionsStyle: React.CSSProperties = {
-  display: 'flex', justifyContent: 'flex-end', gap: 9,
-  marginTop: 20, paddingTop: 15, borderTop: '1px solid #edf0f3',
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 9,
+  marginTop: 20,
+  paddingTop: 15,
+  borderTop: '1px solid #edf0f3',
 };
 
 createRoot(document.getElementById('root')!).render(<App />);
