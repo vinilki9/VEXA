@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -10,11 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import (
-    DispatcherProfile,
-    PassengerProfile,
-    User,
-)
+from app.models import DispatcherProfile, PassengerProfile, User
 
 
 pwd_context = CryptContext(
@@ -34,10 +29,7 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
-def _create_token(
-    user_id: UUID,
-    token_type: str,
-) -> str:
+def _create_token(user_id: UUID, token_type: str) -> str:
     expires = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_minutes
     )
@@ -56,12 +48,10 @@ def _create_token(
 
 
 def create_access_token(user_id: UUID) -> str:
-    # Токен диспетчера.
     return _create_token(user_id, "dispatcher")
 
 
 def create_passenger_access_token(user_id: UUID) -> str:
-    # Отдельный тип токена пассажира.
     return _create_token(user_id, "passenger")
 
 
@@ -103,7 +93,8 @@ def get_current_dispatcher(
 
     user_id, token_type = _decode_token(credentials)
 
-    if token_type != "dispatcher":
+    # None допускается для совместимости со старыми токенами.
+    if token_type not in (None, "dispatcher"):
         raise unauthorized
 
     user = db.get(User, user_id)
@@ -111,9 +102,9 @@ def get_current_dispatcher(
     if user is None or not user.is_active:
         raise unauthorized
 
-    dispatcher_profile = db.get(DispatcherProfile, user_id)
+    profile = db.get(DispatcherProfile, user_id)
 
-    if dispatcher_profile is None or not dispatcher_profile.is_active:
+    if profile is None or not profile.is_active:
         raise unauthorized
 
     return user
