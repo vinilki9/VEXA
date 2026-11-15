@@ -74,6 +74,45 @@ def list_driver_locations(
         dispatcher,
     )
 
+    branch = None
+
+    if profile.role == "dispatcher":
+        branch = db.get(
+            Branch,
+            profile.branch_id,
+        )
+
+        if branch is None or not branch.is_active:
+            raise HTTPException(
+                403,
+                "Филиал диспетчера недоступен",
+            )
+
+        city = db.get(
+            City,
+            branch.city_id,
+        )
+
+        if city is None or not city.is_active:
+            raise HTTPException(
+                403,
+                "Город филиала недоступен",
+            )
+
+    else:
+        city = db.scalar(
+            select(City).where(
+                City.code == city_code,
+                City.is_active.is_(True),
+            )
+        )
+
+        if city is None:
+            raise HTTPException(
+                404,
+                "Город не найден или неактивен",
+            )
+
     query = (
         select(
             DriverProfile,
@@ -100,6 +139,7 @@ def list_driver_locations(
             Branch.id == DriverProfile.branch_id,
         )
         .where(
+            DriverProfile.city_id == city.id,
             DriverProfile.is_active.is_(True),
             User.is_active.is_(True),
             City.is_active.is_(True),
@@ -109,26 +149,6 @@ def list_driver_locations(
     if profile.role == "dispatcher":
         query = query.where(
             DriverProfile.branch_id == profile.branch_id,
-            DriverProfile.city_id == (
-                db.get(Branch, profile.branch_id).city_id
-            ),
-        )
-    else:
-        city = db.scalar(
-            select(City).where(
-                City.code == city_code,
-                City.is_active.is_(True),
-            )
-        )
-
-        if city is None:
-            raise HTTPException(
-                404,
-                "Город не найден или неактивен",
-            )
-
-        query = query.where(
-            DriverProfile.city_id == city.id,
         )
 
     rows = db.execute(
@@ -140,23 +160,23 @@ def list_driver_locations(
 
     drivers = []
 
-    for driver_profile, user, location, city, branch in rows:
+    for driver_profile, user, location, driver_city, driver_branch in rows:
         drivers.append(
             {
                 "user_id": str(user.id),
                 "username": user.username,
                 "phone": user.phone,
                 "city": {
-                    "id": str(city.id),
-                    "code": city.code,
-                    "name": city.name,
+                    "id": str(driver_city.id),
+                    "code": driver_city.code,
+                    "name": driver_city.name,
                 },
                 "branch": (
                     {
-                        "id": str(branch.id),
-                        "name": branch.name,
+                        "id": str(driver_branch.id),
+                        "name": driver_branch.name,
                     }
-                    if branch is not None
+                    if driver_branch is not None
                     else None
                 ),
                 "is_online": driver_profile.is_online,
@@ -178,11 +198,7 @@ def list_driver_locations(
         )
 
     return {
-        "city_code": (
-            rows[0][3].code
-            if rows
-            else city_code
-        ),
+        "city_code": city.code,
         "drivers_count": len(drivers),
         "drivers": drivers,
     }
