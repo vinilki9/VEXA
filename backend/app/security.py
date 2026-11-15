@@ -1,3 +1,4 @@
+
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -9,7 +10,12 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import DispatcherProfile, PassengerProfile, User
+from app.models import (
+    DispatcherProfile,
+    DriverProfile,
+    PassengerProfile,
+    User,
+)
 
 
 pwd_context = CryptContext(
@@ -53,6 +59,10 @@ def create_access_token(user_id: UUID) -> str:
 
 def create_passenger_access_token(user_id: UUID) -> str:
     return _create_token(user_id, "passenger")
+
+
+def create_driver_access_token(user_id: UUID) -> str:
+    return _create_token(user_id, "driver")
 
 
 def _decode_token(credentials):
@@ -131,6 +141,34 @@ def get_current_passenger(
         raise unauthorized
 
     profile = db.get(PassengerProfile, user_id)
+
+    if profile is None or not profile.is_active:
+        raise unauthorized
+
+    return user
+
+
+def get_current_driver(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Требуется авторизация водителя",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    user_id, token_type = _decode_token(credentials)
+
+    if token_type != "driver":
+        raise unauthorized
+
+    user = db.get(User, user_id)
+
+    if user is None or not user.is_active:
+        raise unauthorized
+
+    profile = db.get(DriverProfile, user_id)
 
     if profile is None or not profile.is_active:
         raise unauthorized
