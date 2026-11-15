@@ -496,6 +496,10 @@ fun ClientScreen(
         mutableStateOf("Economy")
     }
 
+    var customerName by remember {
+        mutableStateOf("")
+    }
+
     var cargoVehicle by remember {
         mutableStateOf("Универсал")
     }
@@ -551,6 +555,8 @@ fun ClientScreen(
     var showPassengerAuthDialog by remember {
         mutableStateOf(false)
     }
+
+    val isAnonymousOrder = anonymous || customerName.isBlank()
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -798,6 +804,39 @@ fun ClientScreen(
                     }
 
                     Text(
+                        "Ваше имя",
+                        color = Ink,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    OutlinedTextField(
+                        value = customerName,
+                        onValueChange = {
+                            customerName = it
+                            orderError = null
+                        },
+                        label = {
+                            Text("Имя")
+                        },
+                        placeholder = {
+                            Text("Введите ваше имя")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+
+                    Text(
+                        if (isAnonymousOrder) {
+                            "Имя не указано или включена анонимность. " +
+                                "К стоимости подачи добавится 100 ₽."
+                        } else {
+                            "Ваше имя будет видно водителю."
+                        },
+                        color = if (isAnonymousOrder) CancelRed else Color.Gray,
+                        fontSize = 11.sp
+                    )
+
+                    Text(
                         "Тариф",
                         color = Ink,
                         style = MaterialTheme.typography.titleMedium
@@ -964,7 +1003,7 @@ fun ClientScreen(
                                             checked = anonymous,
                                             onCheckedChange = null
                                         )
-                                        Text("Анонимность +100 ₽")
+                                        Text("Скрыть имя (+100 ₽)")
                                     }
                                 },
                                 onClick = {
@@ -979,7 +1018,7 @@ fun ClientScreen(
                             listOfNotNull(
                                 if (child) "Детское кресло" else null,
                                 if (animal) "Животное" else null,
-                                if (anonymous) "Анонимность" else null
+                                if (isAnonymousOrder) "Анонимность (+100 ₽)" else null
                             ).ifEmpty {
                                 listOf("Не выбраны")
                             }.joinToString(", "),
@@ -1075,7 +1114,7 @@ fun ClientScreen(
                                     val response =
                                         PassengerOrderRepository.createOrder(
                                             tariffLabel = tariff,
-                                            customerName = "",
+                                            customerName = customerName.trim(),
                                             anonymous = anonymous,
                                             pickupAddress = pickupAddress.name,
                                             destinationAddress = destinationAddress.name,
