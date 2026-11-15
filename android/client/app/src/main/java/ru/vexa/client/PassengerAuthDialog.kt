@@ -25,7 +25,7 @@ import org.json.JSONObject
 
 @Composable
 fun PassengerAuthDialog(
-    onAuthenticated: () -> Unit,
+    onAuthenticated: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var phone by remember { mutableStateOf("") }
@@ -48,7 +48,7 @@ fun PassengerAuthDialog(
 
             if (token.isNotBlank()) {
                 ApiClient.setAccessToken(token)
-                onAuthenticated()
+                onAuthenticated(phone.trim())
             } else {
                 authStatus = "failed"
                 errorMessage = "Сервер не вернул токен авторизации"
@@ -200,10 +200,6 @@ fun PassengerAuthDialog(
                     onClick = {
                         loading = true
                         errorMessage = null
-
-                        authStatus = "requesting"
-
-                        // Запрос SMS выполняется в корутине через LaunchedEffect.
                         authStatus = "starting"
                     }
                 ) {
@@ -281,10 +277,6 @@ fun PassengerAuthDialog(
                     sessionId = sessionId!!,
                     code = code
                 )
-
-                // Токен не принимается из ответа verify.
-                // Он будет получен только после отдельной
-                // проверки статуса сессии.
             } catch (error: Exception) {
                 authStatus = "otp_required"
                 errorMessage = error.message
