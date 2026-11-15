@@ -37,6 +37,10 @@ ACTIVE_ORDER_STATUSES = (
 GPS_MAX_AGE = timedelta(minutes=10)
 GPS_FUTURE_TOLERANCE = timedelta(minutes=1)
 
+NO_AVAILABLE_DRIVERS_MESSAGE = (
+    "Нет свободных водителей с актуальным GPS и подходящим автомобилем"
+)
+
 
 class AssignDriverRequest(BaseModel):
     driver_user_id: UUID
@@ -456,7 +460,7 @@ def auto_assign_order(
     if not candidates:
         raise HTTPException(
             409,
-            "Нет свободных водителей с актуальным GPS и подходящим автомобилем",
+            NO_AVAILABLE_DRIVERS_MESSAGE,
         )
 
     candidates.sort(
@@ -480,3 +484,91 @@ def auto_assign_order(
         city=city,
         distance_meters=distance,
     )
+
+
+@router.post("/orders/{order_id}/accept")
+def accept_order_and_assign_driver(
+    order_id: UUID,
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    profile = get_dispatcher_profile(
+        db,
+        dispatcher,
+    )
+
+    order = db.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .with_for_update()
+    )
+
+    if order is None:
+        raise HTTPException(
+            404,
+            "Заказ не найден",
+        )
+
+    ensure_order_access(profile, order)
+
+    if order.status != "new":
+        raise HTTPException(
+            409,
+            "Принять можно только новый заказ",
+        )
+
+    old_status = order.status
+    order.status = "accepted"
+    order.updated_at = datetime.now(timezone.utc)
+
+    db.add(
+        OrderStatusHistory(
+            order_id=order.id,
+            old_status=old_status,
+            new_status="accepted",
+            changed_by_user_id=dispatcher.id,
+        )
+    )
+
+    try:
+        db.commit()
+        db.refresh(order)
+    except Exception:
+        db.rollback()
+        raise
+
+    try:
+        assignment_result = auto_assign_order(
+            order_id=order_id,
+            dispatcher=dispatcher,
+            db=db,
+        )
+
+        assignment_result["accepted"] = True
+        assignment_result["message"] = (
+            "Заказ принят, водитель назначен автоматически"
+        )
+
+        return assignment_result
+
+    except HTTPException as exc:
+        if (
+            exc.status_code == 409
+            and exc.detail == NO_AVAILABLE_DRIVERS_MESSAGE
+        ):
+            return {
+                "success": True,
+                "accepted": True,
+                "assigned": False,
+                "message": (
+                    "Заказ принят. Свободных водителей нет, "
+                    "назначьте водителя вручную."
+                ),
+                "order_id": str(order.id),
+                "public_number": order.public_number,
+                "status": "accepted",
+                "driver_user_id": None,
+                "vehicle_id": None,
+            }
+
+        raise
