@@ -16,6 +16,8 @@ object ApiClient {
 
     private const val BASE_URL = "https://109.120.184.20"
 
+    private const val DEFAULT_CITY_CODE = "obolensk"
+
     private val JSON_MEDIA_TYPE =
         "application/json; charset=utf-8".toMediaType()
 
@@ -84,6 +86,47 @@ object ApiClient {
                 result
             }
         }
+    }
+
+    /**
+     * Получить список активных тарифов города.
+     *
+     * GET /api/v1/tariffs/{city_code}
+     *
+     * По умолчанию используется пилотный город Оболенск.
+     * Возвращает JSON сервера без изменения структуры.
+     */
+    suspend fun getTariffs(
+        cityCode: String = DEFAULT_CITY_CODE
+    ): String {
+        val normalizedCityCode = cityCode.trim()
+
+        require(normalizedCityCode.isNotEmpty()) {
+            "Не указан код города"
+        }
+
+        val request = Request.Builder()
+            .url(
+                "$BASE_URL/api/v1/tariffs/$normalizedCityCode"
+            )
+            .get()
+            .build()
+
+        return executeRequest(request)
+    }
+
+    /**
+     * Получить список активных городов.
+     *
+     * GET /api/v1/cities
+     */
+    suspend fun getCities(): String {
+        val request = Request.Builder()
+            .url("$BASE_URL/api/v1/cities")
+            .get()
+            .build()
+
+        return executeRequest(request)
     }
 
     /**
