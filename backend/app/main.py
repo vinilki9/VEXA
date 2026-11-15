@@ -1,8 +1,8 @@
-
 from datetime import datetime, timezone
 from uuid import UUID
 
 from app.passenger_auth import router as passenger_auth_router
+from app.driver_api import router as driver_router
 from app.phone_utils import normalize_phone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -48,6 +48,7 @@ from app.security import (
 
 app = FastAPI(title="VEXA API", version="0.6.0")
 app.include_router(passenger_auth_router)
+app.include_router(driver_router)
 
 
 ORDER_STATUSES = {
