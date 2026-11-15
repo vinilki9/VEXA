@@ -1,8 +1,10 @@
 
 from datetime import datetime, timezone
 from uuid import UUID
+
 from app.passenger_auth import router as passenger_auth_router
 from app.phone_utils import normalize_phone
+
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -43,8 +45,10 @@ from app.security import (
     verify_password,
 )
 
-app = FastAPI(title="VEXA API", version="0.5.0")
+
+app = FastAPI(title="VEXA API", version="0.6.0")
 app.include_router(passenger_auth_router)
+
 
 ORDER_STATUSES = {
     "new": {"accepted", "cancelled"},
@@ -56,8 +60,17 @@ ORDER_STATUSES = {
     "cancelled": set(),
 }
 
+
 CITY_PREFIXES = {
     "obolensk": "OB",
+}
+
+
+CARGO_VEHICLES = {
+    "Универсал",
+    "Каблук / небольшой фургон",
+    "Средний грузовой фургон",
+    "Газель",
 }
 
 
@@ -93,10 +106,16 @@ def order_to_response(order: Order, city: City) -> dict:
         "price_rub": order.price_rub,
         "price_kopecks": order.price_kopecks,
 
-        # Сохранённая расшифровка стоимости заказа.
-        "fare_base_price_kopecks": order.fare_base_price_kopecks,
-        "fare_distance_price_kopecks": order.fare_distance_price_kopecks,
-        "fare_time_price_kopecks": order.fare_time_price_kopecks,
+        # Основная расшифровка стоимости.
+        "fare_base_price_kopecks": (
+            order.fare_base_price_kopecks
+        ),
+        "fare_distance_price_kopecks": (
+            order.fare_distance_price_kopecks
+        ),
+        "fare_time_price_kopecks": (
+            order.fare_time_price_kopecks
+        ),
         "fare_limit_adjustment_kopecks": (
             order.fare_limit_adjustment_kopecks
         ),
@@ -104,10 +123,54 @@ def order_to_response(order: Order, city: City) -> dict:
             order.anonymous_surcharge_kopecks
         ),
 
+        # Выбранные дополнительные услуги.
+        "child_seat": order.child_seat,
+        "animal_transport": order.animal_transport,
+
+        # Параметры грузового заказа.
+        "cargo_vehicle": order.cargo_vehicle,
+        "cargo_description": order.cargo_description,
+        "cargo_loaders": order.cargo_loaders,
+
+        # Снимок стоимости дополнительных услуг.
+        "child_seat_surcharge_kopecks": (
+            order.child_seat_surcharge_kopecks
+        ),
+        "animal_transport_surcharge_kopecks": (
+            order.animal_transport_surcharge_kopecks
+        ),
+        "cargo_vehicle_surcharge_kopecks": (
+            order.cargo_vehicle_surcharge_kopecks
+        ),
+        "cargo_loaders_surcharge_kopecks": (
+            order.cargo_loaders_surcharge_kopecks
+        ),
+
         "comment": order.comment,
         "created_at": order.created_at,
         "updated_at": order.updated_at,
     }
+
+
+def is_cargo_tariff(tariff: Tariff) -> bool:
+    """
+    Определяет грузовой тариф по его коду,
+    названию или классу автомобиля.
+    """
+
+    values = (
+        tariff.code,
+        tariff.name,
+        tariff.vehicle_class,
+    )
+
+    for value in values:
+        normalized = (value or "").strip().lower()
+
+        if "cargo" in normalized or "груз" in normalized:
+            return True
+
+    return False
 
 
 def get_dispatcher_profile(
@@ -117,7 +180,10 @@ def get_dispatcher_profile(
     profile = db.get(DispatcherProfile, dispatcher.id)
 
     if profile is None or not profile.is_active:
-        raise HTTPException(403, "Доступ диспетчера запрещён")
+        raise HTTPException(
+            403,
+            "Доступ диспетчера запрещён",
+        )
 
     if profile.role == "dispatcher":
         if profile.branch_id is None:
@@ -135,7 +201,10 @@ def get_dispatcher_profile(
             )
 
     elif profile.role != "chief_dispatcher":
-        raise HTTPException(403, "Неизвестная роль диспетчера")
+        raise HTTPException(
+            403,
+            "Неизвестная роль диспетчера",
+        )
 
     return profile
 
@@ -151,7 +220,10 @@ def ensure_dispatcher_can_access_order(
         return profile
 
     if profile.branch_id != order.branch_id:
-        raise HTTPException(404, "Order not found")
+        raise HTTPException(
+            404,
+            "Order not found",
+        )
 
     branch = db.get(Branch, order.branch_id)
 
@@ -160,7 +232,10 @@ def ensure_dispatcher_can_access_order(
         or not branch.is_active
         or branch.city_id != order.city_id
     ):
-        raise HTTPException(404, "Order not found")
+        raise HTTPException(
+            404,
+            "Order not found",
+        )
 
     return profile
 
@@ -201,12 +276,19 @@ def ensure_dispatcher_can_access_tariff(
         or not branch.is_active
         or branch.city_id != tariff.city_id
     ):
-        raise HTTPException(404, "Tariff not found")
+        raise HTTPException(
+            404,
+            "Tariff not found",
+        )
 
     return profile
 
 
 def tariff_snapshot(tariff: Tariff) -> dict:
+    """
+    Полный снимок тарифа для неизменяемой истории.
+    """
+
     return {
         "id": str(tariff.id),
         "city_id": str(tariff.city_id),
@@ -214,10 +296,30 @@ def tariff_snapshot(tariff: Tariff) -> dict:
         "name": tariff.name,
         "vehicle_class": tariff.vehicle_class,
         "base_price_kopecks": tariff.base_price_kopecks,
-        "price_per_km_kopecks": tariff.price_per_km_kopecks,
-        "price_per_minute_kopecks": tariff.price_per_minute_kopecks,
-        "minimum_fare_kopecks": tariff.minimum_fare_kopecks,
-        "maximum_fare_kopecks": tariff.maximum_fare_kopecks,
+        "price_per_km_kopecks": (
+            tariff.price_per_km_kopecks
+        ),
+        "price_per_minute_kopecks": (
+            tariff.price_per_minute_kopecks
+        ),
+        "minimum_fare_kopecks": (
+            tariff.minimum_fare_kopecks
+        ),
+        "maximum_fare_kopecks": (
+            tariff.maximum_fare_kopecks
+        ),
+        "child_seat_surcharge_kopecks": (
+            tariff.child_seat_surcharge_kopecks
+        ),
+        "animal_transport_surcharge_kopecks": (
+            tariff.animal_transport_surcharge_kopecks
+        ),
+        "cargo_vehicle_surcharges": (
+            tariff.cargo_vehicle_surcharges or {}
+        ),
+        "cargo_loader_price_per_person_kopecks": (
+            tariff.cargo_loader_price_per_person_kopecks
+        ),
         "is_active": tariff.is_active,
     }
 
@@ -235,9 +337,15 @@ def next_order_number(db: Session, city: City) -> str:
     }
 
     if dialect == "postgresql":
-        statement = pg_insert(CityOrderCounter).values(**values)
+        statement = pg_insert(
+            CityOrderCounter
+        ).values(**values)
+
     elif dialect == "sqlite":
-        statement = sqlite_insert(CityOrderCounter).values(**values)
+        statement = sqlite_insert(
+            CityOrderCounter
+        ).values(**values)
+
     else:
         raise RuntimeError(
             "Unsupported database dialect for order counter"
@@ -246,10 +354,14 @@ def next_order_number(db: Session, city: City) -> str:
     statement = statement.on_conflict_do_update(
         index_elements=[CityOrderCounter.city_id],
         set_={
-            "last_number": CityOrderCounter.last_number + 1,
+            "last_number": (
+                CityOrderCounter.last_number + 1
+            ),
             "updated_at": func.now(),
         },
-    ).returning(CityOrderCounter.last_number)
+    ).returning(
+        CityOrderCounter.last_number
+    )
 
     number = db.scalar(statement)
 
@@ -269,6 +381,7 @@ def next_order_number(db: Session, city: City) -> str:
 def health(db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
+
     except Exception:
         raise HTTPException(
             status_code=503,
@@ -288,7 +401,9 @@ def health(db: Session = Depends(get_db)):
 # ============================================================
 
 @app.get("/api/v1/cities")
-def list_cities(db: Session = Depends(get_db)):
+def list_cities(
+    db: Session = Depends(get_db),
+):
     cities = db.scalars(
         select(City)
         .where(City.is_active.is_(True))
@@ -297,7 +412,9 @@ def list_cities(db: Session = Depends(get_db)):
 
     return {
         "cities": [
-            CityResponse.model_validate(city).model_dump(mode="json")
+            CityResponse.model_validate(
+                city
+            ).model_dump(mode="json")
             for city in cities
         ]
     }
@@ -320,7 +437,10 @@ def get_tariffs(
     )
 
     if city is None:
-        raise HTTPException(404, "City is not enabled")
+        raise HTTPException(
+            404,
+            "City is not enabled",
+        )
 
     tariffs = db.scalars(
         select(Tariff)
@@ -339,13 +459,36 @@ def get_tariffs(
         "tariffs": [
             {
                 "id": tariff.id,
+                "code": tariff.code,
                 "name": tariff.name,
                 "vehicle_class": tariff.vehicle_class,
-                "base_price_kopecks": tariff.base_price_kopecks,
-                "price_per_km_kopecks": tariff.price_per_km_kopecks,
-                "price_per_minute_kopecks": tariff.price_per_minute_kopecks,
-                "minimum_fare_kopecks": tariff.minimum_fare_kopecks,
-                "maximum_fare_kopecks": tariff.maximum_fare_kopecks,
+                "base_price_kopecks": (
+                    tariff.base_price_kopecks
+                ),
+                "price_per_km_kopecks": (
+                    tariff.price_per_km_kopecks
+                ),
+                "price_per_minute_kopecks": (
+                    tariff.price_per_minute_kopecks
+                ),
+                "minimum_fare_kopecks": (
+                    tariff.minimum_fare_kopecks
+                ),
+                "maximum_fare_kopecks": (
+                    tariff.maximum_fare_kopecks
+                ),
+                "child_seat_surcharge_kopecks": (
+                    tariff.child_seat_surcharge_kopecks
+                ),
+                "animal_transport_surcharge_kopecks": (
+                    tariff.animal_transport_surcharge_kopecks
+                ),
+                "cargo_vehicle_surcharges": (
+                    tariff.cargo_vehicle_surcharges or {}
+                ),
+                "cargo_loader_price_per_person_kopecks": (
+                    tariff.cargo_loader_price_per_person_kopecks
+                ),
             }
             for tariff in tariffs
         ],
@@ -362,25 +505,45 @@ def list_dispatch_tariffs(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    profile = get_dispatcher_profile(db, dispatcher)
+    profile = get_dispatcher_profile(
+        db,
+        dispatcher,
+    )
 
     query = (
         select(Tariff)
-        .join(City, City.id == Tariff.city_id)
-        .where(City.is_active.is_(True))
+        .join(
+            City,
+            City.id == Tariff.city_id,
+        )
+        .where(
+            City.is_active.is_(True)
+        )
     )
 
     if profile.role == "dispatcher":
-        branch = db.get(Branch, profile.branch_id)
+        branch = db.get(
+            Branch,
+            profile.branch_id,
+        )
 
         if branch is None or not branch.is_active:
-            raise HTTPException(403, "Филиал недоступен")
+            raise HTTPException(
+                403,
+                "Филиал недоступен",
+            )
 
         if city_code:
-            city = db.get(City, branch.city_id)
+            city = db.get(
+                City,
+                branch.city_id,
+            )
 
             if city is None or city.code != city_code:
-                raise HTTPException(404, "City not found")
+                raise HTTPException(
+                    404,
+                    "City not found",
+                )
 
         query = query.where(
             Tariff.city_id == branch.city_id
@@ -395,12 +558,20 @@ def list_dispatch_tariffs(
         )
 
         if city is None:
-            raise HTTPException(404, "City not found")
+            raise HTTPException(
+                404,
+                "City not found",
+            )
 
-        query = query.where(Tariff.city_id == city.id)
+        query = query.where(
+            Tariff.city_id == city.id
+        )
 
     tariffs = db.scalars(
-        query.order_by(Tariff.city_id, Tariff.name)
+        query.order_by(
+            Tariff.city_id,
+            Tariff.name,
+        )
     ).all()
 
     return {
@@ -420,7 +591,10 @@ def create_tariff(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    require_chief_dispatcher(db, dispatcher)
+    require_chief_dispatcher(
+        db,
+        dispatcher,
+    )
 
     city = db.scalar(
         select(City).where(
@@ -430,7 +604,10 @@ def create_tariff(
     )
 
     if city is None:
-        raise HTTPException(404, "City not found")
+        raise HTTPException(
+            404,
+            "City not found",
+        )
 
     if (
         payload.minimum_fare_kopecks is not None
@@ -491,12 +668,21 @@ def update_tariff(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    require_chief_dispatcher(db, dispatcher)
+    require_chief_dispatcher(
+        db,
+        dispatcher,
+    )
 
-    tariff = db.get(Tariff, tariff_id)
+    tariff = db.get(
+        Tariff,
+        tariff_id,
+    )
 
     if tariff is None:
-        raise HTTPException(404, "Tariff not found")
+        raise HTTPException(
+            404,
+            "Tariff not found",
+        )
 
     old_values = tariff_snapshot(tariff)
 
@@ -528,7 +714,11 @@ def update_tariff(
             )
 
     for field, value in changes.items():
-        setattr(tariff, field, value)
+        setattr(
+            tariff,
+            field,
+            value,
+        )
 
     if (
         tariff.minimum_fare_kopecks is not None
@@ -576,15 +766,28 @@ def update_tariff(
 )
 def get_tariff_history(
     tariff_id: UUID,
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+    ),
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    tariff = db.get(Tariff, tariff_id)
+    tariff = db.get(
+        Tariff,
+        tariff_id,
+    )
 
     if tariff is None:
-        raise HTTPException(404, "Tariff not found")
+        raise HTTPException(
+            404,
+            "Tariff not found",
+        )
 
     ensure_dispatcher_can_access_tariff(
         db,
@@ -658,13 +861,16 @@ def create_order(
             "У аккаунта пассажира не подтверждён номер телефона",
         )
 
-    request_phone = normalize_phone(payload.customer_phone)
+    request_phone = normalize_phone(
+        payload.customer_phone
+    )
 
     if request_phone != passenger.phone:
         raise HTTPException(
             403,
             "Номер заказа не совпадает с подтверждённым номером аккаунта",
         )
+
     city = db.scalar(
         select(City).where(
             City.code == payload.city_code,
@@ -673,8 +879,12 @@ def create_order(
     )
 
     if city is None:
-        raise HTTPException(400, "City is not enabled")
+        raise HTTPException(
+            400,
+            "City is not enabled",
+        )
 
+    # Защита от повторного создания одного заказа.
     existing = db.scalar(
         select(Order).where(
             Order.city_id == city.id,
@@ -689,12 +899,15 @@ def create_order(
                 "Заказ не найден",
             )
 
-        return order_to_response(existing, city)
+        return order_to_response(
+            existing,
+            city,
+        )
 
     if payload.tariff_id is None:
         raise HTTPException(
-            status_code=400,
-            detail="Необходимо выбрать тариф",
+            400,
+            "Необходимо выбрать тариф",
         )
 
     selected_tariff = db.scalar(
@@ -707,10 +920,11 @@ def create_order(
 
     if selected_tariff is None:
         raise HTTPException(
-            status_code=400,
-            detail="Выбранный тариф не найден или неактивен",
+            400,
+            "Выбранный тариф не найден или неактивен",
         )
 
+    # Для города должен быть настроен активный филиал.
     branches = db.scalars(
         select(Branch).where(
             Branch.city_id == city.id,
@@ -720,22 +934,60 @@ def create_order(
 
     if not branches:
         raise HTTPException(
-            status_code=503,
-            detail="Для города не настроен активный филиал",
+            503,
+            "Для города не настроен активный филиал",
         )
 
     if len(branches) > 1:
         raise HTTPException(
-            status_code=409,
-            detail="Для города требуется настройка выбора филиала",
+            409,
+            "Для города требуется настройка выбора филиала",
         )
 
     selected_branch = branches[0]
 
+    # Если имя не указано, заказ считается анонимным.
     is_anonymous = (
         payload.anonymous
         or not (payload.customer_name or "").strip()
     )
+
+    cargo_order = is_cargo_tariff(
+        selected_tariff
+    )
+
+    # Проверка совместимости параметров заказа с тарифом.
+    if cargo_order:
+        if payload.child_seat or payload.animal_transport:
+            raise HTTPException(
+                422,
+                "Детское кресло и перевозка животного "
+                "не применяются к грузовому тарифу",
+            )
+
+        if payload.cargo_vehicle is None:
+            raise HTTPException(
+                422,
+                "Для грузового заказа необходимо выбрать автомобиль",
+            )
+
+        if payload.cargo_vehicle not in CARGO_VEHICLES:
+            raise HTTPException(
+                422,
+                "Недопустимый тип грузового автомобиля",
+            )
+
+    else:
+        if (
+            payload.cargo_vehicle is not None
+            or (payload.cargo_description or "").strip()
+            or payload.cargo_loaders > 0
+        ):
+            raise HTTPException(
+                422,
+                "Параметры грузового заказа доступны "
+                "только для грузового тарифа",
+            )
 
     coordinates = (
         payload.pickup_latitude,
@@ -746,8 +998,8 @@ def create_order(
 
     if any(value is None for value in coordinates):
         raise HTTPException(
-            status_code=400,
-            detail=(
+            400,
+            (
                 "Для расчёта стоимости необходимы координаты "
                 "подачи и назначения"
             ),
@@ -759,21 +1011,76 @@ def create_order(
             pickup_longitude=payload.pickup_longitude,
             destination_latitude=payload.destination_latitude,
             destination_longitude=payload.destination_longitude,
-            base_price_kopecks=selected_tariff.base_price_kopecks,
-            price_per_km_kopecks=selected_tariff.price_per_km_kopecks,
-            price_per_minute_kopecks=selected_tariff.price_per_minute_kopecks,
+            base_price_kopecks=(
+                selected_tariff.base_price_kopecks
+            ),
+            price_per_km_kopecks=(
+                selected_tariff.price_per_km_kopecks
+            ),
+            price_per_minute_kopecks=(
+                selected_tariff.price_per_minute_kopecks
+            ),
             anonymous=is_anonymous,
-            minimum_fare_kopecks=selected_tariff.minimum_fare_kopecks,
-            maximum_fare_kopecks=selected_tariff.maximum_fare_kopecks,
+            minimum_fare_kopecks=(
+                selected_tariff.minimum_fare_kopecks
+            ),
+            maximum_fare_kopecks=(
+                selected_tariff.maximum_fare_kopecks
+            ),
         )
 
     except RoutingError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Не удалось рассчитать маршрут. Попробуйте позже.",
+            detail=(
+                "Не удалось рассчитать маршрут. "
+                "Попробуйте позже."
+            ),
         ) from exc
 
-    total_kopecks = route_pricing.fare.total_price_kopecks
+    # Базовая стоимость маршрута уже содержит:
+    # базовую цену, расстояние, время, ограничения тарифа
+    # и анонимную доплату.
+    fare = route_pricing.fare
+
+    # Все дополнительные суммы берутся только из тарифа сервера.
+    child_seat_surcharge = (
+        selected_tariff.child_seat_surcharge_kopecks
+        if payload.child_seat
+        else 0
+    )
+
+    animal_transport_surcharge = (
+        selected_tariff.animal_transport_surcharge_kopecks
+        if payload.animal_transport
+        else 0
+    )
+
+    cargo_vehicle_surcharge = 0
+
+    if cargo_order:
+        cargo_prices = (
+            selected_tariff.cargo_vehicle_surcharges or {}
+        )
+
+        cargo_vehicle_surcharge = cargo_prices.get(
+            payload.cargo_vehicle,
+            0,
+        )
+
+    cargo_loaders_surcharge = (
+        payload.cargo_loaders
+        * selected_tariff.cargo_loader_price_per_person_kopecks
+    )
+
+    # Итоговая стоимость рассчитывается исключительно сервером.
+    total_kopecks = (
+        fare.total_price_kopecks
+        + child_seat_surcharge
+        + animal_transport_surcharge
+        + cargo_vehicle_surcharge
+        + cargo_loaders_surcharge
+    )
 
     route_distance_meters = int(
         route_pricing.route.distance_meters.to_integral_value()
@@ -783,14 +1090,20 @@ def create_order(
         route_pricing.route.duration_seconds.to_integral_value()
     )
 
-    total_rubles = (total_kopecks + 50) // 100
+    total_rubles = (
+        total_kopecks + 50
+    ) // 100
 
     order = Order(
-        public_number=next_order_number(db, city),
+        public_number=next_order_number(
+            db,
+            city,
+        ),
         city_id=city.id,
         tariff_id=selected_tariff.id,
         branch_id=selected_branch.id,
         passenger_user_id=passenger.id,
+
         customer_name=(
             None
             if is_anonymous
@@ -798,35 +1111,76 @@ def create_order(
         ),
         customer_phone=passenger.phone,
         anonymous=is_anonymous,
+
         pickup_address=payload.pickup_address,
         destination_address=payload.destination_address,
+
         pickup_latitude=payload.pickup_latitude,
         pickup_longitude=payload.pickup_longitude,
         destination_latitude=payload.destination_latitude,
         destination_longitude=payload.destination_longitude,
+
         route_distance_meters=route_distance_meters,
         route_duration_seconds=route_duration_seconds,
         routing_provider=route_pricing.provider_name,
+
         status="new",
         payment_method=payload.payment_method,
+
         price_rub=total_rubles,
         price_kopecks=total_kopecks,
 
-        # Сохраняем снимок расчёта в момент создания заказа.
+        # Основная расшифровка маршрута.
         fare_base_price_kopecks=(
-            route_pricing.fare.base_price_kopecks
+            fare.base_price_kopecks
         ),
         fare_distance_price_kopecks=(
-            route_pricing.fare.distance_price_kopecks
+            fare.distance_price_kopecks
         ),
         fare_time_price_kopecks=(
-            route_pricing.fare.time_price_kopecks
+            fare.time_price_kopecks
         ),
         fare_limit_adjustment_kopecks=(
-            route_pricing.fare.fare_limit_adjustment_kopecks
+            fare.fare_limit_adjustment_kopecks
         ),
         anonymous_surcharge_kopecks=(
-            route_pricing.fare.anonymous_surcharge_kopecks
+            fare.anonymous_surcharge_kopecks
+        ),
+
+        # Выбранные дополнительные услуги.
+        child_seat=payload.child_seat,
+        animal_transport=payload.animal_transport,
+
+        # Параметры грузового заказа.
+        cargo_vehicle=(
+            payload.cargo_vehicle
+            if cargo_order
+            else None
+        ),
+        cargo_description=(
+            payload.cargo_description
+            if cargo_order
+            else None
+        ),
+        cargo_loaders=(
+            payload.cargo_loaders
+            if cargo_order
+            else 0
+        ),
+
+        # Фиксируем суммы дополнительных услуг.
+        # Изменение тарифа в будущем не повлияет на этот заказ.
+        child_seat_surcharge_kopecks=(
+            child_seat_surcharge
+        ),
+        animal_transport_surcharge_kopecks=(
+            animal_transport_surcharge
+        ),
+        cargo_vehicle_surcharge_kopecks=(
+            cargo_vehicle_surcharge
+        ),
+        cargo_loaders_surcharge_kopecks=(
+            cargo_loaders_surcharge
         ),
 
         comment=payload.comment,
@@ -842,6 +1196,8 @@ def create_order(
     except IntegrityError:
         db.rollback()
 
+        # Повторная проверка нужна на случай одновременных запросов
+        # с одним и тем же ключом идемпотентности.
         existing = db.scalar(
             select(Order).where(
                 Order.city_id == city.id,
@@ -856,14 +1212,20 @@ def create_order(
                     "Заказ не найден",
                 )
 
-            return order_to_response(existing, city)
+            return order_to_response(
+                existing,
+                city,
+            )
 
         raise HTTPException(
-            status_code=409,
-            detail="Не удалось создать заказ",
+            409,
+            "Не удалось создать заказ",
         )
 
-    return order_to_response(order, city)
+    return order_to_response(
+        order,
+        city,
+    )
 
 
 # ============================================================
@@ -894,20 +1256,25 @@ def dispatcher_login(
         )
     ):
         raise HTTPException(
-            status_code=401,
-            detail="Неверный логин или пароль",
+            401,
+            "Неверный логин или пароль",
         )
 
-    profile = db.get(DispatcherProfile, user.id)
+    profile = db.get(
+        DispatcherProfile,
+        user.id,
+    )
 
     if profile is None or not profile.is_active:
         raise HTTPException(
-            status_code=401,
-            detail="Неверный логин или пароль",
+            401,
+            "Неверный логин или пароль",
         )
 
     return TokenResponse(
-        access_token=create_access_token(user.id)
+        access_token=create_access_token(
+            user.id
+        )
     )
 
 
@@ -919,16 +1286,22 @@ def dispatcher_me(
     user: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    profile = get_dispatcher_profile(db, user)
+    profile = get_dispatcher_profile(
+        db,
+        user,
+    )
 
     return {
         "id": user.id,
         "username": user.username,
-        "is_active": user.is_active and profile.is_active,
+        "is_active": (
+            user.is_active and profile.is_active
+        ),
         "role": profile.role,
         "branch_id": profile.branch_id,
         "created_at": user.created_at,
     }
+
 
 # ============================================================
 # PASSENGER ORDER HISTORY
@@ -939,8 +1312,15 @@ def dispatcher_me(
     response_model=list[OrderResponse],
 )
 def list_passenger_orders(
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+    ),
     passenger: User = Depends(get_current_passenger),
     db: Session = Depends(get_db),
 ):
@@ -959,14 +1339,22 @@ def list_passenger_orders(
     result = []
 
     for order in orders:
-        city = db.get(City, order.city_id)
+        city = db.get(
+            City,
+            order.city_id,
+        )
 
         if city is not None:
             result.append(
-                order_to_response(order, city)
+                order_to_response(
+                    order,
+                    city,
+                )
             )
 
     return result
+
+
 # ============================================================
 # DISPATCHER ORDERS
 # ============================================================
@@ -980,7 +1368,10 @@ def list_orders(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    profile = get_dispatcher_profile(db, dispatcher)
+    profile = get_dispatcher_profile(
+        db,
+        dispatcher,
+    )
 
     query = select(Order).order_by(
         Order.created_at.desc()
@@ -1015,11 +1406,17 @@ def list_orders(
     result = []
 
     for order in orders:
-        city = db.get(City, order.city_id)
+        city = db.get(
+            City,
+            order.city_id,
+        )
 
         if city is not None:
             result.append(
-                order_to_response(order, city)
+                order_to_response(
+                    order,
+                    city,
+                )
             )
 
     return result
@@ -1035,7 +1432,10 @@ def update_order_status(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    order = db.get(Order, order_id)
+    order = db.get(
+        Order,
+        order_id,
+    )
 
     if order is None:
         raise HTTPException(
@@ -1049,7 +1449,10 @@ def update_order_status(
         order,
     )
 
-    city = db.get(City, order.city_id)
+    city = db.get(
+        City,
+        order.city_id,
+    )
 
     if city is None or not city.is_active:
         raise HTTPException(
@@ -1088,4 +1491,7 @@ def update_order_status(
     db.commit()
     db.refresh(order)
 
-    return order_to_response(order, city)
+    return order_to_response(
+        order,
+        city,
+    )
