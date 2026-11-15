@@ -850,6 +850,12 @@ def create_order(
         )
 
         if existing is not None:
+            if existing.passenger_user_id != passenger.id:
+                raise HTTPException(
+                    404,
+                    "Заказ не найден",
+                )
+
             return order_to_response(existing, city)
 
         raise HTTPException(
@@ -924,7 +930,43 @@ def dispatcher_me(
         "created_at": user.created_at,
     }
 
+# ============================================================
+# PASSENGER ORDER HISTORY
+# ============================================================
 
+@app.get(
+    "/api/v1/passenger/orders",
+    response_model=list[OrderResponse],
+)
+def list_passenger_orders(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    passenger: User = Depends(get_current_passenger),
+    db: Session = Depends(get_db),
+):
+    orders = db.scalars(
+        select(Order)
+        .where(
+            Order.passenger_user_id == passenger.id
+        )
+        .order_by(
+            Order.created_at.desc()
+        )
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    result = []
+
+    for order in orders:
+        city = db.get(City, order.city_id)
+
+        if city is not None:
+            result.append(
+                order_to_response(order, city)
+            )
+
+    return result
 # ============================================================
 # DISPATCHER ORDERS
 # ============================================================
