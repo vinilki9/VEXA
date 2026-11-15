@@ -23,6 +23,7 @@ from app.security import (
 )
 
 from app.dispatch_driver_api import router as dispatch_driver_router
+from app.dispatch_order_api import router as dispatch_order_router
 
 
 router = APIRouter(
@@ -420,5 +421,8 @@ def update_driver_location(
     }
 
 
-# Подключаем диспетчерские маршруты без изменения их URL.
+# Подключаем диспетчерские маршруты GPS водителей.
 router.include_router(dispatch_driver_router)
+
+# Подключаем ручное и автоматическое назначение водителей.
+router.include_router(dispatch_order_router)
