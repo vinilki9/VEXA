@@ -83,7 +83,11 @@ class OrderResponse(APIModel):
 
     price_rub: int | None = None
     price_kopecks: int | None = None
-
+    fare_base_price_kopecks: int | None = None
+    fare_distance_price_kopecks: int | None = None
+    fare_time_price_kopecks: int | None = None
+    fare_limit_adjustment_kopecks: int | None = None
+    anonymous_surcharge_kopecks: int | None = None
     comment: str | None = None
 
     created_at: datetime
