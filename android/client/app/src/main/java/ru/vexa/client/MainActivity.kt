@@ -1,3 +1,4 @@
+
 package ru.vexa.client
 import ru.dgis.sdk.geometry.ComplexGeometry
 import ru.dgis.sdk.geometry.PointGeometry
@@ -44,6 +45,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
 private val Teal = Color(0xFF1ED9C6)
 private val Ink = Color(0xFF111827)
 private val PanelWhite = Color.White
@@ -55,7 +57,8 @@ class MainActivity : ComponentActivity() {
  private lateinit var trafficRouter: TrafficRouter
  private var mapObjectManager: MapObjectManager? = null
  private var routeMapObjectSource: RouteMapObjectSource? = null
-private val dgisMapState = mutableStateOf<ru.dgis.sdk.map.Map?>(null)
+ private val dgisMapState = mutableStateOf<ru.dgis.sdk.map.Map?>(null)
+
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
 
@@ -70,7 +73,9 @@ private val dgisMapState = mutableStateOf<ru.dgis.sdk.map.Map?>(null)
     )
    )
   )
+
   trafficRouter = TrafficRouter(sdkContext)
+
   // Получаем объект карты 2ГИС.
   lifecycleScope.launch {
    val map = mapViewModel.awaitMap()
@@ -80,8 +85,10 @@ private val dgisMapState = mutableStateOf<ru.dgis.sdk.map.Map?>(null)
     sdkContext,
     RouteVisualizationType.NORMAL
    ).also(map::addSource)
+
    dgisMapState.value = map
   }
+
   setContent {
    ClientScreen(
     mapViewModel = mapViewModel,
@@ -97,25 +104,35 @@ private val dgisMapState = mutableStateOf<ru.dgis.sdk.map.Map?>(null)
   routeMapObjectSource?.let { source ->
    dgisMapState.value?.removeSource(source)
   }
+
   routeMapObjectSource = null
+
   if (::trafficRouter.isInitialized) {
    trafficRouter.close()
   }
+
   if (::mapViewModel.isInitialized) {
    mapViewModel.close()
   }
+
   super.onDestroy()
  }
 }
 
 @Composable
-fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
-                 dgisMap:ru.dgis.sdk.map.Map?, mapObjectManager: MapObjectManager?,
-                 routeMapObjectSource: RouteMapObjectSource?, trafficRouter: TrafficRouter) {
+fun ClientScreen(
+ mapViewModel: DefaultMapControllerViewModel,
+ dgisMap: ru.dgis.sdk.map.Map?,
+ mapObjectManager: MapObjectManager?,
+ routeMapObjectSource: RouteMapObjectSource?,
+ trafficRouter: TrafficRouter
+) {
+
  // Начальное положение панели — 45%.
  var panelFraction by remember {
   mutableFloatStateOf(0.45f)
  }
+
  var pickup by remember {
   mutableStateOf("")
  }
@@ -132,7 +149,9 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
  var selectedDestination by remember {
   mutableStateOf<AddressResult?>(null)
  }
- val sdkContext = (LocalContext.current.applicationContext as VexaApplication).sdkContext
+
+ val sdkContext =
+  (LocalContext.current.applicationContext as VexaApplication).sdkContext
 
  val pickupIcon = remember {
   imageFromResource(sdkContext, R.drawable.vexa_pickup_waving)
@@ -153,16 +172,26 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
  var routeRequestVersion by remember {
   mutableStateOf(0)
  }
+
  var routeGeometry by remember {
   mutableStateOf<ComplexGeometry?>(null)
  }
 
- LaunchedEffect(selectedPickup, selectedDestination, routeGeometry, mapObjectManager, panelFraction) {  val source = routeMapObjectSource ?: return@LaunchedEffect
+ LaunchedEffect(
+  selectedPickup,
+  selectedDestination,
+  routeGeometry,
+  mapObjectManager,
+  panelFraction
+ ) {
+  val source = routeMapObjectSource ?: return@LaunchedEffect
+
   val pickupAddress = selectedPickup
   val destinationAddress = selectedDestination
 
   routeRequestVersion += 1
   val requestVersion = routeRequestVersion
+
   source.clear()
   routeGeometry = null
   routeSummary = "Строим маршрут..."
@@ -176,15 +205,23 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
   val startPoint = RouteSearchPoint(
    GeoPoint(pickupAddress.latitude, pickupAddress.longitude)
   )
+
   val finishPoint = RouteSearchPoint(
    GeoPoint(destinationAddress.latitude, destinationAddress.longitude)
   )
+
   val routeSearchOptions = RouteSearchOptions(
    TaxiRouteSearchOptions(
-    CarRouteSearchOptions(routeSearchType = RouteSearchType.JAM)
+    CarRouteSearchOptions(
+     routeSearchType = RouteSearchType.JAM
+    )
    )
   )
-  android.util.Log.d("VEXA_ROUTING", "Запрос маршрута отправлен")
+
+  android.util.Log.d(
+   "VEXA_ROUTING",
+   "Запрос маршрута отправлен"
+  )
 
   trafficRouter.findRoute(
    startPoint = startPoint,
@@ -197,7 +234,11 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
       routeSummary = null
       routeError = "Маршрут для выбранных адресов не найден."
       routeGeometry = null
-      android.util.Log.w("VEXA_ROUTING", "SDK не вернул маршруты")
+
+      android.util.Log.w(
+       "VEXA_ROUTING",
+       "SDK не вернул маршруты"
+      )
      } else {
       routeGeometry = ComplexGeometry(
        routes[0].route.geometry.entries.map { entry ->
@@ -213,29 +254,45 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
          index = RouteIndex(index.toLong())
         )
        }
-       )
-      android.util.Log.d("VEXA_ROUTING", "Получено маршрутов: ${routes.size}")
+      )
+
+      android.util.Log.d(
+       "VEXA_ROUTING",
+       "Получено маршрутов: ${routes.size}"
+      )
      }
     }
    },
    errorCallback = { error ->
     if (requestVersion == routeRequestVersion) {
-     routeError = "Не удалось построить маршрут: ${error.message ?: "неизвестная ошибка"}"
+     routeError =
+      "Не удалось построить маршрут: ${error.message ?: "неизвестная ошибка"}"
+
      routeGeometry = null
-     android.util.Log.e("VEXA_ROUTING", "Ошибка построения маршрута", error)
+
+     android.util.Log.e(
+      "VEXA_ROUTING",
+      "Ошибка построения маршрута",
+      error
+     )
     }
    }
   )
 
   trafficRouter.findBriefRouteInfos(
-   searchPoints = listOf(BriefRouteInfoSearchPoints(startPoint, finishPoint)),
+   searchPoints = listOf(
+    BriefRouteInfoSearchPoints(startPoint, finishPoint)
+   ),
    routeSearchOptions = routeSearchOptions
   ).onComplete(
    resultCallback = { routeInfos ->
     val routeInfo = routeInfos.firstOrNull()
     val carInfo = routeInfo?.extraInfo?.asCar
+
     if (requestVersion == routeRequestVersion && carInfo != null) {
-     val kilometers = carInfo.length.millimeters / 1_000_000.0
+     val kilometers =
+      carInfo.length.millimeters / 1_000_000.0
+
      routeSummary = "Маршрут: %.1f км, %d мин".format(
       kilometers,
       routeInfo.duration.inMinutes
@@ -245,13 +302,18 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
    errorCallback = { error ->
     if (requestVersion == routeRequestVersion) {
      routeSummary = null
-     android.util.Log.w("VEXA_ROUTING", "Не удалось получить сводку маршрута", error)
+
+     android.util.Log.w(
+      "VEXA_ROUTING",
+      "Не удалось получить сводку маршрута",
+      error
+     )
     }
    }
   )
  }
 
-// Обновляем маркеры при выборе адресов.
+ // Обновляем маркеры при выборе адресов.
  LaunchedEffect(
   selectedPickup,
   selectedDestination,
@@ -271,15 +333,15 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
      MarkerOptions(
       position = GeoPointWithElevation(
        latitude = Latitude(value = address.latitude),
-       longitude = Longitude (value = address.longitude),
-       elevation = Elevation(value = 0.0f)),
+       longitude = Longitude(value = address.longitude),
+       elevation = Elevation(value = 0.0f)
+      ),
       icon = pickupIcon,
       iconWidth = LogicalPixel(value = 32.0f),
-       text = "Подача"
+      text = "Подача"
      )
     )
    )
-
   }
 
   // Маркер назначения.
@@ -289,8 +351,9 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
      MarkerOptions(
       position = GeoPointWithElevation(
        latitude = Latitude(value = address.latitude),
-       longitude = Longitude (value = address.longitude),
-       elevation = Elevation(value = 0.0f)),
+       longitude = Longitude(value = address.longitude),
+       elevation = Elevation(value = 0.0f)
+      ),
       icon = destinationIcon,
       iconWidth = LogicalPixel(value = 32.0f),
       text = "Назначение"
@@ -298,6 +361,7 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
     )
    )
   }
+
   // Автоматически показываем обе точки на карте.
   val pickup = selectedPickup
   val destination = selectedDestination
@@ -321,13 +385,20 @@ fun ClientScreen(mapViewModel: DefaultMapControllerViewModel,
      }
     )
    )
-android.util.Log.d("VEXA_CAMERA",
-   "Расчет камеры выполнен")
-   map.camera.move(position,
-Duration.ofMilliseconds(900),
-    CameraAnimationType.DEFAULT)
+
+   android.util.Log.d(
+    "VEXA_CAMERA",
+    "Расчет камеры выполнен"
+   )
+
+   map.camera.move(
+    position,
+    Duration.ofMilliseconds(900),
+    CameraAnimationType.DEFAULT
+   )
   }
  }
+
  // Подсказки для адреса подачи.
  var pickupSuggestions by remember {
   mutableStateOf<List<AddressResult>>(emptyList())
@@ -432,6 +503,7 @@ Duration.ofMilliseconds(900),
  var tariff by remember {
   mutableStateOf("Economy")
  }
+
  var cargoVehicle by remember {
   mutableStateOf("Универсал")
  }
@@ -443,6 +515,7 @@ Duration.ofMilliseconds(900),
  var cargoLoaders by remember {
   mutableIntStateOf(0)
  }
+
  var child by remember {
   mutableStateOf(false)
  }
@@ -471,6 +544,10 @@ Duration.ofMilliseconds(900),
   mutableStateOf(false)
  }
 
+ // Диалог входа пассажира через серверный API VEXA.
+ var showPassengerAuthDialog by remember {
+  mutableStateOf(false)
+ }
 
  val animatedFraction by animateFloatAsState(
   targetValue = panelFraction,
@@ -527,9 +604,9 @@ Duration.ofMilliseconds(900),
          change.consume()
 
          panelFraction = (
-                 panelFraction -
-                         dragAmount / screenHeightPx
-                 ).coerceIn(0.20f, 0.80f)
+          panelFraction -
+           dragAmount / screenHeightPx
+         ).coerceIn(0.20f, 0.80f)
         },
         onDragEnd = {
          val positions = listOf(
@@ -632,8 +709,7 @@ Duration.ofMilliseconds(900),
        onDismissRequest = {
         pickupSuggestions = emptyList()
        },
-       modifier = Modifier
-        .fillMaxWidth(0.92f)
+       modifier = Modifier.fillMaxWidth(0.92f)
       ) {
        pickupSuggestions.forEach { address ->
         DropdownMenuItem(
@@ -690,8 +766,7 @@ Duration.ofMilliseconds(900),
        onDismissRequest = {
         destinationSuggestions = emptyList()
        },
-       modifier = Modifier
-        .fillMaxWidth(0.92f)
+       modifier = Modifier.fillMaxWidth(0.92f)
       ) {
        destinationSuggestions.forEach { address ->
         DropdownMenuItem(
@@ -780,16 +855,25 @@ Duration.ofMilliseconds(900),
        ).forEach { vehicle ->
         FilterChip(
          selected = cargoVehicle == vehicle,
-         onClick = { cargoVehicle = vehicle },
-         label = { Text(vehicle) }
+         onClick = {
+          cargoVehicle = vehicle
+         },
+         label = {
+          Text(vehicle)
+         }
         )
        }
       }
+
       if (tariff == "Грузовой") {
        OutlinedTextField(
         value = cargoDescription,
-        onValueChange = { cargoDescription = it },
-        label = { Text("Описание груза") },
+        onValueChange = {
+         cargoDescription = it
+        },
+        label = {
+         Text("Описание груза")
+        },
         modifier = Modifier.fillMaxWidth(),
         minLines = 2
        )
@@ -808,15 +892,20 @@ Duration.ofMilliseconds(900),
         (0..4).forEach { count ->
          FilterChip(
           selected = cargoLoaders == count,
-          onClick = { cargoLoaders = count },
+          onClick = {
+           cargoLoaders = count
+          },
           label = {
-           Text(if (count == 0) "Без грузчиков" else "$count")
+           Text(
+            if (count == 0) "Без грузчиков" else "$count"
+           )
           }
          )
         }
        }
       }
      }
+
      Box {
       OutlinedButton(
        onClick = {
@@ -836,8 +925,7 @@ Duration.ofMilliseconds(900),
        DropdownMenuItem(
         text = {
          Row(
-          verticalAlignment =
-           Alignment.CenterVertically
+          verticalAlignment = Alignment.CenterVertically
          ) {
           Checkbox(
            checked = child,
@@ -854,8 +942,7 @@ Duration.ofMilliseconds(900),
        DropdownMenuItem(
         text = {
          Row(
-          verticalAlignment =
-           Alignment.CenterVertically
+          verticalAlignment = Alignment.CenterVertically
          ) {
           Checkbox(
            checked = animal,
@@ -872,8 +959,7 @@ Duration.ofMilliseconds(900),
        DropdownMenuItem(
         text = {
          Row(
-          verticalAlignment =
-           Alignment.CenterVertically
+          verticalAlignment = Alignment.CenterVertically
          ) {
           Checkbox(
            checked = anonymous,
@@ -891,13 +977,13 @@ Duration.ofMilliseconds(900),
 
      Text(
       "Опции: " +
-              listOfNotNull(
-               if (child) "Детское кресло" else null,
-               if (animal) "Животное" else null,
-               if (anonymous) "Анонимность" else null
-              ).ifEmpty {
-               listOf("Не выбраны")
-              }.joinToString(", "),
+       listOfNotNull(
+        if (child) "Детское кресло" else null,
+        if (animal) "Животное" else null,
+        if (anonymous) "Анонимность" else null
+       ).ifEmpty {
+        listOf("Не выбраны")
+       }.joinToString(", "),
       color = Color.Gray,
       fontSize = 12.sp
      )
@@ -938,10 +1024,17 @@ Duration.ofMilliseconds(900),
       }
      }
 
-     // Кнопка заказа.
+     // Кнопка заказа с обязательной авторизацией.
      Button(
       onClick = {
-       orderCreated = !orderCreated
+       if (orderCreated) {
+        orderCreated = false
+       } else if (ApiClient.getAccessToken().isNullOrBlank()) {
+        // До оформления первого заказа требуется авторизация по телефону.
+        showPassengerAuthDialog = true
+       } else {
+        orderCreated = true
+       }
       },
       modifier = Modifier
        .fillMaxWidth()
@@ -974,6 +1067,18 @@ Duration.ofMilliseconds(900),
     }
    }
   }
+
+  // Авторизация открывается поверх главного экрана,
+  // не затрагивая карту 2ГИС.
+  if (showPassengerAuthDialog) {
+   PassengerAuthDialog(
+    onAuthenticated = {
+     showPassengerAuthDialog = false
+    },
+    onDismiss = {
+     showPassengerAuthDialog = false
+    }
+   )
+  }
  }
 }
-
