@@ -1,4 +1,3 @@
-
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -987,4 +986,146 @@ class TariffChangeHistory(Base):
         default=now_utc,
         nullable=False,
         index=True,
+    )
+    
+
+# ============================================================
+# DRIVER FINANCE TRANSACTIONS
+# Неизменяемый журнал финансовых операций водителей
+# ============================================================
+
+class DriverFinanceTransaction(Base):
+    __tablename__ = "driver_finance_transactions"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "order_id",
+            "transaction_type",
+            name="uq_driver_finance_order_type",
+        ),
+        CheckConstraint(
+            "fare_kopecks >= 0",
+            name="driver_finance_fare_nonnegative",
+        ),
+        CheckConstraint(
+            "commission_rate_percent >= 0 "
+            "AND commission_rate_percent <= 100",
+            name="driver_finance_commission_rate_range",
+        ),
+        CheckConstraint(
+            "commission_kopecks >= 0",
+            name="driver_finance_commission_nonnegative",
+        ),
+        CheckConstraint(
+            "driver_earning_kopecks >= 0",
+            name="driver_finance_earning_nonnegative",
+        ),
+        Index(
+            "ix_driver_finance_driver_created",
+            "driver_user_id",
+            "created_at",
+        ),
+        Index(
+            "ix_driver_finance_city_created",
+            "city_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    driver_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "driver_profiles.user_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "orders.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    city_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "cities.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "branches.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    transaction_type: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+    )
+
+    payment_method: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+
+    driver_rating: Mapped[Decimal | None] = mapped_column(
+        Numeric(3, 2),
+        nullable=True,
+    )
+
+    fare_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    commission_rate_percent: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        nullable=False,
+    )
+
+    commission_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    driver_earning_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    debt_change_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
     )
