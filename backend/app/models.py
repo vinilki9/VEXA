@@ -988,6 +988,264 @@ class TariffChangeHistory(Base):
         index=True,
     )
     
+# ============================================================
+# DYNAMIC PRICING SETTINGS
+# Настройки динамического коэффициента по городу и филиалу
+# ============================================================
+
+class DynamicPricingSettings(Base):
+    __tablename__ = "dynamic_pricing_settings"
+
+    __table_args__ = (
+        CheckConstraint(
+            "max_multiplier >= 1.0",
+            name="dynamic_pricing_max_multiplier_min",
+        ),
+        CheckConstraint(
+            "driver_radius_km >= 0",
+            name="dynamic_pricing_driver_radius_nonnegative",
+        ),
+        CheckConstraint(
+            "driver_distance_start_multiplier >= 1.0",
+            name="dynamic_pricing_driver_start_min",
+        ),
+        CheckConstraint(
+            "driver_distance_threshold_km > driver_radius_km",
+            name="dynamic_pricing_driver_threshold_gt_radius",
+        ),
+        CheckConstraint(
+            "driver_distance_threshold_multiplier >= "
+            "driver_distance_start_multiplier",
+            name="dynamic_pricing_driver_threshold_multiplier_valid",
+        ),
+        CheckConstraint(
+            "driver_distance_step_km > 0",
+            name="dynamic_pricing_driver_step_km_positive",
+        ),
+        CheckConstraint(
+            "driver_distance_step_multiplier >= 0",
+            name="dynamic_pricing_driver_step_multiplier_nonnegative",
+        ),
+        UniqueConstraint(
+            "city_id",
+            "branch_id",
+            name="uq_dynamic_pricing_city_branch",
+        ),
+        Index(
+            "ix_dynamic_pricing_city_branch",
+            "city_id",
+            "branch_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    city_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("cities.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("branches.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+
+    max_multiplier: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        default=Decimal("2.50"),
+        nullable=False,
+    )
+
+    driver_radius_km: Mapped[Decimal] = mapped_column(
+        Numeric(6, 2),
+        default=Decimal("4.00"),
+        nullable=False,
+    )
+
+    driver_distance_start_multiplier: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        default=Decimal("1.50"),
+        nullable=False,
+    )
+
+    driver_distance_threshold_km: Mapped[Decimal] = mapped_column(
+        Numeric(6, 2),
+        default=Decimal("20.00"),
+        nullable=False,
+    )
+
+    driver_distance_threshold_multiplier: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        default=Decimal("2.00"),
+        nullable=False,
+    )
+
+    driver_distance_step_km: Mapped[Decimal] = mapped_column(
+        Numeric(6, 2),
+        default=Decimal("3.00"),
+        nullable=False,
+    )
+
+    driver_distance_step_multiplier: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        default=Decimal("0.20"),
+        nullable=False,
+    )
+
+    weather_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    weather_addition: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        default=Decimal("0.00"),
+        nullable=False,
+    )
+
+    traffic_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    traffic_addition: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        default=Decimal("0.00"),
+        nullable=False,
+    )
+
+    demand_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    demand_addition: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        default=Decimal("0.00"),
+        nullable=False,
+    )
+
+    other_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    other_addition: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        default=Decimal("0.00"),
+        nullable=False,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        onupdate=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# DYNAMIC PRICING CHANGE HISTORY
+# История изменений настроек динамического коэффициента
+# ============================================================
+
+class DynamicPricingChangeHistory(Base):
+    __tablename__ = "dynamic_pricing_change_history"
+
+    __table_args__ = (
+        Index(
+            "ix_dynamic_pricing_history_city_changed",
+            "city_id",
+            "changed_at",
+        ),
+        Index(
+            "ix_dynamic_pricing_history_settings_changed",
+            "settings_id",
+            "changed_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    settings_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "dynamic_pricing_settings.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    city_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("cities.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("branches.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+
+    changed_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    action: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    old_values: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    new_values: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=False,
+    )
+
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+        index=True,
+    )
+
 
 # ============================================================
 # DRIVER FINANCE TRANSACTIONS
