@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import VexaMap from './components/VexaMap';
 import DriverFinancePanel from './components/DriverFinancePanel';
+import FinanceSummaryPanel from './components/FinanceSummaryPanel';
 import './style.css';
 
 const API_BASE = 'https://109.120.184.20';
@@ -716,9 +717,18 @@ function App() {
           </div>
         )}
 
-        {activeSection === 'finance' ? (
-          <DriverFinancePanel token={token} cityCode={CITY_CODE} />
-        ) : (
+{activeSection === 'finance' ? (
+  <>
+    <FinanceSummaryPanel
+      token={token}
+      cityCode={CITY_CODE}
+    />
+    <DriverFinancePanel
+      token={token}
+      cityCode={CITY_CODE}
+    />
+  </>
+) : (
           <>
             <section className="stats">
               <article>
