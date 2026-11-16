@@ -8,6 +8,8 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 
 type MoneyValue = {
@@ -141,6 +143,55 @@ async function requestSummary(
   return data as FinanceSummary;
 }
 
+function localDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+async function downloadFinanceExport(
+  token: string,
+  cityCode: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<void> {
+  const params = new URLSearchParams({
+    city_code: cityCode,
+    date_from: dateFrom,
+    date_to: dateTo,
+  });
+
+  const response = await fetch(
+    `${API_BASE}/api/v1/dispatch/finance/export.xlsx?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(
+      data?.detail ||
+      data?.message ||
+      `Ошибка экспорта Excel: ${response.status}`,
+    );
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = `vexa_finance_${cityCode}_${dateFrom}_${dateTo}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 function SummaryCard({
   title,
   value,
@@ -249,6 +300,17 @@ export default function FinanceSummaryPanel({
   cityCode,
 }: Props) {
   const [periodDays, setPeriodDays] = useState(30);
+  const [exportDateFrom, setExportDateFrom] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 29);
+    return localDateValue(date);
+  });
+  const [exportDateTo, setExportDateTo] = useState(() =>
+    localDateValue(new Date()),
+  );
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -282,6 +344,35 @@ export default function FinanceSummaryPanel({
       setLoading(false);
     }
   }, [token, cityCode, periodDays]);
+
+  const handleExport = useCallback(async () => {
+    if (!token || !cityCode) return;
+
+    if (!exportDateFrom || !exportDateTo || exportDateFrom > exportDateTo) {
+      setExportError('Проверьте даты начала и окончания отчёта');
+      return;
+    }
+
+    setExporting(true);
+    setExportError('');
+
+    try {
+      await downloadFinanceExport(
+        token,
+        cityCode,
+        exportDateFrom,
+        exportDateTo,
+      );
+    } catch (err) {
+      setExportError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось скачать финансовый отчёт',
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [token, cityCode, exportDateFrom, exportDateTo]);
 
   useEffect(() => {
     loadSummary();
@@ -345,6 +436,68 @@ export default function FinanceSummaryPanel({
             <option value={30}>Последние 30 дней</option>
             <option value={90}>Последние 90 дней</option>
           </select>
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 7,
+            flexWrap: 'wrap',
+            width: '100%',
+            justifyContent: 'flex-end',
+          }}>
+            <label style={{ ...mutedStyle, display: 'grid', gap: 4 }}>
+              С даты
+              <input
+                type="date"
+                value={exportDateFrom}
+                max={exportDateTo || undefined}
+                onChange={event => setExportDateFrom(event.target.value)}
+                style={selectStyle}
+                aria-label="Начало периода экспорта"
+              />
+            </label>
+            <label style={{ ...mutedStyle, display: 'grid', gap: 4 }}>
+              По дату
+              <input
+                type="date"
+                value={exportDateTo}
+                min={exportDateFrom || undefined}
+                max={localDateValue(new Date())}
+                onChange={event => setExportDateTo(event.target.value)}
+                style={selectStyle}
+                aria-label="Окончание периода экспорта"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting || !token || !cityCode}
+              style={{
+                ...primaryButtonStyle,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                opacity: exporting ? 0.6 : 1,
+                background: '#176b55',
+                alignSelf: 'end',
+              }}
+            >
+              {exporting ? <Download size={14} /> : <FileSpreadsheet size={14} />}
+              {exporting ? 'Формируем...' : 'Скачать Excel'}
+            </button>
+          </div>
+
+          {exportError && (
+            <div style={{
+              color: '#b42318',
+              background: '#fff0ee',
+              borderRadius: 8,
+              padding: 10,
+              fontSize: 12,
+            }}>
+              {exportError}
+            </div>
+          )}
 
           <button
             type="button"
