@@ -545,7 +545,9 @@ def driver_finance_summary(
                 ),
                 0,
             ),
-            func.count(DriverFinanceTransaction.id),
+            func.count(DriverFinanceTransaction.id).filter(
+                DriverFinanceTransaction.transaction_type == "completed_trip"
+            ),
         ).where(
             DriverFinanceTransaction.driver_user_id == driver.id,
             DriverFinanceTransaction.city_id == profile.city_id,
@@ -567,6 +569,7 @@ def driver_finance_summary(
         ),
     }
 
+ 
 
 @router.get("/api/v1/driver/finance/transactions")
 def driver_finance_transactions(
