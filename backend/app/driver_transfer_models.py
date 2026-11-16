@@ -9,8 +9,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Uuid,
 )
-from sqlalchemy import Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -19,9 +19,10 @@ from app.models import now_utc
 
 class DriverBranchTransfer(Base):
     """
-    Неизменяемая история переводов водителя между филиалами.
+    Неизменяемая история переводов водителя между филиалами
+    и городами.
 
-    debt_kopecks_at_transfer — общий долг водителя на момент перевода.
+    Общий долг водителя сохраняется при переводе.
     Исторические финансовые операции не изменяются.
     """
 
@@ -46,8 +47,13 @@ class DriverBranchTransfer(Base):
             "created_at",
         ),
         Index(
-            "ix_driver_branch_transfers_city_created",
-            "city_id",
+            "ix_driver_branch_transfers_from_city_created",
+            "from_city_id",
+            "created_at",
+        ),
+        Index(
+            "ix_driver_branch_transfers_to_city_created",
+            "to_city_id",
             "created_at",
         ),
     )
@@ -68,7 +74,17 @@ class DriverBranchTransfer(Base):
         index=True,
     )
 
-    city_id: Mapped[uuid.UUID] = mapped_column(
+    from_city_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "cities.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    to_city_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey(
             "cities.id",
@@ -88,13 +104,13 @@ class DriverBranchTransfer(Base):
         index=True,
     )
 
-    to_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+    to_branch_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey(
             "branches.id",
             ondelete="RESTRICT",
         ),
-        nullable=True,
+        nullable=False,
         index=True,
     )
 
