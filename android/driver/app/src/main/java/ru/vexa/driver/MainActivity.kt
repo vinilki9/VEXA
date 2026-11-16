@@ -535,35 +535,26 @@ fun DriverScreen() {
                 }
 
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(145.dp)
-                            .background(
-                                if (dark) Navy else Color(0xFFDDEBE8),
-                                RoundedCornerShape(18.dp)
-                            )
-                            .padding(16.dp)
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = cardColor
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                "VEXA · ОБОЛЕНСК",
-                                color = if (dark) Teal else Color(0xFF46716D),
-                                fontSize = 12.sp
-                            )
-
-                            Text(
-                                "Карта и GPS",
-                                color = fg,
+                                "VEXA · $cityName",
+                                color = Teal,
                                 style = MaterialTheme.typography.titleMedium
                             )
 
-                            Text(
-                                "Отображение карты и передача GPS будут подключены отдельным этапом.",
-                                color = fg,
-                                fontSize = 11.sp
+                            DriverMap(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(320.dp)
                             )
                         }
                     }
