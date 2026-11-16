@@ -1085,38 +1085,22 @@ fun ClientScreen(
        }
       }
      }
-     
+
      if (
       pricePreview != null &&
       pricePreviewSignature == currentPricePreviewSignature
      ) {
       val preview = pricePreview!!
-      val breakdown = preview.optJSONObject(
-       "dynamic_pricing_breakdown"
-      ) ?: JSONObject()
-
-      val reasons = breakdown.optJSONArray("reasons")
 
       val totalPrice = preview.optString(
        "price_rub",
        ""
       )
 
-      val multiplier = preview.optString(
-       "dynamic_pricing_multiplier",
-       "1.00"
-      )
-
-      val driverDistance = preview.optString(
+      val driverDistanceKm = preview.optString(
        "dynamic_driver_distance_km",
        ""
-      )
-
-      val dynamicAdjustment =
-       preview.optInt(
-        "fare_dynamic_adjustment_kopecks",
-        0
-       ) / 100.0
+      ).toDoubleOrNull()
 
       Surface(
        modifier = Modifier.fillMaxWidth(),
@@ -1125,10 +1109,10 @@ fun ClientScreen(
       ) {
        Column(
         modifier = Modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
        ) {
         Text(
-         "Предварительная стоимость",
+         "Стоимость поездки",
          color = Ink,
          style = MaterialTheme.typography.titleMedium
         )
@@ -1144,53 +1128,23 @@ fun ClientScreen(
          color = Teal.copy(alpha = 0.25f)
         )
 
-        Text(
-         "Динамический коэффициент: ×$multiplier",
-         color = Ink,
-         fontSize = 13.sp
-        )
-
-        if (
-         driverDistance.isNotBlank() &&
-         driverDistance != "null"
-        ) {
+        if (driverDistanceKm != null && driverDistanceKm >= 0.0) {
          Text(
-          "Расстояние до свободного водителя: " +
-                  "$driverDistance км",
+          "До ближайшего свободного водителя: " +
+                  "%.1f км".format(driverDistanceKm),
           color = Color.DarkGray,
-          fontSize = 12.sp
+          fontSize = 13.sp
          )
-        }
-
-        if (dynamicAdjustment > 0.0) {
+        } else {
          Text(
-          "Динамическая надбавка: " +
-                  "%.2f ₽".format(dynamicAdjustment),
-          color = Ink,
+          "Расстояние до ближайшего свободного водителя пока неизвестно",
+          color = Color.DarkGray,
           fontSize = 13.sp
          )
         }
 
-        if (reasons != null && reasons.length() > 0) {
-         Text(
-          "Причины изменения стоимости:",
-          color = Ink,
-          fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-          fontSize = 12.sp
-         )
-
-         for (index in 0 until reasons.length()) {
-          Text(
-           "• ${reasons.optString(index)}",
-           color = Color.DarkGray,
-           fontSize = 12.sp
-          )
-         }
-        }
-
         Text(
-         "Стоимость предварительная. " +
-                 "Окончательная цена фиксируется сервером при оформлении заказа.",
+         "После подтверждения заказа стоимость фиксируется.",
          color = Color.DarkGray,
          fontSize = 11.sp
         )
