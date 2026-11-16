@@ -924,68 +924,6 @@ def create_price_quote_token(
     )
 
     return token, expires_at
-            default=0,
-        ge=0,
-    ),
-    dispatcher: User = Depends(get_current_dispatcher),
-    db: Session = Depends(get_db),
-):
-    tariff = db.get(
-        Tariff,
-        tariff_id,
-    )
-
-    if tariff is None:
-        raise HTTPException(
-            404,
-            "Tariff not found",
-        )
-
-    ensure_dispatcher_can_access_tariff(
-        db,
-        dispatcher,
-        tariff,
-    )
-
-    rows = db.execute(
-        select(
-            TariffChangeHistory,
-            User.username,
-        )
-        .join(
-            User,
-            User.id == TariffChangeHistory.changed_by_user_id,
-        )
-        .where(
-            TariffChangeHistory.tariff_id == tariff.id,
-            TariffChangeHistory.city_id == tariff.city_id,
-        )
-        .order_by(
-            TariffChangeHistory.changed_at.desc(),
-            TariffChangeHistory.id.desc(),
-        )
-        .limit(limit)
-        .offset(offset)
-    ).all()
-
-    return {
-        "tariff_id": str(tariff.id),
-        "history": [
-            {
-                "id": str(history.id),
-                "action": history.action,
-                "changed_by_user_id": str(
-                    history.changed_by_user_id
-                ),
-                "changed_by_username": username,
-                "old_values": history.old_values,
-                "new_values": history.new_values,
-                "changed_at": history.changed_at,
-            }
-            for history, username in rows
-        ],
-    }
-
 
 PRICE_QUOTE_TTL_MINUTES = 2
 
