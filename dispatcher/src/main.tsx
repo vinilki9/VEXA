@@ -309,7 +309,9 @@ function LoginScreen({
 
 function App() {
   const [token, setToken] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<'overview' | 'finance'>('overview');
+const [activeSection, setActiveSection] = useState<
+  'overview' | 'map' | 'orders' | 'drivers' | 'finance'
+>('overview');
   const [dispatcher, setDispatcher] = useState<DispatcherProfile | null>(null);
   const [orders, setOrders] = useState<VexaOrder[]>([]);
   const [loading, setLoading] = useState(false);
@@ -589,35 +591,57 @@ function App() {
           <small>DISPATCH</small>
         </div>
 
-        <nav>
-          <a
-            href="#overview"
-            className={activeSection === 'overview' ? 'active' : ''}
-            onClick={event => {
-              event.preventDefault();
-              setActiveSection('overview');
-            }}
-          >
-            <LayoutDashboard />Обзор
-          </a>
+<nav>
+  <a
+    href="#overview"
+    className={activeSection === 'overview' ? 'active' : ''}
+    onClick={() => setActiveSection('overview')}
+  >
+    <LayoutDashboard />Обзор
+  </a>
 
-          <a><Map />Карта</a>
-          <a><CarFront />Заказы</a>
-          <a><Users />Водители</a>
+  <a
+    href="#map"
+    className={activeSection === 'map' ? 'active' : ''}
+    onClick={() => setActiveSection('map')}
+  >
+    <Map />Карта
+  </a>
 
-          <a
-            href="#finance"
-            className={activeSection === 'finance' ? 'active' : ''}
-            onClick={event => {
-              event.preventDefault();
-              setActiveSection('finance');
-            }}
-          >
-            <Wallet />Финансы
-          </a>
+  <a
+    href="#orders"
+    className={activeSection === 'orders' ? 'active' : ''}
+    onClick={() => setActiveSection('orders')}
+  >
+    <CarFront />Заказы
+  </a>
 
-          <a><Settings />Настройки</a>
-        </nav>
+  <a
+    href="#drivers"
+    className={activeSection === 'drivers' ? 'active' : ''}
+    onClick={() => setActiveSection('drivers')}
+  >
+    <Users />Водители
+  </a>
+
+  <a
+    href="#finance"
+    className={activeSection === 'finance' ? 'active' : ''}
+    onClick={event => {
+      event.preventDefault();
+      setActiveSection('finance');
+    }}
+  >
+    <Wallet />Финансы
+  </a>
+
+  <a
+    href="#settings"
+    onClick={event => event.preventDefault()}
+  >
+    <Settings />Настройки
+  </a>
+</nav>
 
         <div className="branch">
           <span className="dot" />
