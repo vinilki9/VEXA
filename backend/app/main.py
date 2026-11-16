@@ -6,6 +6,7 @@ from app.driver_api import router as driver_router
 from app.driver_transfer_api import router as driver_transfer_router
 from app.phone_utils import normalize_phone
 from app.dispatch_order_api import router as dispatch_order_router
+from app.dynamic_pricing_api import router as dynamic_pricing_router
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -52,7 +53,7 @@ app.include_router(passenger_auth_router)
 app.include_router(driver_router)
 app.include_router(driver_transfer_router)
 app.include_router(dispatch_order_router)
-
+app.include_router(dynamic_pricing_router)
 
 ORDER_STATUSES = {
     "new": {"accepted", "cancelled"},
