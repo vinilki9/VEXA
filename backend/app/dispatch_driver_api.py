@@ -1,6 +1,6 @@
-
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 from uuid import UUID
 
@@ -361,6 +361,293 @@ def list_driver_finance(
             for item in drivers
         ),
         "drivers": drivers,
+    }
+
+
+@router.get("/finance/summary")
+def get_dispatch_finance_summary(
+    city_code: str = "obolensk",
+    period_days: int = Query(default=30, ge=1, le=90),
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    """
+    Финансовая сводка города или филиала диспетчера.
+
+    Показатели поездок и погашений рассчитываются за выбранный период.
+    Текущая задолженность рассчитывается за всё время.
+    Денежные суммы возвращаются в копейках и рублях.
+    """
+
+    profile = get_dispatcher_profile(
+        db,
+        dispatcher,
+    )
+
+    if profile.role == "dispatcher":
+        branch = db.get(
+            Branch,
+            profile.branch_id,
+        )
+
+        if branch is None or not branch.is_active:
+            raise HTTPException(
+                403,
+                "Филиал диспетчера недоступен",
+            )
+
+        city = db.get(
+            City,
+            branch.city_id,
+        )
+
+        if city is None or not city.is_active:
+            raise HTTPException(
+                403,
+                "Город филиала недоступен",
+            )
+
+        branch_id = branch.id
+    else:
+        city = db.scalar(
+            select(City).where(
+                City.code == city_code,
+                City.is_active.is_(True),
+            )
+        )
+
+        if city is None:
+            raise HTTPException(
+                404,
+                "Город не найден или неактивен",
+            )
+
+        branch_id = None
+
+    period_end = datetime.now(timezone.utc)
+    period_start = period_end - timedelta(days=period_days)
+
+    transaction_filters = [
+        DriverFinanceTransaction.city_id == city.id,
+    ]
+
+    if branch_id is not None:
+        transaction_filters.append(
+            DriverFinanceTransaction.branch_id == branch_id,
+        )
+
+    period_filters = [
+        *transaction_filters,
+        DriverFinanceTransaction.created_at >= period_start,
+        DriverFinanceTransaction.created_at <= period_end,
+    ]
+
+    completed_trip = (
+        DriverFinanceTransaction.transaction_type
+        == "completed_trip"
+    )
+
+    debt_repayment = (
+        DriverFinanceTransaction.transaction_type
+        == "debt_repayment"
+    )
+
+    electronic_payment = (
+        DriverFinanceTransaction.payment_method.in_(
+            ["card", "sbp", "driver_transfer"]
+        )
+    )
+
+    totals = db.execute(
+        select(
+            func.count(
+                DriverFinanceTransaction.id
+            ).filter(
+                completed_trip
+            ).label("completed_trips"),
+
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.fare_kopecks
+                ).filter(
+                    completed_trip
+                ),
+                0,
+            ).label("total_fare_kopecks"),
+
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.commission_kopecks
+                ).filter(
+                    completed_trip
+                ),
+                0,
+            ).label("commission_accrued_kopecks"),
+
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.commission_kopecks
+                ).filter(
+                    completed_trip & electronic_payment
+                ),
+                0,
+            ).label("electronic_commission_kopecks"),
+
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.fare_kopecks
+                ).filter(
+                    completed_trip & electronic_payment
+                ),
+                0,
+            ).label("electronic_trip_fare_kopecks"),
+
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.fare_kopecks
+                ).filter(
+                    completed_trip
+                    & (
+                        DriverFinanceTransaction.payment_method
+                        == "cash"
+                    )
+                ),
+                0,
+            ).label("cash_trip_fare_kopecks"),
+
+            func.coalesce(
+                func.sum(
+                    -DriverFinanceTransaction.debt_change_kopecks
+                ).filter(
+                    debt_repayment
+                ),
+                0,
+            ).label("debt_repaid_kopecks"),
+
+            func.coalesce(
+                func.sum(
+                    -DriverFinanceTransaction.debt_change_kopecks
+                ).filter(
+                    debt_repayment
+                    & (
+                        DriverFinanceTransaction.payment_method
+                        == "cash"
+                    )
+                ),
+                0,
+            ).label("cash_repaid_kopecks"),
+
+            func.coalesce(
+                func.sum(
+                    -DriverFinanceTransaction.debt_change_kopecks
+                ).filter(
+                    debt_repayment
+                    & (
+                        DriverFinanceTransaction.payment_method
+                        == "driver_transfer"
+                    )
+                ),
+                0,
+            ).label("transfer_repaid_kopecks"),
+
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.debt_change_kopecks
+                ).filter(
+                    completed_trip
+                    & (
+                        DriverFinanceTransaction.payment_method
+                        == "cash"
+                    )
+                ),
+                0,
+            ).label("cash_commission_debt_kopecks"),
+        )
+        .where(*period_filters)
+    ).one()
+
+    current_debt_query = select(
+        func.coalesce(
+            func.sum(
+                DriverFinanceTransaction.debt_change_kopecks
+            ),
+            0,
+        )
+    ).where(*transaction_filters)
+
+    current_debt_kopecks = int(
+        db.scalar(current_debt_query) or 0
+    )
+
+    def amount_response(value: int) -> dict:
+        amount = int(value or 0)
+
+        return {
+            "kopecks": amount,
+            "rub": round(amount / 100, 2),
+        }
+
+    return {
+        "city": {
+            "code": city.code,
+            "name": city.name,
+        },
+        "branch_id": (
+            str(branch_id)
+            if branch_id is not None
+            else None
+        ),
+        "period": {
+            "days": period_days,
+            "from": period_start,
+            "to": period_end,
+            "timezone": "UTC",
+        },
+        "completed_trips": int(
+            totals.completed_trips or 0
+        ),
+        "total_trip_fare": amount_response(
+            totals.total_fare_kopecks
+        ),
+        "commission_accrued": amount_response(
+            totals.commission_accrued_kopecks
+        ),
+        "electronic_payments": {
+            "trip_fare_turnover": amount_response(
+                totals.electronic_trip_fare_kopecks
+            ),
+            "commission": amount_response(
+                totals.electronic_commission_kopecks
+            ),
+        },
+        "cash_payments": {
+            "trip_fare_turnover": amount_response(
+                totals.cash_trip_fare_kopecks
+            ),
+            "commission_debt_accrued": amount_response(
+                totals.cash_commission_debt_kopecks
+            ),
+        },
+        "debt_repayments": {
+            "total": amount_response(
+                totals.debt_repaid_kopecks
+            ),
+            "cash": amount_response(
+                totals.cash_repaid_kopecks
+            ),
+            "driver_transfer": amount_response(
+                totals.transfer_repaid_kopecks
+            ),
+        },
+        "current_driver_debt": amount_response(
+            current_debt_kopecks
+        ),
+        "accounting_note": (
+            "Оборот поездок по электронным способам оплаты "
+            "не является подтверждением фактического зачисления "
+            "денег на расчётный счёт сервиса. Для учёта реальных "
+            "поступлений потребуется интеграция с платёжным провайдером."
+        ),
     }
 
 
