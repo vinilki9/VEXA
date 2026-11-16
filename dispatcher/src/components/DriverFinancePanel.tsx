@@ -3,6 +3,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  History,
   RefreshCw,
   Wallet,
 } from 'lucide-react';
@@ -34,12 +37,41 @@ type RepaymentResponse = {
   remaining_debt_kopecks: number;
 };
 
+type FinanceTransaction = {
+  id: string;
+  transaction_type: string;
+  payment_method?: string | null;
+  amount_kopecks: number;
+  debt_change_kopecks: number;
+  debt_after_kopecks: number;
+  description?: string | null;
+  order_id?: string | null;
+  created_at: string;
+};
+
+type FinanceHistoryResponse = {
+  driver: {
+    user_id: string;
+    username: string;
+    phone?: string | null;
+    city_code: string;
+    city_name: string;
+    branch_name?: string | null;
+  };
+  current_debt_kopecks: number;
+  total_transactions: number;
+  limit: number;
+  offset: number;
+  transactions: FinanceTransaction[];
+};
+
 type Props = {
   token: string;
   cityCode: string;
 };
 
 const API_BASE = 'https://109.120.184.20';
+const HISTORY_PAGE_SIZE = 30;
 
 const money = (kopecks: number) =>
   `${(kopecks / 100).toLocaleString('ru-RU', {
@@ -115,6 +147,44 @@ function parseRublesToKopecks(value: string): number | null {
   return kopecks;
 }
 
+function formatDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Дата не указана';
+  }
+
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function transactionTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    trip_commission: 'Комиссия за поездку',
+    commission: 'Комиссия за поездку',
+    debt_repayment: 'Погашение задолженности',
+    adjustment: 'Корректировка',
+  };
+
+  return labels[type] || 'Финансовая операция';
+}
+
+function paymentMethodLabel(method?: string | null): string {
+  const labels: Record<string, string> = {
+    cash: 'Наличные',
+    driver_transfer: 'Перевод водителю',
+    card: 'Банковская карта',
+    sbp: 'СБП',
+  };
+
+  return method ? labels[method] || method : '—';
+}
+
 async function financeRequest(
   path: string,
   token: string,
@@ -157,6 +227,12 @@ export default function DriverFinancePanel({
     'cash' | 'driver_transfer'
   >('cash');
 
+  const [historyDriverId, setHistoryDriverId] = useState('');
+  const [history, setHistory] = useState<FinanceHistoryResponse | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyOffset, setHistoryOffset] = useState(0);
+
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -172,15 +248,8 @@ export default function DriverFinancePanel({
         token,
       );
 
-      setDrivers(
-        Array.isArray(data?.drivers)
-          ? data.drivers
-          : [],
-      );
-
-      setTotalDebt(
-        Number(data?.total_cash_debt_kopecks || 0),
-      );
+      setDrivers(Array.isArray(data?.drivers) ? data.drivers : []);
+      setTotalDebt(Number(data?.total_cash_debt_kopecks || 0));
     } catch (err) {
       setError(
         err instanceof Error
@@ -189,6 +258,36 @@ export default function DriverFinancePanel({
       );
     } finally {
       setLoading(false);
+    }
+  }, [token, cityCode]);
+
+  const loadHistory = useCallback(async (
+    driverId: string,
+    offset = 0,
+  ) => {
+    if (!token || !driverId) return;
+
+    setHistoryLoading(true);
+    setHistoryError('');
+
+    try {
+      const data: FinanceHistoryResponse = await financeRequest(
+        `/api/v1/dispatch/drivers/${encodeURIComponent(driverId)}/finance/transactions` +
+        `?city_code=${encodeURIComponent(cityCode)}` +
+        `&limit=${HISTORY_PAGE_SIZE}&offset=${offset}`,
+        token,
+      );
+
+      setHistory(data);
+      setHistoryOffset(offset);
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить историю операций',
+      );
+    } finally {
+      setHistoryLoading(false);
     }
   }, [token, cityCode]);
 
@@ -255,6 +354,10 @@ export default function DriverFinancePanel({
 
       setAmount('');
       await loadFinance();
+
+      if (historyDriverId === selectedDriver.driver_user_id) {
+        await loadHistory(selectedDriver.driver_user_id, 0);
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -264,6 +367,19 @@ export default function DriverFinancePanel({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function toggleHistory(driverId: string) {
+    if (historyDriverId === driverId) {
+      setHistoryDriverId('');
+      setHistory(null);
+      setHistoryError('');
+      return;
+    }
+
+    setHistoryDriverId(driverId);
+    setHistory(null);
+    loadHistory(driverId, 0);
   }
 
   const indebtedDrivers = drivers.filter(
@@ -523,9 +639,7 @@ export default function DriverFinancePanel({
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
-              opacity: !selectedDriver || submitting || loading
-                ? 0.55
-                : 1,
+              opacity: !selectedDriver || submitting || loading ? 0.55 : 1,
               cursor: !selectedDriver || submitting || loading
                 ? 'not-allowed'
                 : 'pointer',
@@ -545,7 +659,7 @@ export default function DriverFinancePanel({
           fontSize: 15,
           color: '#172033',
         }}>
-          Задолженность водителей
+          Задолженность и история операций
         </h3>
 
         {loading && drivers.length === 0 && (
@@ -561,47 +675,296 @@ export default function DriverFinancePanel({
             display: 'grid',
             gap: 8,
           }}>
-            {drivers.map(driver => (
-              <div
-                key={driver.driver_user_id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                  padding: '11px 0',
-                  borderBottom: '1px solid #edf0f3',
-                }}
-              >
-                <div style={{
-                  display: 'grid',
-                  gap: 4,
-                }}>
-                  <b style={{
-                    color: '#172033',
-                    fontSize: 13,
+            {drivers.map(driver => {
+              const isHistoryOpen = historyDriverId === driver.driver_user_id;
+
+              return (
+                <div
+                  key={driver.driver_user_id}
+                  style={{
+                    borderBottom: '1px solid #edf0f3',
+                    padding: '11px 0',
+                  }}
+                >
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    flexWrap: 'wrap',
                   }}>
-                    {driver.username}
-                  </b>
+                    <div style={{
+                      display: 'grid',
+                      gap: 4,
+                    }}>
+                      <b style={{
+                        color: '#172033',
+                        fontSize: 13,
+                      }}>
+                        {driver.username}
+                      </b>
 
-                  <span style={mutedStyle}>
-                    {driver.branch_name || 'Без филиала'}
-                    {' · '}
-                    {driver.is_online ? 'На линии' : 'Не на линии'}
-                  </span>
+                      <span style={mutedStyle}>
+                        {driver.branch_name || 'Без филиала'}
+                        {' · '}
+                        {driver.is_online ? 'На линии' : 'Не на линии'}
+                      </span>
+                    </div>
+
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                    }}>
+                      <strong style={{
+                        color: driver.cash_debt_kopecks > 0
+                          ? '#b54708'
+                          : '#087e70',
+                        fontSize: 14,
+                      }}>
+                        {money(driver.cash_debt_kopecks)}
+                      </strong>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleHistory(driver.driver_user_id)}
+                        style={{
+                          ...secondaryButtonStyle,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '8px 10px',
+                        }}
+                      >
+                        <History size={14} />
+                        История
+                        {isHistoryOpen
+                          ? <ChevronUp size={14} />
+                          : <ChevronDown size={14} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isHistoryOpen && (
+                    <div style={{
+                      marginTop: 12,
+                      padding: 12,
+                      borderRadius: 9,
+                      background: '#f7f9fb',
+                      display: 'grid',
+                      gap: 12,
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                        flexWrap: 'wrap',
+                      }}>
+                        <div>
+                          <b style={{
+                            fontSize: 13,
+                            color: '#172033',
+                          }}>
+                            История финансовых операций
+                          </b>
+
+                          {history && (
+                            <p style={{
+                              ...mutedStyle,
+                              margin: '4px 0 0',
+                            }}>
+                              Всего записей: {history.total_transactions}
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => loadHistory(driver.driver_user_id, 0)}
+                          disabled={historyLoading}
+                          style={secondaryButtonStyle}
+                        >
+                          <RefreshCw size={13} />
+                          {' '}Обновить
+                        </button>
+                      </div>
+
+                      {historyLoading && (
+                        <p style={mutedStyle}>Загружаем историю операций...</p>
+                      )}
+
+                      {historyError && (
+                        <div style={{
+                          color: '#b42318',
+                          background: '#fff0ee',
+                          borderRadius: 8,
+                          padding: 10,
+                          fontSize: 12,
+                        }}>
+                          {historyError}
+                        </div>
+                      )}
+
+                      {!historyLoading && !historyError &&
+                        history && history.transactions.length === 0 && (
+                          <p style={mutedStyle}>
+                            У этого водителя пока нет финансовых операций.
+                          </p>
+                        )}
+
+                      {history && history.transactions.length > 0 && (
+                        <>
+                          <div style={{
+                            display: 'grid',
+                            gap: 9,
+                          }}>
+                            {history.transactions.map(transaction => (
+                              <div
+                                key={transaction.id}
+                                style={{
+                                  background: '#fff',
+                                  border: '1px solid #e8edf2',
+                                  borderRadius: 8,
+                                  padding: 11,
+                                  display: 'grid',
+                                  gap: 7,
+                                }}
+                              >
+                                <div style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'flex-start',
+                                  gap: 10,
+                                  flexWrap: 'wrap',
+                                }}>
+                                  <div style={{
+                                    display: 'grid',
+                                    gap: 4,
+                                  }}>
+                                    <b style={{
+                                      color: '#172033',
+                                      fontSize: 12,
+                                    }}>
+                                      {transactionTypeLabel(transaction.transaction_type)}
+                                    </b>
+
+                                    <span style={mutedStyle}>
+                                      {formatDate(transaction.created_at)}
+                                    </span>
+                                  </div>
+
+                                  <strong style={{
+                                    color: transaction.debt_change_kopecks < 0
+                                      ? '#087e70'
+                                      : '#b54708',
+                                    fontSize: 13,
+                                  }}>
+                                    {transaction.debt_change_kopecks < 0 ? '−' : '+'}
+                                    {money(transaction.amount_kopecks)}
+                                  </strong>
+                                </div>
+
+                                <div style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  gap: 8,
+                                  flexWrap: 'wrap',
+                                  color: '#526174',
+                                  fontSize: 11,
+                                }}>
+                                  <span>
+                                    Способ: {paymentMethodLabel(transaction.payment_method)}
+                                  </span>
+
+                                  <b style={{ color: '#172033' }}>
+                                    Остаток долга: {money(transaction.debt_after_kopecks)}
+                                  </b>
+                                </div>
+
+                                {transaction.description && (
+                                  <span style={{
+                                    color: '#8994a3',
+                                    fontSize: 11,
+                                  }}>
+                                    {transaction.description}
+                                  </span>
+                                )}
+
+                                {transaction.order_id && (
+                                  <span style={{
+                                    color: '#8994a3',
+                                    fontSize: 10,
+                                  }}>
+                                    ID заказа: {transaction.order_id}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: 10,
+                            flexWrap: 'wrap',
+                          }}>
+                            <span style={mutedStyle}>
+                              Показано {historyOffset + 1}–
+                              {historyOffset + history.transactions.length}
+                              {' '}из {history.total_transactions}
+                            </span>
+
+                            <div style={{
+                              display: 'flex',
+                              gap: 8,
+                            }}>
+                              <button
+                                type="button"
+                                disabled={historyOffset === 0 || historyLoading}
+                                onClick={() => loadHistory(
+                                  driver.driver_user_id,
+                                  Math.max(0, historyOffset - HISTORY_PAGE_SIZE),
+                                )}
+                                style={{
+                                  ...secondaryButtonStyle,
+                                  opacity: historyOffset === 0 ? 0.5 : 1,
+                                }}
+                              >
+                                Назад
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={
+                                  historyOffset + history.transactions.length >=
+                                    history.total_transactions ||
+                                  historyLoading
+                                }
+                                onClick={() => loadHistory(
+                                  driver.driver_user_id,
+                                  historyOffset + HISTORY_PAGE_SIZE,
+                                )}
+                                style={{
+                                  ...secondaryButtonStyle,
+                                  opacity:
+                                    historyOffset + history.transactions.length >=
+                                    history.total_transactions ? 0.5 : 1,
+                                }}
+                              >
+                                Далее
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-
-                <strong style={{
-                  color: driver.cash_debt_kopecks > 0
-                    ? '#b54708'
-                    : '#087e70',
-                  fontSize: 14,
-                }}>
-                  {money(driver.cash_debt_kopecks)}
-                </strong>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -611,9 +974,10 @@ export default function DriverFinancePanel({
         lineHeight: 1.5,
         margin: 0,
       }}>
-        Суммы и задолженности загружаются с сервера. Регистрация погашения
-        создаёт финансовую запись и уменьшает долг водителя. Повторное
-        изменение суммы на клиенте не позволяет обойти серверную проверку.
+        История загружается с сервера отдельно для каждого водителя.
+        Доступные записи показывают тип операции, дату, способ оплаты,
+        сумму и остаток задолженности после операции. Просмотр истории
+        не изменяет финансовые данные.
       </p>
     </section>
   );
