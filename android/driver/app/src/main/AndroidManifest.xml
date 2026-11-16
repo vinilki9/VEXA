@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
+        android:name=".VexaApplication"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:label="VEXA Driver"
         android:usesCleartextTraffic="false">
