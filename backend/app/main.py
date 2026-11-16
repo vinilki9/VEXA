@@ -116,7 +116,7 @@ def order_to_response(order: Order, city: City) -> dict:
         "payment_method": order.payment_method,
         "price_rub": order.price_rub,
         "price_kopecks": order.price_kopecks,
-                # Зафиксированный снимок динамического ценообразования.
+        # Зафиксированный снимок динамического ценообразования.
         "dynamic_pricing_settings_id": (
             order.dynamic_pricing_settings_id
         ),
@@ -859,6 +859,8 @@ def get_tariff_history(
             for history, username in rows
         ],
     }
+
+
 PRICE_QUOTE_TTL_MINUTES = 2
 
 
@@ -922,6 +924,133 @@ def create_price_quote_token(
     )
 
     return token, expires_at
+            default=0,
+        ge=0,
+    ),
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    tariff = db.get(
+        Tariff,
+        tariff_id,
+    )
+
+    if tariff is None:
+        raise HTTPException(
+            404,
+            "Tariff not found",
+        )
+
+    ensure_dispatcher_can_access_tariff(
+        db,
+        dispatcher,
+        tariff,
+    )
+
+    rows = db.execute(
+        select(
+            TariffChangeHistory,
+            User.username,
+        )
+        .join(
+            User,
+            User.id == TariffChangeHistory.changed_by_user_id,
+        )
+        .where(
+            TariffChangeHistory.tariff_id == tariff.id,
+            TariffChangeHistory.city_id == tariff.city_id,
+        )
+        .order_by(
+            TariffChangeHistory.changed_at.desc(),
+            TariffChangeHistory.id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    return {
+        "tariff_id": str(tariff.id),
+        "history": [
+            {
+                "id": str(history.id),
+                "action": history.action,
+                "changed_by_user_id": str(
+                    history.changed_by_user_id
+                ),
+                "changed_by_username": username,
+                "old_values": history.old_values,
+                "new_values": history.new_values,
+                "changed_at": history.changed_at,
+            }
+            for history, username in rows
+        ],
+    }
+
+
+PRICE_QUOTE_TTL_MINUTES = 2
+
+
+def build_price_quote_fingerprint(
+    payload: OrderCreate,
+    is_anonymous: bool,
+) -> dict:
+    """
+    Параметры заказа, от которых зависит рассчитанная стоимость.
+    """
+
+    return {
+        "city_code": payload.city_code,
+        "tariff_id": str(payload.tariff_id),
+        "anonymous": bool(is_anonymous),
+        "pickup_address": payload.pickup_address.strip(),
+        "destination_address": payload.destination_address.strip(),
+        "pickup_latitude": payload.pickup_latitude,
+        "pickup_longitude": payload.pickup_longitude,
+        "destination_latitude": payload.destination_latitude,
+        "destination_longitude": payload.destination_longitude,
+        "child_seat": bool(payload.child_seat),
+        "animal_transport": bool(payload.animal_transport),
+        "cargo_vehicle": payload.cargo_vehicle,
+        "cargo_description": (
+            (payload.cargo_description or "").strip() or None
+        ),
+        "cargo_loaders": payload.cargo_loaders,
+    }
+
+
+def create_price_quote_token(
+    passenger: User,
+    city: City,
+    branch: Branch,
+    payload: OrderCreate,
+    is_anonymous: bool,
+    quote: dict,
+) -> tuple[str, datetime]:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=PRICE_QUOTE_TTL_MINUTES
+    )
+
+    claims = {
+        "sub": str(passenger.id),
+        "token_type": "price_quote",
+        "city_id": str(city.id),
+        "branch_id": str(branch.id),
+        "request": build_price_quote_fingerprint(
+            payload,
+            is_anonymous,
+        ),
+        "quote": jsonable_encoder(quote),
+        "exp": expires_at,
+    }
+
+    token = jwt.encode(
+        claims,
+        settings.secret_key,
+        algorithm="HS256",
+    )
+
+    return token, expires_at
+
 
 # ============================================================
 # CREATE ORDER
@@ -1155,7 +1284,7 @@ def preview_order_price(
     total_rubles = (
         total_kopecks + 50
     ) // 100
-    
+
     result = {
         "city_code": city.code,
         "tariff_id": tariff.id,
@@ -1203,7 +1332,8 @@ def preview_order_price(
         "price_kopecks": total_kopecks,
         "price_rub": total_rubles,
     }
-        price_quote_token, price_quote_expires_at = (
+
+    price_quote_token, price_quote_expires_at = (
         create_price_quote_token(
             passenger=passenger,
             city=city,
@@ -1218,7 +1348,6 @@ def preview_order_price(
     result["price_quote_expires_at"] = price_quote_expires_at
 
     return result
-
 @app.post(
     "/api/v1/orders",
     response_model=OrderResponse,
@@ -1576,9 +1705,12 @@ def create_order(
 
         price_rub=total_rubles,
         price_kopecks=total_kopecks,
-                # Снимок динамического ценообразования на момент заказа.
+
+        # Снимок динамического ценообразования на момент заказа.
         dynamic_pricing_settings_id=(
-            dynamic_pricing["settings_id"]
+            UUID(str(dynamic_pricing["settings_id"]))
+            if dynamic_pricing["settings_id"]
+            else None
         ),
         dynamic_pricing_multiplier=dynamic_multiplier,
         dynamic_driver_distance_km=(
@@ -1590,6 +1722,7 @@ def create_order(
         dynamic_pricing_breakdown=(
             dynamic_pricing["breakdown"]
         ),
+
         # Основная расшифровка маршрута.
         fare_base_price_kopecks=(
             fare.base_price_kopecks
