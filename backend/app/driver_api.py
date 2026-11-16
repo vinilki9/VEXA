@@ -1,15 +1,17 @@
 
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import (
     Branch,
     City,
+    DriverFinanceTransaction,
     DriverLocation,
     DriverProfile,
     Order,
@@ -35,6 +37,33 @@ DRIVER_ORDER_STATUS_TRANSITIONS = {
     "arrived": "in_progress",
     "in_progress": "completed",
 }
+
+
+# Комиссия сервиса в зависимости от рейтинга водителя.
+def get_driver_commission_rate(rating: Decimal) -> Decimal:
+    if rating < Decimal("4.20"):
+        return Decimal("10.00")
+    if rating < Decimal("4.50"):
+        return Decimal("9.00")
+    if rating < Decimal("4.70"):
+        return Decimal("8.00")
+    if rating < Decimal("4.90"):
+        return Decimal("6.00")
+    return Decimal("4.00")
+
+
+def calculate_commission(fare_kopecks: int, rate: Decimal) -> int:
+    amount = (
+        Decimal(fare_kopecks)
+        * rate
+        / Decimal("100")
+    )
+    return int(
+        amount.quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP,
+        )
+    )
 
 
 class DriverLoginRequest(BaseModel):
@@ -204,6 +233,108 @@ def driver_order_response(
     }
 
 
+def create_completed_trip_finance(
+    db: Session,
+    order: Order,
+    driver: User,
+    profile: DriverProfile,
+) -> None:
+    existing = db.scalar(
+        select(DriverFinanceTransaction.id).where(
+            DriverFinanceTransaction.order_id == order.id,
+            DriverFinanceTransaction.transaction_type == "completed_trip",
+        )
+    )
+
+    if existing is not None:
+        return
+
+    fare_kopecks = order.price_kopecks
+
+    if fare_kopecks is None and order.price_rub is not None:
+        fare_kopecks = order.price_rub * 100
+
+    if fare_kopecks is None or fare_kopecks < 0:
+        raise HTTPException(
+            409,
+            "Невозможно завершить поездку: стоимость заказа не указана",
+        )
+
+    rating = Decimal(str(profile.rating))
+    commission_rate = get_driver_commission_rate(rating)
+    commission_kopecks = calculate_commission(
+        fare_kopecks,
+        commission_rate,
+    )
+
+    driver_earning_kopecks = fare_kopecks - commission_kopecks
+
+    if order.payment_method == "cash":
+        debt_change_kopecks = commission_kopecks
+    elif order.payment_method in (
+        "driver_transfer",
+        "card",
+        "sbp",
+    ):
+        debt_change_kopecks = 0
+    else:
+        raise HTTPException(
+            409,
+            "Неизвестный способ оплаты заказа",
+        )
+
+    db.add(
+        DriverFinanceTransaction(
+            driver_user_id=driver.id,
+            order_id=order.id,
+            city_id=order.city_id,
+            branch_id=order.branch_id,
+            transaction_type="completed_trip",
+            payment_method=order.payment_method,
+            driver_rating=rating,
+            fare_kopecks=fare_kopecks,
+            commission_rate_percent=commission_rate,
+            commission_kopecks=commission_kopecks,
+            driver_earning_kopecks=driver_earning_kopecks,
+            debt_change_kopecks=debt_change_kopecks,
+            description=(
+                f"Завершённая поездка №{order.public_number}"
+            ),
+        )
+    )
+
+
+def finance_transaction_response(
+    transaction: DriverFinanceTransaction,
+) -> dict:
+    return {
+        "id": str(transaction.id),
+        "order_id": (
+            str(transaction.order_id)
+            if transaction.order_id is not None
+            else None
+        ),
+        "transaction_type": transaction.transaction_type,
+        "payment_method": transaction.payment_method,
+        "driver_rating": (
+            str(transaction.driver_rating)
+            if transaction.driver_rating is not None
+            else None
+        ),
+        "fare_kopecks": transaction.fare_kopecks,
+        "commission_rate_percent": str(
+            transaction.commission_rate_percent
+        ),
+        "commission_kopecks": transaction.commission_kopecks,
+        "driver_earning_kopecks": (
+            transaction.driver_earning_kopecks
+        ),
+        "debt_change_kopecks": transaction.debt_change_kopecks,
+        "description": transaction.description,
+        "created_at": transaction.created_at,
+    }
+
+
 @router.post("/api/v1/driver/auth/login")
 def driver_login(
     payload: DriverLoginRequest,
@@ -353,6 +484,14 @@ def update_driver_order_status(
         )
     )
 
+    if payload.status == "completed":
+        create_completed_trip_finance(
+            db=db,
+            order=order,
+            driver=driver,
+            profile=profile,
+        )
+
     try:
         db.commit()
         db.refresh(order)
@@ -370,6 +509,95 @@ def update_driver_order_status(
         "success": True,
         "message": "Статус заказа обновлён",
         "order": driver_order_response(order, vehicle),
+    }
+
+
+@router.get("/api/v1/driver/finance")
+def driver_finance_summary(
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    profile = get_driver_profile(db, driver)
+
+    totals = db.execute(
+        select(
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.fare_kopecks
+                ),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.commission_kopecks
+                ),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.driver_earning_kopecks
+                ),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.debt_change_kopecks
+                ),
+                0,
+            ),
+            func.count(DriverFinanceTransaction.id),
+        ).where(
+            DriverFinanceTransaction.driver_user_id == driver.id,
+            DriverFinanceTransaction.city_id == profile.city_id,
+        )
+    ).one()
+
+    return {
+        "currency": "RUB",
+        "fare_total_kopecks": int(totals[0]),
+        "commission_total_kopecks": int(totals[1]),
+        "earnings_total_kopecks": int(totals[2]),
+        "cash_debt_kopecks": int(totals[3]),
+        "completed_trips": int(totals[4]),
+        "current_rating": str(profile.rating),
+        "current_commission_rate_percent": str(
+            get_driver_commission_rate(
+                Decimal(str(profile.rating))
+            )
+        ),
+    }
+
+
+@router.get("/api/v1/driver/finance/transactions")
+def driver_finance_transactions(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    profile = get_driver_profile(db, driver)
+
+    transactions = db.scalars(
+        select(DriverFinanceTransaction)
+        .where(
+            DriverFinanceTransaction.driver_user_id == driver.id,
+            DriverFinanceTransaction.city_id == profile.city_id,
+        )
+        .order_by(
+            DriverFinanceTransaction.created_at.desc(),
+            DriverFinanceTransaction.id.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    return {
+        "items": [
+            finance_transaction_response(item)
+            for item in transactions
+        ],
+        "limit": limit,
+        "offset": offset,
     }
 
 
