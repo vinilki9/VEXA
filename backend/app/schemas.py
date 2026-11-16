@@ -2,6 +2,7 @@
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
+from decimal import Decimal
 
 from pydantic import (
     BaseModel,
@@ -170,7 +171,13 @@ class OrderResponse(APIModel):
 
     price_rub: int | None = None
     price_kopecks: int | None = None
-
+        # Зафиксированный снимок динамического ценообразования.
+    dynamic_pricing_settings_id: UUID | None = None
+    dynamic_pricing_multiplier: Decimal | None = None
+    dynamic_driver_distance_km: Decimal | None = None
+    fare_dynamic_adjustment_kopecks: int | None = None
+    dynamic_pricing_breakdown: dict | None = None
+    
     # Основная расшифровка стоимости.
     fare_base_price_kopecks: int | None = None
     fare_distance_price_kopecks: int | None = None
