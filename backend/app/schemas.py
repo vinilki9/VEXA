@@ -96,7 +96,8 @@ class OrderCreate(APIModel):
 
     # Подписанное сервером ценовое предложение.
     # Сервер проверяет подпись и срок действия перед созданием заказа.
-    price_quote_token: str = Field(
+    price_quote_token: str | None = Field(
+        default=None,
         min_length=32,
         max_length=4096,
     )
