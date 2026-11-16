@@ -506,8 +506,9 @@ def get_dynamic_pricing_history(
         # При просмотре конкретного филиала показываем
         # его историю и историю городских значений по умолчанию.
         query = query.where(
-            DynamicPricingChangeHistory.branch_id.in_(
-                [None, branch.id]
+            or_(
+                DynamicPricingChangeHistory.branch_id.is_(None),
+                DynamicPricingChangeHistory.branch_id == branch.id,
             )
         )
 
