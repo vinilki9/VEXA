@@ -1085,7 +1085,8 @@ fun ClientScreen(
        }
       }
      }
-
+      // Здесь отображается карточка предварительного расчёта:
+      // базовая стоимость и итоговая цена
      if (
       pricePreview != null &&
       pricePreviewSignature == currentPricePreviewSignature
