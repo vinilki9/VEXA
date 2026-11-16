@@ -1142,6 +1142,7 @@ fun ClientScreen(
      }
       // Здесь отображается карточка предварительного расчёта:
       // базовая стоимость и итоговая цена
+     // Пассажиру показываем только итоговую стоимость поездки.
      if (
       pricePreview != null &&
       pricePreviewSignature == currentPricePreviewSignature
@@ -1152,11 +1153,6 @@ fun ClientScreen(
        "price_rub",
        ""
       )
-
-      val driverDistanceKm = preview.optString(
-       "dynamic_driver_distance_km",
-       ""
-      ).toDoubleOrNull()
 
       Surface(
        modifier = Modifier.fillMaxWidth(),
@@ -1179,25 +1175,6 @@ fun ClientScreen(
          fontSize = 30.sp,
          fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
         )
-
-        HorizontalDivider(
-         color = Teal.copy(alpha = 0.25f)
-        )
-
-        if (driverDistanceKm != null && driverDistanceKm >= 0.0) {
-         Text(
-          "До ближайшего свободного водителя: " +
-                  "%.1f км".format(driverDistanceKm),
-          color = Color.DarkGray,
-          fontSize = 13.sp
-         )
-        } else {
-         Text(
-          "Расстояние до ближайшего свободного водителя пока неизвестно",
-          color = Color.DarkGray,
-          fontSize = 13.sp
-         )
-        }
 
         Text(
          "После подтверждения заказа стоимость фиксируется.",
