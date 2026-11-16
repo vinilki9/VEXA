@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -496,8 +496,9 @@ def get_dynamic_pricing_history(
         # Обычный диспетчер видит историю своего филиала
         # и историю городских настроек, от которых он наследует значения.
         query = query.where(
-            DynamicPricingChangeHistory.branch_id.in_(
-                [None, branch.id]
+            or_(
+                DynamicPricingChangeHistory.branch_id.is_(None),
+                DynamicPricingChangeHistory.branch_id == branch.id,
             )
         )
 
