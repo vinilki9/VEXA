@@ -1,4 +1,3 @@
-
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -270,7 +269,6 @@ class Tariff(Base):
         nullable=True,
     )
 
-    # Дополнительные услуги и параметры грузового тарифа.
     child_seat_surcharge_kopecks: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -387,6 +385,69 @@ class DriverProfile(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# DRIVER LOCATIONS
+# Последнее известное местоположение водителя
+# ============================================================
+
+class DriverLocation(Base):
+    __tablename__ = "driver_locations"
+
+    __table_args__ = (
+        CheckConstraint(
+            "latitude >= -90 AND latitude <= 90",
+            name="driver_locations_latitude_range",
+        ),
+        CheckConstraint(
+            "longitude >= -180 AND longitude <= 180",
+            name="driver_locations_longitude_range",
+        ),
+        CheckConstraint(
+            "accuracy_meters IS NULL OR accuracy_meters >= 0",
+            name="driver_locations_accuracy_nonnegative",
+        ),
+        Index(
+            "ix_driver_locations_recorded_at",
+            "recorded_at",
+        ),
+    )
+
+    driver_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "driver_profiles.user_id",
+            ondelete="CASCADE",
+        ),
+        primary_key=True,
+        nullable=False,
+    )
+
+    latitude: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )
+
+    longitude: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+    )
+
+    accuracy_meters: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
     )
 
@@ -681,7 +742,6 @@ class Order(Base):
     destination_latitude: Mapped[float | None] = mapped_column(Float)
     destination_longitude: Mapped[float | None] = mapped_column(Float)
 
-    # Параметры маршрута, рассчитанные сервером.
     route_distance_meters: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -720,7 +780,6 @@ class Order(Base):
         nullable=True,
     )
 
-    # Неизменяемый снимок расчёта стоимости заказа.
     fare_base_price_kopecks: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -746,7 +805,6 @@ class Order(Base):
         nullable=True,
     )
 
-    # Выбранные дополнительные услуги и параметры грузового заказа.
     child_seat: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -775,7 +833,6 @@ class Order(Base):
         default=0,
     )
 
-    # Неизменяемый снимок стоимости дополнительных услуг.
     child_seat_surcharge_kopecks: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -929,4 +986,146 @@ class TariffChangeHistory(Base):
         default=now_utc,
         nullable=False,
         index=True,
+    )
+    
+
+# ============================================================
+# DRIVER FINANCE TRANSACTIONS
+# Неизменяемый журнал финансовых операций водителей
+# ============================================================
+
+class DriverFinanceTransaction(Base):
+    __tablename__ = "driver_finance_transactions"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "order_id",
+            "transaction_type",
+            name="uq_driver_finance_order_type",
+        ),
+        CheckConstraint(
+            "fare_kopecks >= 0",
+            name="driver_finance_fare_nonnegative",
+        ),
+        CheckConstraint(
+            "commission_rate_percent >= 0 "
+            "AND commission_rate_percent <= 100",
+            name="driver_finance_commission_rate_range",
+        ),
+        CheckConstraint(
+            "commission_kopecks >= 0",
+            name="driver_finance_commission_nonnegative",
+        ),
+        CheckConstraint(
+            "driver_earning_kopecks >= 0",
+            name="driver_finance_earning_nonnegative",
+        ),
+        Index(
+            "ix_driver_finance_driver_created",
+            "driver_user_id",
+            "created_at",
+        ),
+        Index(
+            "ix_driver_finance_city_created",
+            "city_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    driver_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "driver_profiles.user_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "orders.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    city_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "cities.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "branches.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    transaction_type: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+    )
+
+    payment_method: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+    )
+
+    driver_rating: Mapped[Decimal | None] = mapped_column(
+        Numeric(3, 2),
+        nullable=True,
+    )
+
+    fare_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    commission_rate_percent: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        nullable=False,
+    )
+
+    commission_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    driver_earning_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    debt_change_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
     )

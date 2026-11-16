@@ -1,0 +1,41 @@
+
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:tools="http://schemas.android.com/tools"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Доступ к GPS и примерному местоположению -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <application
+        android:name=".VexaApplication"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:label="VEXA Driver"
+        android:usesCleartextTraffic="false"
+        tools:ignore="MissingClass">
+
+        <!-- Финансовый экран водителя -->
+        <activity
+            android:name=".DriverFinanceActivity"
+            android:exported="false"
+            tools:ignore="MissingClass" />
+
+        <!-- Главный экран приложения -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            tools:ignore="MissingClass">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+    </application>
+
+</manifest>
