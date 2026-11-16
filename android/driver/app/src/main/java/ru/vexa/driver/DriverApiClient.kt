@@ -20,44 +20,28 @@ object DriverApiClient {
     @Volatile
     private var accessToken: String? = null
 
-    /**
-     * Сохранить токен авторизации водителя.
-     */
     fun setAccessToken(token: String) {
         accessToken = token.trim().takeIf { it.isNotEmpty() }
     }
 
-    /**
-     * Получить текущий токен.
-     */
     fun getAccessToken(): String? {
         return accessToken
     }
 
-    /**
-     * Очистить авторизацию.
-     */
     fun clearAccessToken() {
         accessToken = null
     }
 
-    /**
-     * Экранирование строки для JSON.
-     */
     private fun jsonString(value: String): String {
         return JSONObject.quote(value)
     }
 
-    /**
-     * Универсальный HTTP-запрос.
-     */
     private fun request(
         path: String,
         method: String = "GET",
         body: String? = null,
         requiresAuth: Boolean = true
     ): String {
-
         val connection = URL("$BASE_URL$path")
             .openConnection() as HttpURLConnection
 
@@ -65,6 +49,7 @@ object DriverApiClient {
             connection.requestMethod = method
             connection.connectTimeout = 20000
             connection.readTimeout = 30000
+
             connection.setRequestProperty(
                 "Accept",
                 "application/json"
@@ -106,7 +91,7 @@ object DriverApiClient {
 
             val responseBody = responseStream
                 ?.bufferedReader(Charsets.UTF_8)
-                ?.use(BufferedReader::readText)
+                ?.use { it.readText() }
                 .orEmpty()
 
             if (responseCode !in 200..299) {
@@ -125,7 +110,6 @@ object DriverApiClient {
             }
 
             return responseBody
-
         } finally {
             connection.disconnect()
         }
@@ -133,16 +117,11 @@ object DriverApiClient {
 
     /**
      * Авторизация водителя.
-     *
-     * POST /api/v1/driver/auth/login
-     *
-     * В ответе сервер возвращает access_token.
      */
     fun login(
         login: String,
         password: String
     ): String {
-
         require(login.isNotBlank()) {
             "Введите логин или телефон"
         }
@@ -181,9 +160,7 @@ object DriverApiClient {
     }
 
     /**
-     * Получить профиль авторизованного водителя.
-     *
-     * GET /api/v1/driver/me
+     * Получить профиль водителя.
      */
     fun getProfile(): JSONObject {
         val response = request(
@@ -194,11 +171,7 @@ object DriverApiClient {
     }
 
     /**
-     * Переключить режим водителя:
-     * true — на линии;
-     * false — не на линии.
-     *
-     * POST /api/v1/driver/online
+     * Переключить режим водителя.
      */
     fun setOnline(isOnline: Boolean): JSONObject {
         val json = JSONObject()
@@ -215,9 +188,7 @@ object DriverApiClient {
     }
 
     /**
-     * Получить активные заказы водителя.
-     *
-     * GET /api/v1/driver/orders/active
+     * Получить активные заказы.
      */
     fun getActiveOrders(): JSONObject {
         val response = request(
@@ -229,17 +200,11 @@ object DriverApiClient {
 
     /**
      * Изменить статус поездки.
-     *
-     * Возможные переходы:
-     * assigned -> arrived
-     * arrived -> in_progress
-     * in_progress -> completed
      */
     fun updateOrderStatus(
         orderId: String,
         status: String
     ): JSONObject {
-
         require(orderId.isNotBlank()) {
             "Не указан номер заказа"
         }
@@ -259,15 +224,12 @@ object DriverApiClient {
 
     /**
      * Передать координаты водителя.
-     *
-     * POST /api/v1/driver/location
      */
     fun sendLocation(
         latitude: Double,
         longitude: Double,
         accuracyMeters: Double? = null
     ): JSONObject {
-
         require(latitude in -90.0..90.0) {
             "Некорректная широта"
         }
@@ -290,6 +252,44 @@ object DriverApiClient {
             path = "/api/v1/driver/location",
             method = "POST",
             body = json
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
+     * Получить финансовую сводку водителя.
+     *
+     * GET /api/v1/driver/finance
+     */
+    fun getFinanceSummary(): JSONObject {
+        val response = request(
+            path = "/api/v1/driver/finance"
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
+     * Получить историю финансовых операций.
+     *
+     * GET /api/v1/driver/finance/transactions
+     */
+    fun getFinanceTransactions(
+        limit: Int = 50,
+        offset: Int = 0
+    ): JSONObject {
+        require(limit in 1..100) {
+            "Количество записей должно быть от 1 до 100"
+        }
+
+        require(offset >= 0) {
+            "Смещение не может быть отрицательным"
+        }
+
+        val response = request(
+            path = "/api/v1/driver/finance/transactions" +
+                "?limit=$limit&offset=$offset"
         )
 
         return JSONObject(response)
