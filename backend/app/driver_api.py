@@ -1,5 +1,7 @@
 
 from datetime import datetime, timezone
+from typing import Literal
+from uuid import UUID
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import (
     Branch,
+    DispatcherProfile,
     City,
     DriverFinanceTransaction,
     DriverLocation,
@@ -21,6 +24,7 @@ from app.models import (
 )
 from app.security import (
     create_driver_access_token,
+    get_current_dispatcher,
     get_current_driver,
     verify_password,
 )
@@ -83,6 +87,11 @@ class DriverLocationRequest(BaseModel):
 
 class DriverOrderStatusRequest(BaseModel):
     status: str = Field(min_length=1, max_length=30)
+
+
+class DriverDebtRepaymentRequest(BaseModel):
+    amount_kopecks: int = Field(gt=0, le=2147483647)
+    payment_method: Literal["cash", "driver_transfer"]
 
 
 def get_driver_profile(
@@ -239,6 +248,19 @@ def create_completed_trip_finance(
     driver: User,
     profile: DriverProfile,
 ) -> None:
+    # Блокировка профиля синхронизирует начисление комиссии
+    # и регистрацию погашения задолженности.
+    locked_profile = db.scalar(
+        select(DriverProfile)
+        .where(DriverProfile.user_id == driver.id)
+        .with_for_update()
+    )
+
+    if locked_profile is None or not locked_profile.is_active:
+        raise HTTPException(409, "Профиль водителя недоступен")
+
+    profile = locked_profile
+
     existing = db.scalar(
         select(DriverFinanceTransaction.id).where(
             DriverFinanceTransaction.order_id == order.id,
@@ -526,6 +548,7 @@ def driver_finance_summary(
                     DriverFinanceTransaction.fare_kopecks
                 ),
                 0,
+
             ),
             func.coalesce(
                 func.sum(
@@ -571,6 +594,121 @@ def driver_finance_summary(
 
  
 
+
+@router.post(
+    "/api/v1/dispatch/drivers/{driver_user_id}/finance/repayments"
+)
+def register_driver_debt_repayment(
+    driver_user_id: UUID,
+    payload: DriverDebtRepaymentRequest,
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    dispatcher_profile = db.get(DispatcherProfile, dispatcher.id)
+
+    if (
+        dispatcher_profile is None
+        or not dispatcher_profile.is_active
+    ):
+        raise HTTPException(403, "Доступ диспетчера запрещён")
+
+    driver_profile = db.scalar(
+        select(DriverProfile)
+        .where(DriverProfile.user_id == driver_user_id)
+        .with_for_update()
+    )
+
+    if driver_profile is None or not driver_profile.is_active:
+        raise HTTPException(404, "Водитель не найден или неактивен")
+
+    city = db.get(City, driver_profile.city_id)
+
+    if city is None or not city.is_active:
+        raise HTTPException(409, "Город водителя неактивен")
+
+    if dispatcher_profile.role == "chief_dispatcher":
+        pass
+    elif dispatcher_profile.role == "dispatcher":
+        if (
+            dispatcher_profile.branch_id is None
+            or dispatcher_profile.branch_id != driver_profile.branch_id
+        ):
+            raise HTTPException(
+                403,
+                "Нет доступа к финансовым операциям этого водителя",
+            )
+
+        branch = db.get(Branch, dispatcher_profile.branch_id)
+
+        if (
+            branch is None
+            or not branch.is_active
+            or branch.city_id != driver_profile.city_id
+        ):
+            raise HTTPException(403, "Филиал диспетчера недоступен")
+    else:
+        raise HTTPException(403, "Недостаточно прав для погашения долга")
+
+    current_debt_kopecks = db.scalar(
+        select(
+            func.coalesce(
+                func.sum(DriverFinanceTransaction.debt_change_kopecks),
+                0,
+            )
+        ).where(
+            DriverFinanceTransaction.driver_user_id == driver_user_id,
+            DriverFinanceTransaction.city_id == driver_profile.city_id,
+        )
+    )
+    current_debt_kopecks = int(current_debt_kopecks or 0)
+
+    if current_debt_kopecks <= 0:
+        raise HTTPException(409, "У водителя нет задолженности")
+
+    if payload.amount_kopecks > current_debt_kopecks:
+        raise HTTPException(
+            409,
+            "Сумма погашения превышает текущую задолженность",
+        )
+
+    repayment = DriverFinanceTransaction(
+        driver_user_id=driver_user_id,
+        order_id=None,
+        city_id=driver_profile.city_id,
+        branch_id=driver_profile.branch_id,
+        transaction_type="debt_repayment",
+        payment_method=payload.payment_method,
+        driver_rating=driver_profile.rating,
+        fare_kopecks=0,
+        commission_rate_percent=Decimal("0.00"),
+        commission_kopecks=0,
+        driver_earning_kopecks=0,
+        debt_change_kopecks=-payload.amount_kopecks,
+        description=(
+            "Погашение задолженности водителем: "
+            f"{payload.amount_kopecks / 100:.2f} ₽"
+        ),
+    )
+    db.add(repayment)
+
+    try:
+        db.commit()
+        db.refresh(repayment)
+    except Exception:
+        db.rollback()
+        raise
+
+    remaining_debt_kopecks = current_debt_kopecks - payload.amount_kopecks
+
+    return {
+        "success": True,
+        "message": "Погашение задолженности зарегистрировано",
+        "repayment": finance_transaction_response(repayment),
+        "paid_kopecks": payload.amount_kopecks,
+        "remaining_debt_kopecks": remaining_debt_kopecks,
+    }
+
+
 @router.get("/api/v1/driver/finance/transactions")
 def driver_finance_transactions(
     limit: int = Query(default=50, ge=1, le=100),
@@ -603,6 +741,7 @@ def driver_finance_transactions(
         "offset": offset,
     }
 
+ 
 
 @router.post("/api/v1/driver/online")
 def set_driver_online(
