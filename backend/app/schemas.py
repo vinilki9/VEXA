@@ -204,6 +204,38 @@ class OrderResponse(APIModel):
 
     created_at: datetime
     updated_at: datetime
+    
+class OrderPricePreviewResponse(APIModel):
+    city_code: str
+    tariff_id: UUID
+
+    route_distance_meters: int
+    route_duration_seconds: int
+    routing_provider: str
+
+    # Основная стоимость маршрута.
+    fare_base_price_kopecks: int
+    fare_distance_price_kopecks: int
+    fare_time_price_kopecks: int
+    fare_limit_adjustment_kopecks: int
+    anonymous_surcharge_kopecks: int
+
+    # Динамическое ценообразование.
+    dynamic_pricing_settings_id: UUID | None = None
+    dynamic_pricing_multiplier: Decimal
+    dynamic_driver_distance_km: Decimal | None = None
+    fare_dynamic_adjustment_kopecks: int
+    dynamic_pricing_breakdown: dict
+
+    # Дополнительные услуги.
+    child_seat_surcharge_kopecks: int = 0
+    animal_transport_surcharge_kopecks: int = 0
+    cargo_vehicle_surcharge_kopecks: int = 0
+    cargo_loaders_surcharge_kopecks: int = 0
+
+    # Итоговая предварительная стоимость.
+    price_kopecks: int
+    price_rub: int
 
 
 # ------------------------------------------------------------
