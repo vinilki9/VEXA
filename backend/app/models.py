@@ -620,10 +620,12 @@ class Order(Base):
                 AND animal_transport_surcharge_kopecks IS NULL
                 AND cargo_vehicle_surcharge_kopecks IS NULL
                 AND cargo_loaders_surcharge_kopecks IS NULL
+                AND fare_dynamic_adjustment_kopecks IS NULL
             )
             OR
             (
                 fare_base_price_kopecks IS NOT NULL
+                AND fare_dynamic_adjustment_kopecks IS NOT NULL
                 AND fare_distance_price_kopecks IS NOT NULL
                 AND fare_time_price_kopecks IS NOT NULL
                 AND fare_limit_adjustment_kopecks IS NOT NULL
@@ -633,6 +635,7 @@ class Order(Base):
                 AND cargo_vehicle_surcharge_kopecks IS NOT NULL
                 AND cargo_loaders_surcharge_kopecks IS NOT NULL
                 AND price_kopecks IS NOT NULL
+                AND fare_dynamic_adjustment_kopecks >= 0
                 AND fare_base_price_kopecks >= 0
                 AND fare_distance_price_kopecks >= 0
                 AND fare_time_price_kopecks >= 0
@@ -643,6 +646,7 @@ class Order(Base):
                 AND cargo_loaders_surcharge_kopecks >= 0
                 AND price_kopecks =
                     fare_base_price_kopecks
+                    + fare_dynamic_adjustment_kopecks
                     + fare_distance_price_kopecks
                     + fare_time_price_kopecks
                     + fare_limit_adjustment_kopecks
@@ -779,7 +783,34 @@ class Order(Base):
         Integer,
         nullable=True,
     )
+    dynamic_pricing_settings_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "dynamic_pricing_settings.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+    )
 
+    dynamic_pricing_multiplier: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2),
+        nullable=True,
+    )
+
+    dynamic_driver_distance_km: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 2),
+        nullable=True,
+    )
+
+    fare_dynamic_adjustment_kopecks: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    dynamic_pricing_breakdown: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
     fare_base_price_kopecks: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
