@@ -1,12 +1,6 @@
 package ru.vexa.client
 
-import ru.dgis.sdk.geometry.ComplexGeometry
-import ru.dgis.sdk.geometry.PointGeometry
-import androidx.compose.ui.platform.LocalContext
-import ru.dgis.sdk.coordinates.Latitude
-import ru.dgis.sdk.coordinates.Longitude
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
+import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,32 +8,92 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import ru.dgis.sdk.map.*
-import ru.dgis.sdk.geometry.GeoPointWithElevation
-import ru.dgis.sdk.map.MarkerOptions
-import ru.dgis.sdk.coordinates.GeoPoint
 import ru.dgis.sdk.Duration
-import ru.dgis.sdk.geometry.Elevation
 import ru.dgis.sdk.compose.map.MapComposable
-import ru.dgis.sdk.routing.*
+import ru.dgis.sdk.coordinates.GeoPoint
+import ru.dgis.sdk.coordinates.Latitude
+import ru.dgis.sdk.coordinates.Longitude
+import ru.dgis.sdk.geometry.ComplexGeometry
+import ru.dgis.sdk.geometry.Elevation
+import ru.dgis.sdk.geometry.GeoPointWithElevation
+import ru.dgis.sdk.geometry.PointGeometry
+import ru.dgis.sdk.map.CameraAnimationType
+import ru.dgis.sdk.map.CameraPosition
+import ru.dgis.sdk.map.DefaultMapControllerViewModel
+import ru.dgis.sdk.map.LogicalPixel
+import ru.dgis.sdk.map.MapControllerOptions
+import ru.dgis.sdk.map.MapCopyrightOptions
+import ru.dgis.sdk.map.MapObjectManager
+import ru.dgis.sdk.map.MapRenderOptions
+import ru.dgis.sdk.map.Marker
+import ru.dgis.sdk.map.MarkerOptions
+import ru.dgis.sdk.map.Padding
+import ru.dgis.sdk.map.RouteMapObject
+import ru.dgis.sdk.map.RouteMapObjectSource
+import ru.dgis.sdk.map.RouteVisualizationType
+import ru.dgis.sdk.map.Zoom
+import ru.dgis.sdk.map.awaitMap
+import ru.dgis.sdk.map.calcPosition
+import ru.dgis.sdk.map.imageFromResource
+import ru.dgis.sdk.routing.BriefRouteInfoSearchPoints
+import ru.dgis.sdk.routing.CarRouteSearchOptions
+import ru.dgis.sdk.routing.RouteIndex
+import ru.dgis.sdk.routing.RouteSearchOptions
+import ru.dgis.sdk.routing.RouteSearchPoint
+import ru.dgis.sdk.routing.RouteSearchType
+import ru.dgis.sdk.routing.TaxiRouteSearchOptions
+import ru.dgis.sdk.routing.TrafficRouter
 import ru.vexa.driver.VexaApplication
 import kotlin.math.abs
 
@@ -49,6 +103,7 @@ private val PanelWhite = Color.White
 private val CancelRed = Color(0xFFE53935)
 
 class MainActivity : ComponentActivity() {
+ class MainActivity : Activity()
 
  private lateinit var mapViewModel: DefaultMapControllerViewModel
  private lateinit var trafficRouter: TrafficRouter
