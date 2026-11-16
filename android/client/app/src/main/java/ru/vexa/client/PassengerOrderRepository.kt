@@ -18,10 +18,59 @@ object PassengerOrderRepository {
     )
 
     /**
+     * Предварительно рассчитать стоимость поездки.
+     *
+     * Заказ не создаётся.
+     * Сервер возвращает стоимость и расшифровку
+     * динамического коэффициента.
+     */
+    suspend fun previewOrderPrice(
+        tariffLabel: String,
+        customerName: String,
+        anonymous: Boolean,
+        pickupAddress: String,
+        destinationAddress: String,
+        pickupLatitude: Double,
+        pickupLongitude: Double,
+        destinationLatitude: Double,
+        destinationLongitude: Double,
+        paymentLabel: String,
+        childSeat: Boolean,
+        animalTransport: Boolean,
+        cargoVehicle: String,
+        cargoDescription: String,
+        cargoLoaders: Int
+    ): JSONObject {
+        val payload = buildOrderPayload(
+            tariffLabel = tariffLabel,
+            customerName = customerName,
+            anonymous = anonymous,
+            pickupAddress = pickupAddress,
+            destinationAddress = destinationAddress,
+            pickupLatitude = pickupLatitude,
+            pickupLongitude = pickupLongitude,
+            destinationLatitude = destinationLatitude,
+            destinationLongitude = destinationLongitude,
+            paymentLabel = paymentLabel,
+            childSeat = childSeat,
+            animalTransport = animalTransport,
+            cargoVehicle = cargoVehicle,
+            cargoDescription = cargoDescription,
+            cargoLoaders = cargoLoaders
+        )
+
+        val response = ApiClient.previewOrderPrice(
+            json = payload.toString()
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
      * Создать заказ пассажира через API VEXA.
      *
      * Тариф выбирается из актуального списка сервера.
-     * Стоимость рассчитывает сервер.
+     * Стоимость окончательно рассчитывает сервер.
      */
     suspend fun createOrder(
         tariffLabel: String,
@@ -40,6 +89,56 @@ object PassengerOrderRepository {
         cargoDescription: String,
         cargoLoaders: Int,
         idempotencyKey: String = UUID.randomUUID().toString()
+    ): JSONObject {
+
+        val payload = buildOrderPayload(
+            tariffLabel = tariffLabel,
+            customerName = customerName,
+            anonymous = anonymous,
+            pickupAddress = pickupAddress,
+            destinationAddress = destinationAddress,
+            pickupLatitude = pickupLatitude,
+            pickupLongitude = pickupLongitude,
+            destinationLatitude = destinationLatitude,
+            destinationLongitude = destinationLongitude,
+            paymentLabel = paymentLabel,
+            childSeat = childSeat,
+            animalTransport = animalTransport,
+            cargoVehicle = cargoVehicle,
+            cargoDescription = cargoDescription,
+            cargoLoaders = cargoLoaders
+        )
+
+        val response = ApiClient.sendOrder(
+            json = payload.toString(),
+            idempotencyKey = idempotencyKey
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
+     * Общая подготовка данных заказа.
+     *
+     * Используется как для предварительного расчёта,
+     * так и для фактического оформления поездки.
+     */
+    private suspend fun buildOrderPayload(
+        tariffLabel: String,
+        customerName: String,
+        anonymous: Boolean,
+        pickupAddress: String,
+        destinationAddress: String,
+        pickupLatitude: Double,
+        pickupLongitude: Double,
+        destinationLatitude: Double,
+        destinationLongitude: Double,
+        paymentLabel: String,
+        childSeat: Boolean,
+        animalTransport: Boolean,
+        cargoVehicle: String,
+        cargoDescription: String,
+        cargoLoaders: Int
     ): JSONObject {
 
         val phone = ApiClient.getPassengerPhone()
@@ -100,7 +199,7 @@ object PassengerOrderRepository {
 
         val cargoOrder = isCargoTariff(selectedTariff)
 
-        val payload = JSONObject().apply {
+        return JSONObject().apply {
             put("city_code", CITY_CODE)
             put("tariff_id", tariffId)
 
@@ -143,13 +242,6 @@ object PassengerOrderRepository {
                 put("cargo_loaders", 0)
             }
         }
-
-        val response = ApiClient.sendOrder(
-            json = payload.toString(),
-            idempotencyKey = idempotencyKey
-        )
-
-        return JSONObject(response)
     }
 
     /**
