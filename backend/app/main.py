@@ -5,7 +5,7 @@ from app.passenger_auth import router as passenger_auth_router
 from app.driver_api import router as driver_router
 from app.driver_transfer_api import router as driver_transfer_router
 from app.phone_utils import normalize_phone
-
+from app.dispatch_order_api import router as dispatch_order_router
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -51,6 +51,7 @@ app = FastAPI(title="VEXA API", version="0.6.0")
 app.include_router(passenger_auth_router)
 app.include_router(driver_router)
 app.include_router(driver_transfer_router)
+app.include_router(dispatch_order_router)
 
 
 ORDER_STATUSES = {
