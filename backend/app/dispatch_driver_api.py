@@ -1,6 +1,6 @@
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -8,6 +8,7 @@ from app.models import (
     Branch,
     City,
     DispatcherProfile,
+    DriverFinanceTransaction,
     DriverLocation,
     DriverProfile,
     User,
@@ -200,5 +201,163 @@ def list_driver_locations(
     return {
         "city_code": city.code,
         "drivers_count": len(drivers),
+        "drivers": drivers,
+    }
+
+
+@router.get("/drivers/finance")
+def list_driver_finance(
+    city_code: str = "obolensk",
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    profile = get_dispatcher_profile(
+        db,
+        dispatcher,
+    )
+
+    if profile.role == "dispatcher":
+        branch = db.get(
+            Branch,
+            profile.branch_id,
+        )
+
+        if branch is None or not branch.is_active:
+            raise HTTPException(
+                403,
+                "Филиал диспетчера недоступен",
+            )
+
+        city = db.get(
+            City,
+            branch.city_id,
+        )
+
+        if city is None or not city.is_active:
+            raise HTTPException(
+                403,
+                "Город филиала недоступен",
+            )
+    else:
+        city = db.scalar(
+            select(City).where(
+                City.code == city_code,
+                City.is_active.is_(True),
+            )
+        )
+
+        if city is None:
+            raise HTTPException(
+                404,
+                "Город не найден или неактивен",
+            )
+
+    query = (
+        select(
+            DriverProfile.user_id,
+            User.username,
+            User.phone,
+            DriverProfile.rating,
+            DriverProfile.is_online,
+            City.code,
+            City.name,
+            Branch.name,
+            func.coalesce(
+                func.sum(
+                    DriverFinanceTransaction.debt_change_kopecks
+                ),
+                0,
+            ).label("cash_debt_kopecks"),
+        )
+        .join(
+            User,
+            User.id == DriverProfile.user_id,
+        )
+        .join(
+            City,
+            City.id == DriverProfile.city_id,
+        )
+        .outerjoin(
+            Branch,
+            Branch.id == DriverProfile.branch_id,
+        )
+        .outerjoin(
+            DriverFinanceTransaction,
+            (
+                DriverFinanceTransaction.driver_user_id
+                == DriverProfile.user_id
+            )
+            & (
+                DriverFinanceTransaction.city_id
+                == DriverProfile.city_id
+            ),
+        )
+        .where(
+            DriverProfile.city_id == city.id,
+            DriverProfile.is_active.is_(True),
+            User.is_active.is_(True),
+            City.is_active.is_(True),
+        )
+        .group_by(
+            DriverProfile.user_id,
+            User.username,
+            User.phone,
+            DriverProfile.rating,
+            DriverProfile.is_online,
+            City.code,
+            City.name,
+            Branch.name,
+        )
+    )
+
+    if profile.role == "dispatcher":
+        query = query.where(
+            DriverProfile.branch_id == profile.branch_id,
+        )
+
+    rows = db.execute(
+        query.order_by(
+            User.username,
+        )
+    ).all()
+
+    drivers = []
+
+    for (
+        driver_user_id,
+        username,
+        phone,
+        rating,
+        is_online,
+        driver_city_code,
+        city_name,
+        branch_name,
+        cash_debt_kopecks,
+    ) in rows:
+        drivers.append(
+            {
+                "driver_user_id": str(driver_user_id),
+                "username": username,
+                "phone": phone,
+                "rating": str(rating),
+                "is_online": is_online,
+                "city_code": driver_city_code,
+                "city_name": city_name,
+                "branch_name": branch_name,
+                "cash_debt_kopecks": int(cash_debt_kopecks),
+                "cash_debt_rub": round(
+                    int(cash_debt_kopecks) / 100,
+                    2,
+                ),
+            }
+        )
+
+    return {
+        "city_code": city.code,
+        "drivers_count": len(drivers),
+        "total_cash_debt_kopecks": sum(
+            item["cash_debt_kopecks"]
+            for item in drivers
+        ),
         "drivers": drivers,
     }
