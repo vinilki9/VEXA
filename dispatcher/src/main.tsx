@@ -7,6 +7,7 @@ import {
   MapPin, Radio,
 } from 'lucide-react';
 import VexaMap from './components/VexaMap';
+import DriverFinancePanel from './components/DriverFinancePanel';
 import './style.css';
 
 const API_BASE = 'https://109.120.184.20';
@@ -308,6 +309,7 @@ function LoginScreen({
 
 function App() {
   const [token, setToken] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<'overview' | 'finance'>('overview');
   const [dispatcher, setDispatcher] = useState<DispatcherProfile | null>(null);
   const [orders, setOrders] = useState<VexaOrder[]>([]);
   const [loading, setLoading] = useState(false);
@@ -588,11 +590,32 @@ function App() {
         </div>
 
         <nav>
-          <a className="active"><LayoutDashboard />Обзор</a>
+          <a
+            href="#overview"
+            className={activeSection === 'overview' ? 'active' : ''}
+            onClick={event => {
+              event.preventDefault();
+              setActiveSection('overview');
+            }}
+          >
+            <LayoutDashboard />Обзор
+          </a>
+
           <a><Map />Карта</a>
           <a><CarFront />Заказы</a>
           <a><Users />Водители</a>
-          <a><Wallet />Финансы</a>
+
+          <a
+            href="#finance"
+            className={activeSection === 'finance' ? 'active' : ''}
+            onClick={event => {
+              event.preventDefault();
+              setActiveSection('finance');
+            }}
+          >
+            <Wallet />Финансы
+          </a>
+
           <a><Settings />Настройки</a>
         </nav>
 
@@ -668,7 +691,10 @@ function App() {
             </button>
           </div>
         )}
-
+        {activeSection === 'finance' ? (
+          <DriverFinancePanel token={token} cityCode={CITY_CODE} />
+        ) : (
+          <>
         <section className="stats">
           <article>
             <label>Новые заказы</label>
@@ -1048,6 +1074,8 @@ function App() {
             </span>
           </div>
         </section>
+          </>
+    )}
       </main>
 
       {assignmentOrder && (
