@@ -111,7 +111,7 @@ class DriverOrderOffer(Base):
 
     response_timeout_seconds: Mapped[int] = mapped_column(
         Integer,
-        default=20,
+        default=13,
         nullable=False,
     )
 
