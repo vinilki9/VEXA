@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from uuid import UUID
+from decimal import Decimal, ROUND_HALF_UP
 
 from app.passenger_auth import router as passenger_auth_router
 from app.driver_api import router as driver_router
@@ -7,6 +8,7 @@ from app.driver_transfer_api import router as driver_transfer_router
 from app.phone_utils import normalize_phone
 from app.dispatch_order_api import router as dispatch_order_router
 from app.dynamic_pricing_api import router as dynamic_pricing_router
+from app.dynamic_pricing_service import calculate_order_dynamic_pricing
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -110,7 +112,22 @@ def order_to_response(order: Order, city: City) -> dict:
         "payment_method": order.payment_method,
         "price_rub": order.price_rub,
         "price_kopecks": order.price_kopecks,
-
+                # Зафиксированный снимок динамического ценообразования.
+        "dynamic_pricing_settings_id": (
+            order.dynamic_pricing_settings_id
+        ),
+        "dynamic_pricing_multiplier": (
+            order.dynamic_pricing_multiplier
+        ),
+        "dynamic_driver_distance_km": (
+            order.dynamic_driver_distance_km
+        ),
+        "fare_dynamic_adjustment_kopecks": (
+            order.fare_dynamic_adjustment_kopecks
+        ),
+        "dynamic_pricing_breakdown": (
+            order.dynamic_pricing_breakdown
+        ),
         # Основная расшифровка стоимости.
         "fare_base_price_kopecks": (
             order.fare_base_price_kopecks
@@ -1047,7 +1064,44 @@ def create_order(
     # базовую цену, расстояние, время, ограничения тарифа
     # и анонимную доплату.
     fare = route_pricing.fare
+        # Динамический коэффициент рассчитывается сервером
+    # по настройкам города/филиала и последним GPS свободных водителей.
+    try:
+        dynamic_pricing = calculate_order_dynamic_pricing(
+            db,
+            city=city,
+            branch=selected_branch,
+            pickup_latitude=payload.pickup_latitude,
+            pickup_longitude=payload.pickup_longitude,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
 
+    dynamic_multiplier = Decimal(
+        str(dynamic_pricing["total_multiplier"])
+    )
+
+    # Коэффициент применяется только к стоимости маршрута:
+    # без анонимной доплаты и дополнительных услуг.
+    trip_subtotal_kopecks = (
+        fare.base_price_kopecks
+        + fare.distance_price_kopecks
+        + fare.time_price_kopecks
+        + fare.fare_limit_adjustment_kopecks
+    )
+
+    fare_dynamic_adjustment_kopecks = int(
+        (
+            Decimal(trip_subtotal_kopecks)
+            * (dynamic_multiplier - Decimal("1"))
+        ).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP,
+        )
+    )
     # Все дополнительные суммы берутся только из тарифа сервера.
     child_seat_surcharge = (
         selected_tariff.child_seat_surcharge_kopecks
@@ -1081,6 +1135,7 @@ def create_order(
     # Итоговая стоимость рассчитывается исключительно сервером.
     total_kopecks = (
         fare.total_price_kopecks
+        + fare_dynamic_adjustment_kopecks
         + child_seat_surcharge
         + animal_transport_surcharge
         + cargo_vehicle_surcharge
@@ -1134,7 +1189,20 @@ def create_order(
 
         price_rub=total_rubles,
         price_kopecks=total_kopecks,
-
+                # Снимок динамического ценообразования на момент заказа.
+        dynamic_pricing_settings_id=(
+            dynamic_pricing["settings_id"]
+        ),
+        dynamic_pricing_multiplier=dynamic_multiplier,
+        dynamic_driver_distance_km=(
+            dynamic_pricing["driver_distance_km"]
+        ),
+        fare_dynamic_adjustment_kopecks=(
+            fare_dynamic_adjustment_kopecks
+        ),
+        dynamic_pricing_breakdown=(
+            dynamic_pricing["breakdown"]
+        ),
         # Основная расшифровка маршрута.
         fare_base_price_kopecks=(
             fare.base_price_kopecks
