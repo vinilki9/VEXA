@@ -1,6 +1,7 @@
+
 package ru.vexa.client
 
-import android.app.Activity
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -94,7 +95,10 @@ import ru.dgis.sdk.routing.RouteSearchPoint
 import ru.dgis.sdk.routing.RouteSearchType
 import ru.dgis.sdk.routing.TaxiRouteSearchOptions
 import ru.dgis.sdk.routing.TrafficRouter
-import ru.vexa.driver.VexaApplication
+
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.util.UUID
 import kotlin.math.abs
 
 private val Teal = Color(0xFF1ED9C6)
@@ -102,9 +106,15 @@ private val Ink = Color(0xFF111827)
 private val PanelWhite = Color.White
 private val CancelRed = Color(0xFFE53935)
 
-class MainActivity : ComponentActivity() {
- class MainActivity : Activity()
+private fun parsePriceQuoteExpiry(value: String): Instant? {
+ return runCatching {
+  Instant.parse(value)
+ }.getOrNull() ?: runCatching {
+  OffsetDateTime.parse(value).toInstant()
+ }.getOrNull()
+}
 
+class MainActivity : ComponentActivity() {
  private lateinit var mapViewModel: DefaultMapControllerViewModel
  private lateinit var trafficRouter: TrafficRouter
  private var mapObjectManager: MapObjectManager? = null
@@ -616,6 +626,60 @@ fun ClientScreen(
   mutableStateOf<String?>(null)
  }
 
+ var priceQuoteSecondsRemaining by remember {
+  mutableIntStateOf(0)
+ }
+
+ var priceQuoteExpired by remember {
+  mutableStateOf(false)
+ }
+
+ LaunchedEffect(pricePreview) {
+  val preview = pricePreview
+
+  if (preview == null) {
+   priceQuoteSecondsRemaining = 0
+   priceQuoteExpired = false
+   return@LaunchedEffect
+  }
+
+  val expiresAtValue = preview.optString(
+   "price_quote_expires_at",
+   ""
+  )
+
+  val expiresAt = parsePriceQuoteExpiry(expiresAtValue)
+
+  if (expiresAt == null) {
+   priceQuoteSecondsRemaining = 0
+   priceQuoteExpired = true
+   return@LaunchedEffect
+  }
+
+  while (true) {
+   val remainingMillis =
+    java.time.Duration.between(
+     Instant.now(),
+     expiresAt
+    ).toMillis()
+
+   if (remainingMillis <= 0L) {
+    priceQuoteSecondsRemaining = 0
+    priceQuoteExpired = true
+    break
+   }
+
+   priceQuoteSecondsRemaining =
+    ((remainingMillis + 999L) / 1000L)
+     .coerceAtMost(Int.MAX_VALUE.toLong())
+     .toInt()
+
+   priceQuoteExpired = false
+
+   delay(1000)
+  }
+ }
+
  var showPassengerAuthDialog by remember {
   mutableStateOf(false)
  }
@@ -639,6 +703,11 @@ fun ClientScreen(
   cargoLoaders.toString()
  ).joinToString("|")
  val coroutineScope = rememberCoroutineScope()
+
+ val hasCurrentPricePreview =
+  pricePreview != null &&
+   pricePreviewSignature == currentPricePreviewSignature &&
+   !priceQuoteExpired
 
  val animatedFraction by animateFloatAsState(
   targetValue = panelFraction,
@@ -1140,8 +1209,8 @@ fun ClientScreen(
        }
       }
      }
-      // Здесь отображается карточка предварительного расчёта:
-      // базовая стоимость и итоговая цена
+
+     // Здесь отображается карточка предварительного расчёта.
      // Пассажиру показываем только итоговую стоимость поездки.
      if (
       pricePreview != null &&
@@ -1154,33 +1223,66 @@ fun ClientScreen(
        ""
       )
 
+      val minutes = priceQuoteSecondsRemaining / 60
+      val seconds = priceQuoteSecondsRemaining % 60
+
       Surface(
        modifier = Modifier.fillMaxWidth(),
        shape = RoundedCornerShape(16.dp),
-       color = Teal.copy(alpha = 0.10f)
+       color = if (priceQuoteExpired) {
+        CancelRed.copy(alpha = 0.08f)
+       } else {
+        Teal.copy(alpha = 0.10f)
+       }
       ) {
        Column(
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
        ) {
         Text(
-         "Стоимость поездки",
-         color = Ink,
+         if (priceQuoteExpired) {
+          "Расчёт стоимости устарел"
+         } else {
+          "Стоимость поездки"
+         },
+         color = if (priceQuoteExpired) CancelRed else Ink,
          style = MaterialTheme.typography.titleMedium
         )
 
         Text(
          "$totalPrice ₽",
-         color = Ink,
+         color = if (priceQuoteExpired) Color.Gray else Ink,
          fontSize = 30.sp,
          fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
         )
 
-        Text(
-         "После подтверждения заказа стоимость фиксируется.",
-         color = Color.DarkGray,
-         fontSize = 11.sp
-        )
+        if (priceQuoteExpired) {
+         Text(
+          "Срок действия расчёта истёк. " +
+                  "Для заказа необходимо рассчитать стоимость заново.",
+          color = CancelRed,
+          fontSize = 12.sp
+         )
+        } else {
+         Text(
+          "Расчёт действителен ещё: %02d:%02d".format(
+           minutes,
+           seconds
+          ),
+          color = if (priceQuoteSecondsRemaining <= 20) {
+           CancelRed
+          } else {
+           Color.DarkGray
+          },
+          fontSize = 12.sp
+         )
+
+         Text(
+          "После подтверждения заказа стоимость фиксируется.",
+          color = Color.DarkGray,
+          fontSize = 11.sp
+         )
+        }
        }
       }
      }
@@ -1239,7 +1341,8 @@ fun ClientScreen(
 
        val hasCurrentPreview =
         pricePreview != null &&
-                pricePreviewSignature == requestSignature
+         pricePreviewSignature == requestSignature &&
+         !priceQuoteExpired
 
        orderSubmitting = true
        orderError = null
@@ -1270,6 +1373,23 @@ fun ClientScreen(
           pricePreviewSignature = requestSignature
 
          } else {
+          val priceQuoteToken =
+           pricePreview?.optString("price_quote_token").orEmpty()
+
+          if (priceQuoteToken.isBlank()) {
+           throw IllegalStateException(
+            "Сервер не вернул токен расчёта стоимости. " +
+                    "Рассчитайте стоимость заново."
+           )
+          }
+
+          // Один токен ценового предложения всегда даёт один
+          // и тот же ключ. Повтор после сетевой ошибки не создаст
+          // второй заказ, если сервер уже обработал первый запрос.
+          val idempotencyKey = UUID.nameUUIDFromBytes(
+           priceQuoteToken.toByteArray(Charsets.UTF_8)
+          ).toString()
+
           val response =
            PassengerOrderRepository.createOrder(
             tariffLabel = tariff,
@@ -1286,7 +1406,9 @@ fun ClientScreen(
             animalTransport = animal,
             cargoVehicle = cargoVehicle,
             cargoDescription = cargoDescription,
-            cargoLoaders = cargoLoaders
+            cargoLoaders = cargoLoaders,
+            priceQuoteToken = priceQuoteToken,
+            idempotencyKey = idempotencyKey
            )
 
           val publicNumber =
@@ -1300,8 +1422,37 @@ fun ClientScreen(
           orderCreated = true
          }
         } catch (error: Exception) {
-         orderError = error.message
+         val errorMessage = error.message
           ?: "Не удалось выполнить запрос. Попробуйте ещё раз."
+
+         val requiresPriceRecalculation =
+          errorMessage.contains(
+           "Ошибка сервера: 409"
+          ) && (
+           errorMessage.contains(
+            "ценовое предложение",
+            ignoreCase = true
+           ) ||
+           errorMessage.contains(
+            "Рассчитайте стоимость повторно",
+            ignoreCase = true
+           ) ||
+           errorMessage.contains(
+            "Параметры заказа изменились",
+            ignoreCase = true
+           )
+          )
+
+         if (requiresPriceRecalculation) {
+          pricePreview = null
+          pricePreviewSignature = null
+
+          orderError =
+           "Срок действия расчёта истёк или параметры цены изменились. " +
+                   "Проверьте стоимость и нажмите «Рассчитать стоимость» ещё раз."
+         } else {
+          orderError = errorMessage
+         }
         } finally {
          orderSubmitting = false
         }
@@ -1330,10 +1481,7 @@ fun ClientScreen(
        Text(
         text = when {
          orderCreated -> "Заказ создан"
-         pricePreview != null &&
-                 pricePreviewSignature ==
-                 currentPricePreviewSignature ->
-          "Подтвердить и заказать"
+         hasCurrentPricePreview -> "Подтвердить и заказать"
          else -> "Рассчитать стоимость"
         },
         color = Color.White,
