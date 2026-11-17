@@ -96,7 +96,7 @@ import ru.dgis.sdk.routing.TaxiRouteSearchOptions
 import ru.dgis.sdk.routing.TrafficRouter
 
 import kotlin.math.abs
-
+class MainActivity : ComponentActivity() {
 private val Teal = Color(0xFF1ED9C6)
 private val Ink = Color(0xFF111827)
 private val PanelWhite = Color.White
