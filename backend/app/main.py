@@ -1354,7 +1354,7 @@ def preview_order_price(
     result["price_quote_expires_at"] = price_quote_expires_at
 
     return result
-    @app.post(
+@app.post(
     "/api/v1/orders",
     response_model=OrderResponse,
     status_code=201,
