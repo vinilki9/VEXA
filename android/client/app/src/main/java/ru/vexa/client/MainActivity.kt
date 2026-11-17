@@ -98,6 +98,7 @@ import ru.dgis.sdk.routing.TrafficRouter
 
 import java.time.Instant
 import java.time.OffsetDateTime
+import java.util.UUID
 import kotlin.math.abs
 
 private val Teal = Color(0xFF1ED9C6)
@@ -1382,6 +1383,13 @@ fun ClientScreen(
            )
           }
 
+          // Один токен ценового предложения всегда даёт один
+          // и тот же ключ. Повтор после сетевой ошибки не создаст
+          // второй заказ, если сервер уже обработал первый запрос.
+          val idempotencyKey = UUID.nameUUIDFromBytes(
+           priceQuoteToken.toByteArray(Charsets.UTF_8)
+          ).toString()
+
           val response =
            PassengerOrderRepository.createOrder(
             tariffLabel = tariff,
@@ -1399,7 +1407,8 @@ fun ClientScreen(
             cargoVehicle = cargoVehicle,
             cargoDescription = cargoDescription,
             cargoLoaders = cargoLoaders,
-            priceQuoteToken = priceQuoteToken
+            priceQuoteToken = priceQuoteToken,
+            idempotencyKey = idempotencyKey
            )
 
           val publicNumber =
