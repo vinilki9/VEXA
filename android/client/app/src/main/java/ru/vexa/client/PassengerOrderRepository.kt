@@ -69,8 +69,10 @@ object PassengerOrderRepository {
     /**
      * Создать заказ пассажира через API VEXA.
      *
-     * Тариф выбирается из актуального списка сервера.
-     * Стоимость окончательно рассчитывает сервер.
+     * Для создания заказа передаётся токен
+     * предварительного расчёта стоимости.
+     * Сервер проверяет токен и использует
+     * подтверждённую стоимость.
      */
     suspend fun createOrder(
         tariffLabel: String,
@@ -88,8 +90,13 @@ object PassengerOrderRepository {
         cargoVehicle: String,
         cargoDescription: String,
         cargoLoaders: Int,
+        priceQuoteToken: String,
         idempotencyKey: String = UUID.randomUUID().toString()
     ): JSONObject {
+
+        require(priceQuoteToken.isNotBlank()) {
+            "Необходимо заново рассчитать стоимость заказа."
+        }
 
         val payload = buildOrderPayload(
             tariffLabel = tariffLabel,
@@ -108,6 +115,8 @@ object PassengerOrderRepository {
             cargoDescription = cargoDescription,
             cargoLoaders = cargoLoaders
         )
+
+        payload.put("price_quote_token", priceQuoteToken)
 
         val response = ApiClient.sendOrder(
             json = payload.toString(),
