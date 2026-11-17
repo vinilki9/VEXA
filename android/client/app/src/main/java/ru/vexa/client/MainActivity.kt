@@ -94,7 +94,7 @@ import ru.dgis.sdk.routing.RouteSearchPoint
 import ru.dgis.sdk.routing.RouteSearchType
 import ru.dgis.sdk.routing.TaxiRouteSearchOptions
 import ru.dgis.sdk.routing.TrafficRouter
-import ru.vexa.driver.VexaApplication
+
 import kotlin.math.abs
 
 private val Teal = Color(0xFF1ED9C6)
