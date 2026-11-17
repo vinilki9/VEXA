@@ -199,6 +199,74 @@ def is_cargo_tariff(tariff: Tariff) -> bool:
     return False
 
 
+def idempotency_request_matches(
+    existing: Order,
+    payload: OrderCreate,
+    passenger: User,
+    city: City,
+) -> bool:
+    """
+    Проверяет, что повторный запрос с тем же ключом
+    содержит те же параметры, что и сохранённый заказ.
+    """
+
+    is_anonymous = (
+        payload.anonymous
+        or not (payload.customer_name or "").strip()
+    )
+
+    cargo_order = (
+        existing.cargo_vehicle is not None
+        or payload.cargo_vehicle is not None
+        or bool((payload.cargo_description or "").strip())
+        or payload.cargo_loaders > 0
+    )
+
+    expected_customer_name = (
+        None
+        if is_anonymous
+        else payload.customer_name.strip()
+    )
+
+    expected_cargo_vehicle = (
+        payload.cargo_vehicle
+        if cargo_order
+        else None
+    )
+    expected_cargo_description = (
+        payload.cargo_description
+        if cargo_order
+        else None
+    )
+    expected_cargo_loaders = (
+        payload.cargo_loaders
+        if cargo_order
+        else 0
+    )
+
+    return all((
+        existing.passenger_user_id == passenger.id,
+        existing.city_id == city.id,
+        existing.tariff_id == payload.tariff_id,
+        existing.customer_name == expected_customer_name,
+        existing.customer_phone == passenger.phone,
+        existing.anonymous == is_anonymous,
+        existing.pickup_address == payload.pickup_address,
+        existing.destination_address == payload.destination_address,
+        existing.pickup_latitude == payload.pickup_latitude,
+        existing.pickup_longitude == payload.pickup_longitude,
+        existing.destination_latitude == payload.destination_latitude,
+        existing.destination_longitude == payload.destination_longitude,
+        existing.payment_method == payload.payment_method,
+        existing.child_seat == payload.child_seat,
+        existing.animal_transport == payload.animal_transport,
+        existing.cargo_vehicle == expected_cargo_vehicle,
+        existing.cargo_description == expected_cargo_description,
+        existing.cargo_loaders == expected_cargo_loaders,
+        existing.comment == payload.comment,
+    ))
+
+
 def get_dispatcher_profile(
     db: Session,
     dispatcher: User,
@@ -1286,7 +1354,7 @@ def preview_order_price(
     result["price_quote_expires_at"] = price_quote_expires_at
 
     return result
-@app.post(
+    @app.post(
     "/api/v1/orders",
     response_model=OrderResponse,
     status_code=201,
@@ -1344,6 +1412,18 @@ def create_order(
             raise HTTPException(
                 404,
                 "Заказ не найден",
+            )
+
+        if not idempotency_request_matches(
+            existing,
+            payload,
+            passenger,
+            city,
+        ):
+            raise HTTPException(
+                409,
+                "Ключ идемпотентности уже использован "
+                "для другого заказа. Создайте новый расчёт стоимости.",
             )
 
         return order_to_response(
@@ -1743,6 +1823,18 @@ def create_order(
                     "Заказ не найден",
                 )
 
+            if not idempotency_request_matches(
+                existing,
+                payload,
+                passenger,
+                city,
+            ):
+                raise HTTPException(
+                    409,
+                    "Ключ идемпотентности уже использован "
+                    "для другого заказа. Создайте новый расчёт стоимости.",
+                )
+
             return order_to_response(
                 existing,
                 city,
@@ -1757,9 +1849,7 @@ def create_order(
         order,
         city,
     )
-
-
-# ============================================================
+    # ============================================================
 # DISPATCHER AUTHENTICATION
 # ============================================================
 
