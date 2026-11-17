@@ -1,4 +1,3 @@
-
 package ru.vexa.client
 
 
@@ -1311,8 +1310,37 @@ fun ClientScreen(
           orderCreated = true
          }
         } catch (error: Exception) {
-         orderError = error.message
+         val errorMessage = error.message
           ?: "Не удалось выполнить запрос. Попробуйте ещё раз."
+
+         val requiresPriceRecalculation =
+          errorMessage.contains(
+           "Ошибка сервера: 409"
+          ) && (
+           errorMessage.contains(
+            "ценовое предложение",
+            ignoreCase = true
+           ) ||
+           errorMessage.contains(
+            "Рассчитайте стоимость повторно",
+            ignoreCase = true
+           ) ||
+           errorMessage.contains(
+            "Параметры заказа изменились",
+            ignoreCase = true
+           )
+          )
+
+         if (requiresPriceRecalculation) {
+          pricePreview = null
+          pricePreviewSignature = null
+
+          orderError =
+           "Срок действия расчёта истёк или параметры цены изменились. " +
+                   "Проверьте стоимость и нажмите «Рассчитать стоимость» ещё раз."
+         } else {
+          orderError = errorMessage
+         }
         } finally {
          orderSubmitting = false
         }
