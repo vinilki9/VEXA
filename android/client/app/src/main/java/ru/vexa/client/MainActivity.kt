@@ -1,3 +1,4 @@
+
 package ru.vexa.client
 
 
@@ -95,12 +96,22 @@ import ru.dgis.sdk.routing.RouteSearchType
 import ru.dgis.sdk.routing.TaxiRouteSearchOptions
 import ru.dgis.sdk.routing.TrafficRouter
 
+import java.time.Instant
+import java.time.OffsetDateTime
 import kotlin.math.abs
 
 private val Teal = Color(0xFF1ED9C6)
 private val Ink = Color(0xFF111827)
 private val PanelWhite = Color.White
 private val CancelRed = Color(0xFFE53935)
+
+private fun parsePriceQuoteExpiry(value: String): Instant? {
+ return runCatching {
+  Instant.parse(value)
+ }.getOrNull() ?: runCatching {
+  OffsetDateTime.parse(value).toInstant()
+ }.getOrNull()
+}
 
 class MainActivity : ComponentActivity() {
  private lateinit var mapViewModel: DefaultMapControllerViewModel
@@ -614,6 +625,60 @@ fun ClientScreen(
   mutableStateOf<String?>(null)
  }
 
+ var priceQuoteSecondsRemaining by remember {
+  mutableIntStateOf(0)
+ }
+
+ var priceQuoteExpired by remember {
+  mutableStateOf(false)
+ }
+
+ LaunchedEffect(pricePreview) {
+  val preview = pricePreview
+
+  if (preview == null) {
+   priceQuoteSecondsRemaining = 0
+   priceQuoteExpired = false
+   return@LaunchedEffect
+  }
+
+  val expiresAtValue = preview.optString(
+   "price_quote_expires_at",
+   ""
+  )
+
+  val expiresAt = parsePriceQuoteExpiry(expiresAtValue)
+
+  if (expiresAt == null) {
+   priceQuoteSecondsRemaining = 0
+   priceQuoteExpired = true
+   return@LaunchedEffect
+  }
+
+  while (true) {
+   val remainingMillis =
+    java.time.Duration.between(
+     Instant.now(),
+     expiresAt
+    ).toMillis()
+
+   if (remainingMillis <= 0L) {
+    priceQuoteSecondsRemaining = 0
+    priceQuoteExpired = true
+    break
+   }
+
+   priceQuoteSecondsRemaining =
+    ((remainingMillis + 999L) / 1000L)
+     .coerceAtMost(Int.MAX_VALUE.toLong())
+     .toInt()
+
+   priceQuoteExpired = false
+
+   delay(1000)
+  }
+ }
+
  var showPassengerAuthDialog by remember {
   mutableStateOf(false)
  }
@@ -637,6 +702,11 @@ fun ClientScreen(
   cargoLoaders.toString()
  ).joinToString("|")
  val coroutineScope = rememberCoroutineScope()
+
+ val hasCurrentPricePreview =
+  pricePreview != null &&
+   pricePreviewSignature == currentPricePreviewSignature &&
+   !priceQuoteExpired
 
  val animatedFraction by animateFloatAsState(
   targetValue = panelFraction,
@@ -1139,8 +1209,7 @@ fun ClientScreen(
       }
      }
 
-     // Здесь отображается карточка предварительного расчёта:
-     // базовая стоимость и итоговая цена
+     // Здесь отображается карточка предварительного расчёта.
      // Пассажиру показываем только итоговую стоимость поездки.
      if (
       pricePreview != null &&
@@ -1153,33 +1222,66 @@ fun ClientScreen(
        ""
       )
 
+      val minutes = priceQuoteSecondsRemaining / 60
+      val seconds = priceQuoteSecondsRemaining % 60
+
       Surface(
        modifier = Modifier.fillMaxWidth(),
        shape = RoundedCornerShape(16.dp),
-       color = Teal.copy(alpha = 0.10f)
+       color = if (priceQuoteExpired) {
+        CancelRed.copy(alpha = 0.08f)
+       } else {
+        Teal.copy(alpha = 0.10f)
+       }
       ) {
        Column(
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
        ) {
         Text(
-         "Стоимость поездки",
-         color = Ink,
+         if (priceQuoteExpired) {
+          "Расчёт стоимости устарел"
+         } else {
+          "Стоимость поездки"
+         },
+         color = if (priceQuoteExpired) CancelRed else Ink,
          style = MaterialTheme.typography.titleMedium
         )
 
         Text(
          "$totalPrice ₽",
-         color = Ink,
+         color = if (priceQuoteExpired) Color.Gray else Ink,
          fontSize = 30.sp,
          fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
         )
 
-        Text(
-         "После подтверждения заказа стоимость фиксируется.",
-         color = Color.DarkGray,
-         fontSize = 11.sp
-        )
+        if (priceQuoteExpired) {
+         Text(
+          "Срок действия расчёта истёк. " +
+                  "Для заказа необходимо рассчитать стоимость заново.",
+          color = CancelRed,
+          fontSize = 12.sp
+         )
+        } else {
+         Text(
+          "Расчёт действителен ещё: %02d:%02d".format(
+           minutes,
+           seconds
+          ),
+          color = if (priceQuoteSecondsRemaining <= 20) {
+           CancelRed
+          } else {
+           Color.DarkGray
+          },
+          fontSize = 12.sp
+         )
+
+         Text(
+          "После подтверждения заказа стоимость фиксируется.",
+          color = Color.DarkGray,
+          fontSize = 11.sp
+         )
+        }
        }
       }
      }
@@ -1238,7 +1340,8 @@ fun ClientScreen(
 
        val hasCurrentPreview =
         pricePreview != null &&
-                pricePreviewSignature == requestSignature
+         pricePreviewSignature == requestSignature &&
+         !priceQuoteExpired
 
        orderSubmitting = true
        orderError = null
@@ -1369,10 +1472,7 @@ fun ClientScreen(
        Text(
         text = when {
          orderCreated -> "Заказ создан"
-         pricePreview != null &&
-                 pricePreviewSignature ==
-                 currentPricePreviewSignature ->
-          "Подтвердить и заказать"
+         hasCurrentPricePreview -> "Подтвердить и заказать"
          else -> "Рассчитать стоимость"
         },
         color = Color.White,
