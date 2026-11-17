@@ -102,8 +102,6 @@ private val Ink = Color(0xFF111827)
 private val PanelWhite = Color.White
 private val CancelRed = Color(0xFFE53935)
 
-class MainActivity : ComponentActivity() {
- class MainActivity : Activity()
 
  private lateinit var mapViewModel: DefaultMapControllerViewModel
  private lateinit var trafficRouter: TrafficRouter
