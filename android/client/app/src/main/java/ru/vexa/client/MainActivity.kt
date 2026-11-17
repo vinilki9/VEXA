@@ -1,3 +1,4 @@
+
 package ru.vexa.client
 
 
@@ -1138,8 +1139,9 @@ fun ClientScreen(
        }
       }
      }
-      // Здесь отображается карточка предварительного расчёта:
-      // базовая стоимость и итоговая цена
+
+     // Здесь отображается карточка предварительного расчёта:
+     // базовая стоимость и итоговая цена
      // Пассажиру показываем только итоговую стоимость поездки.
      if (
       pricePreview != null &&
@@ -1268,6 +1270,16 @@ fun ClientScreen(
           pricePreviewSignature = requestSignature
 
          } else {
+          val priceQuoteToken =
+           pricePreview?.optString("price_quote_token").orEmpty()
+
+          if (priceQuoteToken.isBlank()) {
+           throw IllegalStateException(
+            "Сервер не вернул токен расчёта стоимости. " +
+                    "Рассчитайте стоимость заново."
+           )
+          }
+
           val response =
            PassengerOrderRepository.createOrder(
             tariffLabel = tariff,
@@ -1284,7 +1296,8 @@ fun ClientScreen(
             animalTransport = animal,
             cargoVehicle = cargoVehicle,
             cargoDescription = cargoDescription,
-            cargoLoaders = cargoLoaders
+            cargoLoaders = cargoLoaders,
+            priceQuoteToken = priceQuoteToken
            )
 
           val publicNumber =
