@@ -2,6 +2,7 @@
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
+from decimal import Decimal
 
 from pydantic import (
     BaseModel,
@@ -93,6 +94,14 @@ class OrderCreate(APIModel):
 
     payment_method: PaymentMethod = "cash"
 
+    # Подписанное сервером ценовое предложение.
+    # Сервер проверяет подпись и срок действия перед созданием заказа.
+    price_quote_token: str | None = Field(
+        default=None,
+        min_length=32,
+        max_length=4096,
+    )
+
     # Дополнительные услуги обычных тарифов.
     child_seat: bool = False
     animal_transport: bool = False
@@ -171,6 +180,13 @@ class OrderResponse(APIModel):
     price_rub: int | None = None
     price_kopecks: int | None = None
 
+    # Зафиксированный снимок динамического ценообразования.
+    dynamic_pricing_settings_id: UUID | None = None
+    dynamic_pricing_multiplier: Decimal | None = None
+    dynamic_driver_distance_km: Decimal | None = None
+    fare_dynamic_adjustment_kopecks: int | None = None
+    dynamic_pricing_breakdown: dict | None = None
+
     # Основная расшифровка стоимости.
     fare_base_price_kopecks: int | None = None
     fare_distance_price_kopecks: int | None = None
@@ -197,6 +213,46 @@ class OrderResponse(APIModel):
 
     created_at: datetime
     updated_at: datetime
+
+
+class OrderPricePreviewResponse(APIModel):
+    city_code: str
+    tariff_id: UUID
+
+    route_distance_meters: int
+    route_duration_seconds: int
+    routing_provider: str
+
+    # Основная стоимость маршрута.
+    fare_base_price_kopecks: int
+    fare_distance_price_kopecks: int
+    fare_time_price_kopecks: int
+    fare_limit_adjustment_kopecks: int
+    anonymous_surcharge_kopecks: int
+
+    # Динамическое ценообразование.
+    dynamic_pricing_settings_id: UUID | None = None
+    dynamic_pricing_multiplier: Decimal
+    dynamic_driver_distance_km: Decimal | None = None
+    fare_dynamic_adjustment_kopecks: int
+    dynamic_pricing_breakdown: dict
+
+    # Дополнительные услуги.
+    child_seat_surcharge_kopecks: int = 0
+    animal_transport_surcharge_kopecks: int = 0
+    cargo_vehicle_surcharge_kopecks: int = 0
+    cargo_loaders_surcharge_kopecks: int = 0
+
+    # Подписанное ценовое предложение.
+    price_quote_token: str = Field(
+        min_length=32,
+        max_length=4096,
+    )
+    price_quote_expires_at: datetime
+
+    # Итоговая предварительная стоимость.
+    price_kopecks: int
+    price_rub: int
 
 
 # ------------------------------------------------------------

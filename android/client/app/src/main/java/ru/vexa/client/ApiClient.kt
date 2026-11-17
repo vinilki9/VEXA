@@ -106,6 +106,31 @@ object ApiClient {
     }
 
     /**
+     * Предварительно рассчитать стоимость поездки.
+     *
+     * POST /api/v1/orders/price-preview
+     *
+     * Заказ не создаётся.
+     * Требуется подтверждённая авторизация пассажира.
+     */
+    suspend fun previewOrderPrice(
+        json: String
+    ): String {
+        val token = accessToken
+            ?: throw IllegalStateException(
+                "Для расчёта стоимости необходимо войти в профиль"
+            )
+
+        val request = Request.Builder()
+            .url("$BASE_URL/api/v1/orders/price-preview")
+            .header("Authorization", "Bearer $token")
+            .post(json.toRequestBody(JSON_MEDIA_TYPE))
+            .build()
+
+        return executeRequest(request)
+    }
+
+    /**
      * Получить список активных тарифов города.
      *
      * GET /api/v1/tariffs/{city_code}

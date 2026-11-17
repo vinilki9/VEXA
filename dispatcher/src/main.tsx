@@ -7,6 +7,8 @@ import {
   MapPin, Radio,
 } from 'lucide-react';
 import VexaMap from './components/VexaMap';
+import DriverFinancePanel from './components/DriverFinancePanel';
+import FinanceSummaryPanel from './components/FinanceSummaryPanel';
 import './style.css';
 
 const API_BASE = 'https://109.120.184.20';
@@ -308,6 +310,9 @@ function LoginScreen({
 
 function App() {
   const [token, setToken] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<
+    'overview' | 'map' | 'orders' | 'drivers' | 'finance'
+  >('overview');
   const [dispatcher, setDispatcher] = useState<DispatcherProfile | null>(null);
   const [orders, setOrders] = useState<VexaOrder[]>([]);
   const [loading, setLoading] = useState(false);
@@ -588,12 +593,55 @@ function App() {
         </div>
 
         <nav>
-          <a className="active"><LayoutDashboard />Обзор</a>
-          <a><Map />Карта</a>
-          <a><CarFront />Заказы</a>
-          <a><Users />Водители</a>
-          <a><Wallet />Финансы</a>
-          <a><Settings />Настройки</a>
+          <a
+            href="#overview"
+            className={activeSection === 'overview' ? 'active' : ''}
+            onClick={() => setActiveSection('overview')}
+          >
+            <LayoutDashboard />Обзор
+          </a>
+
+          <a
+            href="#map"
+            className={activeSection === 'map' ? 'active' : ''}
+            onClick={() => setActiveSection('map')}
+          >
+            <Map />Карта
+          </a>
+
+          <a
+            href="#orders"
+            className={activeSection === 'orders' ? 'active' : ''}
+            onClick={() => setActiveSection('orders')}
+          >
+            <CarFront />Заказы
+          </a>
+
+          <a
+            href="#drivers"
+            className={activeSection === 'drivers' ? 'active' : ''}
+            onClick={() => setActiveSection('drivers')}
+          >
+            <Users />Водители
+          </a>
+
+          <a
+            href="#finance"
+            className={activeSection === 'finance' ? 'active' : ''}
+            onClick={event => {
+              event.preventDefault();
+              setActiveSection('finance');
+            }}
+          >
+            <Wallet />Финансы
+          </a>
+
+          <a
+            href="#settings"
+            onClick={event => event.preventDefault()}
+          >
+            <Settings />Настройки
+          </a>
         </nav>
 
         <div className="branch">
@@ -603,7 +651,7 @@ function App() {
       </aside>
 
       <main>
-        <header>
+        <header id="overview">
           <div>
             <p className="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</p>
             <h1>Обзор диспетчера</h1>
@@ -669,385 +717,400 @@ function App() {
           </div>
         )}
 
-        <section className="stats">
-          <article>
-            <label>Новые заказы</label>
-            <strong>{newOrders.length}</strong>
-            <small>Ожидают принятия</small>
-          </article>
+{activeSection === 'finance' ? (
+  <>
+    <FinanceSummaryPanel
+      token={token}
+      cityCode={CITY_CODE}
+    />
+    <DriverFinancePanel
+      token={token}
+      cityCode={CITY_CODE}
+    />
+  </>
+) : (
+          <>
+            <section className="stats">
+              <article>
+                <label>Новые заказы</label>
+                <strong>{newOrders.length}</strong>
+                <small>Ожидают принятия</small>
+              </article>
 
-          <article>
-            <label>Ожидают водителя</label>
-            <strong>{acceptedOrders.length}</strong>
-            <small>Нуждаются в назначении</small>
-          </article>
+              <article>
+                <label>Ожидают водителя</label>
+                <strong>{acceptedOrders.length}</strong>
+                <small>Нуждаются в назначении</small>
+              </article>
 
-          <article>
-            <label>Активные поездки</label>
-            <strong>{activeOrders.length}</strong>
-            <small>Назначены водители</small>
-          </article>
+              <article>
+                <label>Активные поездки</label>
+                <strong>{activeOrders.length}</strong>
+                <small>Назначены водители</small>
+              </article>
 
-          <article>
-            <label>Завершённые</label>
-            <strong>{completedOrders.length}</strong>
-            <small>В загруженном списке</small>
-          </article>
-        </section>
+              <article>
+                <label>Завершённые</label>
+                <strong>{completedOrders.length}</strong>
+                <small>В загруженном списке</small>
+              </article>
+            </section>
 
-        <section style={panelStyle}>
-          <div style={panelHeaderStyle}>
-            <div>
-              <h2 style={panelTitleStyle}>Водители на линии</h2>
-              <p style={mutedTextStyle}>
-                Последние сохранённые сведения о водителях · Оболенск
+            <section id="drivers" style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <h2 style={panelTitleStyle}>Водители на линии</h2>
+                  <p style={mutedTextStyle}>
+                    Последние сохранённые сведения о водителях · Оболенск
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => loadDriverLocations(token)}
+                  disabled={driversLoading}
+                  style={secondaryButtonStyle}
+                >
+                  <RefreshCw
+                    size={14}
+                    style={{ marginRight: 6, verticalAlign: 'middle' }}
+                  />
+                  {driversLoading ? 'Обновление...' : 'Обновить'}
+                </button>
+              </div>
+
+              <div style={driverStatsStyle}>
+                <div style={driverStatCardStyle}>
+                  <span style={statLabelStyle}>На линии</span>
+                  <strong style={{
+                    ...statNumberStyle,
+                    color: '#07866f',
+                  }}>
+                    {onlineDrivers.length}
+                  </strong>
+                </div>
+
+                <div style={driverStatCardStyle}>
+                  <span style={statLabelStyle}>Не на линии</span>
+                  <strong style={statNumberStyle}>
+                    {offlineDrivers.length}
+                  </strong>
+                </div>
+
+                <div style={driverStatCardStyle}>
+                  <span style={statLabelStyle}>Всего водителей</span>
+                  <strong style={statNumberStyle}>
+                    {drivers.length}
+                  </strong>
+                </div>
+              </div>
+
+              {driversError && (
+                <div style={errorStyle}>
+                  <AlertCircle size={16} />
+                  {driversError}
+                </div>
+              )}
+
+              {driversLoading && drivers.length === 0 && (
+                <p style={mutedTextStyle}>
+                  Загрузка списка водителей...
+                </p>
+              )}
+
+              {!driversLoading && drivers.length === 0 && !driversError && (
+                <div style={emptyDriversStyle}>
+                  <Users size={27} />
+                  <p>В этом городе пока нет зарегистрированных водителей.</p>
+                </div>
+              )}
+
+              {onlineDrivers.length > 0 && (
+                <>
+                  <h3 style={subheadingStyle}>
+                    На линии ({onlineDrivers.length})
+                  </h3>
+
+                  <div style={onlineListStyle}>
+                    {onlineDrivers.map(driver => (
+                      <div
+                        key={driver.user_id}
+                        style={onlineDriverCardStyle}
+                      >
+                        <div style={onlineDriverTopStyle}>
+                          <div style={driverAvatarStyle}>
+                            <CarFront size={19} />
+                          </div>
+
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <b style={driverNameStyle}>
+                              {driver.username}
+                            </b>
+
+                            <span style={driverPhoneStyle}>
+                              {driver.phone || 'Телефон не указан'}
+                            </span>
+                          </div>
+
+                          <span style={onlineBadgeStyle}>
+                            <i />
+                            На линии
+                          </span>
+                        </div>
+
+                        <div style={driverMetaStyle}>
+                          <span>
+                            Рейтинг: ★ {Number(driver.rating || 0).toFixed(1)}
+                          </span>
+                          <span>Город: {driver.city?.name || '—'}</span>
+                          <span>Филиал: {driver.branch?.name || 'Не указан'}</span>
+                        </div>
+
+                        <div style={locationInfoStyle}>
+                          <MapPin size={15} />
+
+                          {driver.location ? (
+                            <div>
+                              <b>
+                                {Number(driver.location.latitude).toFixed(5)},{' '}
+                                {Number(driver.location.longitude).toFixed(5)}
+                              </b>
+
+                              <small>
+                                Последние координаты: {formatDate(
+                                  driver.location.recorded_at ||
+                                  driver.location.updated_at,
+                                )}
+
+                                {driver.location.accuracy_meters != null
+                                  ? ` · точность ±${Math.round(driver.location.accuracy_meters)} м`
+                                  : ''}
+                              </small>
+                            </div>
+                          ) : (
+                            <div>
+                              <b>Координаты не получены</b>
+                              <small>Последнее местоположение пока неизвестно</small>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {offlineDrivers.length > 0 && (
+                <details style={{ marginTop: 14 }}>
+                  <summary style={offlineSummaryStyle}>
+                    Не на линии ({offlineDrivers.length})
+                  </summary>
+
+                  <div style={onlineListStyle}>
+                    {offlineDrivers.map(driver => (
+                      <div
+                        key={driver.user_id}
+                        style={{
+                          ...onlineDriverCardStyle,
+                          opacity: 0.72,
+                        }}
+                      >
+                        <div style={onlineDriverTopStyle}>
+                          <div style={{
+                            ...driverAvatarStyle,
+                            background: '#f0f2f5',
+                            color: '#8994a3',
+                          }}>
+                            <CarFront size={19} />
+                          </div>
+
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <b style={driverNameStyle}>
+                              {driver.username}
+                            </b>
+
+                            <span style={driverPhoneStyle}>
+                              {driver.phone || 'Телефон не указан'}
+                            </span>
+                          </div>
+
+                          <span style={offlineBadgeStyle}>
+                            Не на линии
+                          </span>
+                        </div>
+
+                        <div style={driverMetaStyle}>
+                          <span>Город: {driver.city?.name || '—'}</span>
+                          <span>Филиал: {driver.branch?.name || 'Не указан'}</span>
+                        </div>
+
+                        <div style={locationInfoStyle}>
+                          <MapPin size={15} />
+
+                          {driver.location ? (
+                            <div>
+                              <b>
+                                {Number(driver.location.latitude).toFixed(5)},{' '}
+                                {Number(driver.location.longitude).toFixed(5)}
+                              </b>
+
+                              <small>
+                                Последние сохранённые координаты: {formatDate(
+                                  driver.location.recorded_at ||
+                                  driver.location.updated_at,
+                                )}
+                              </small>
+                            </div>
+                          ) : (
+                            <div>
+                              <b>Координаты не получены</b>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+
+              <p style={gpsNoticeStyle}>
+                <Radio size={13} />
+                Панель показывает последние сохранённые координаты. Сам факт
+                нахождения водителя на линии не означает непрерывную передачу GPS.
               </p>
-            </div>
+            </section>
 
-            <button
-              onClick={() => loadDriverLocations(token)}
-              disabled={driversLoading}
-              style={secondaryButtonStyle}
-            >
-              <RefreshCw
-                size={14}
-                style={{ marginRight: 6, verticalAlign: 'middle' }}
-              />
-              {driversLoading ? 'Обновление...' : 'Обновить'}
-            </button>
-          </div>
+            <section className="content">
+              <article id="map" className="mapcard">
+                <div className="cardhead">
+                  <div>
+                    <h2>Карта города</h2>
+                    <p>Карта 2ГИС · Местоположение водителей</p>
+                  </div>
 
-          <div style={driverStatsStyle}>
-            <div style={driverStatCardStyle}>
-              <span style={statLabelStyle}>На линии</span>
-              <strong style={{
-                ...statNumberStyle,
-                color: '#07866f',
-              }}>
-                {onlineDrivers.length}
-              </strong>
-            </div>
+                  <span className="live">
+                    <i />
+                    ОБОЛЕНСК
+                  </span>
+                </div>
 
-            <div style={driverStatCardStyle}>
-              <span style={statLabelStyle}>Не на линии</span>
-              <strong style={statNumberStyle}>
-                {offlineDrivers.length}
-              </strong>
-            </div>
+                <div className="maparea" style={{
+                  padding: 0,
+                  minHeight: 300,
+                }}>
+                  <VexaMap
+                    drivers={drivers}
+                    height={430}
+                  />
+                </div>
+              </article>
 
-            <div style={driverStatCardStyle}>
-              <span style={statLabelStyle}>Всего водителей</span>
-              <strong style={statNumberStyle}>
-                {drivers.length}
-              </strong>
-            </div>
-          </div>
+              <article id="orders" className="orders">
+                <div className="cardhead">
+                  <div>
+                    <h2>Заказы</h2>
+                    <p>{orders.length} заказов в текущем списке</p>
+                  </div>
 
-          {driversError && (
-            <div style={errorStyle}>
-              <AlertCircle size={16} />
-              {driversError}
-            </div>
-          )}
+                  <button onClick={() => loadOrders(token)}>
+                    Обновить
+                  </button>
+                </div>
 
-          {driversLoading && drivers.length === 0 && (
-            <p style={mutedTextStyle}>
-              Загрузка списка водителей...
-            </p>
-          )}
+                {loading && orders.length === 0 && (
+                  <p style={mutedTextStyle}>Загрузка заказов...</p>
+                )}
 
-          {!driversLoading && drivers.length === 0 && !driversError && (
-            <div style={emptyDriversStyle}>
-              <Users size={27} />
-              <p>В этом городе пока нет зарегистрированных водителей.</p>
-            </div>
-          )}
+                {!loading && orders.length === 0 && (
+                  <p style={mutedTextStyle}>Заказов пока нет.</p>
+                )}
 
-          {onlineDrivers.length > 0 && (
-            <>
-              <h3 style={subheadingStyle}>
-                На линии ({onlineDrivers.length})
-              </h3>
-
-              <div style={onlineListStyle}>
-                {onlineDrivers.map(driver => (
-                  <div
-                    key={driver.user_id}
-                    style={onlineDriverCardStyle}
-                  >
-                    <div style={onlineDriverTopStyle}>
-                      <div style={driverAvatarStyle}>
-                        <CarFront size={19} />
-                      </div>
-
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <b style={driverNameStyle}>
-                          {driver.username}
-                        </b>
-
-                        <span style={driverPhoneStyle}>
-                          {driver.phone || 'Телефон не указан'}
-                        </span>
-                      </div>
-
-                      <span style={onlineBadgeStyle}>
-                        <i />
-                        На линии
-                      </span>
+                {orders.map(order => (
+                  <div className="order" key={order.id}>
+                    <div className="ordericon">
+                      <CarFront />
                     </div>
 
-                    <div style={driverMetaStyle}>
+                    <div className="orderinfo">
+                      <b>{order.public_number}</b>
+
                       <span>
-                        Рейтинг: ★ {Number(driver.rating || 0).toFixed(1)}
+                        {order.pickup_address} → {order.destination_address}
                       </span>
-                      <span>Город: {driver.city?.name || '—'}</span>
-                      <span>Филиал: {driver.branch?.name || 'Не указан'}</span>
-                    </div>
 
-                    <div style={locationInfoStyle}>
-                      <MapPin size={15} />
+                      <small>
+                        {formatDate(order.created_at)}
+                        {' · '}
+                        {getPaymentLabel(order.payment_method)}
+                        {' · '}
+                        {Number(order.price_rub || 0).toLocaleString('ru-RU')} ₽
+                      </small>
 
-                      {driver.location ? (
-                        <div>
-                          <b>
-                            {Number(driver.location.latitude).toFixed(5)},{' '}
-                            {Number(driver.location.longitude).toFixed(5)}
-                          </b>
+                      <small>
+                        Клиент: {order.customer_name || 'Анонимный заказ'}
+                        {order.customer_phone ? ` · ${order.customer_phone}` : ''}
+                      </small>
 
-                          <small>
-                            Последние координаты: {formatDate(
-                              driver.location.recorded_at ||
-                              driver.location.updated_at,
-                            )}
+                      <span
+                        className={`status ${getStatusClass(order.status)}`}
+                        style={{
+                          display: 'inline-block',
+                          width: 'fit-content',
+                          marginTop: 5,
+                        }}
+                      >
+                        {getStatusLabel(order.status)}
+                      </span>
 
-                            {driver.location.accuracy_meters != null
-                              ? ` · точность ±${Math.round(driver.location.accuracy_meters)} м`
-                              : ''}
-                          </small>
-                        </div>
-                      ) : (
-                        <div>
-                          <b>Координаты не получены</b>
-                          <small>Последнее местоположение пока неизвестно</small>
-                        </div>
+                      {order.status === 'new' && (
+                        <button
+                          onClick={() => acceptOrder(order)}
+                          disabled={acceptingId !== null}
+                          style={{
+                            ...primaryButtonStyle,
+                            marginTop: 8,
+                            width: 'fit-content',
+                            opacity: acceptingId !== null ? 0.6 : 1,
+                          }}
+                        >
+                          {acceptingId === order.id
+                            ? 'Принимаем...'
+                            : 'Принять и найти водителя'}
+                        </button>
+                      )}
+
+                      {order.status === 'accepted' && (
+                        <button
+                          onClick={() => openManualAssignment(order)}
+                          style={{
+                            ...primaryButtonStyle,
+                            marginTop: 8,
+                            width: 'fit-content',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 7,
+                          }}
+                        >
+                          <UserCheck size={15} />
+                          Назначить водителя
+                        </button>
                       )}
                     </div>
                   </div>
                 ))}
-              </div>
-            </>
-          )}
+              </article>
+            </section>
 
-          {offlineDrivers.length > 0 && (
-            <details style={{ marginTop: 14 }}>
-              <summary style={offlineSummaryStyle}>
-                Не на линии ({offlineDrivers.length})
-              </summary>
-
-              <div style={onlineListStyle}>
-                {offlineDrivers.map(driver => (
-                  <div
-                    key={driver.user_id}
-                    style={{
-                      ...onlineDriverCardStyle,
-                      opacity: 0.72,
-                    }}
-                  >
-                    <div style={onlineDriverTopStyle}>
-                      <div style={{
-                        ...driverAvatarStyle,
-                        background: '#f0f2f5',
-                        color: '#8994a3',
-                      }}>
-                        <CarFront size={19} />
-                      </div>
-
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <b style={driverNameStyle}>
-                          {driver.username}
-                        </b>
-
-                        <span style={driverPhoneStyle}>
-                          {driver.phone || 'Телефон не указан'}
-                        </span>
-                      </div>
-
-                      <span style={offlineBadgeStyle}>
-                        Не на линии
-                      </span>
-                    </div>
-
-                    <div style={driverMetaStyle}>
-                      <span>Город: {driver.city?.name || '—'}</span>
-                      <span>Филиал: {driver.branch?.name || 'Не указан'}</span>
-                    </div>
-
-                    <div style={locationInfoStyle}>
-                      <MapPin size={15} />
-
-                      {driver.location ? (
-                        <div>
-                          <b>
-                            {Number(driver.location.latitude).toFixed(5)},{' '}
-                            {Number(driver.location.longitude).toFixed(5)}
-                          </b>
-
-                          <small>
-                            Последние сохранённые координаты: {formatDate(
-                              driver.location.recorded_at ||
-                              driver.location.updated_at,
-                            )}
-                          </small>
-                        </div>
-                      ) : (
-                        <div>
-                          <b>Координаты не получены</b>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-
-          <p style={gpsNoticeStyle}>
-            <Radio size={13} />
-            Панель показывает последние сохранённые координаты. Сам факт
-            нахождения водителя на линии не означает непрерывную передачу GPS.
-          </p>
-        </section>
-
-        <section className="content">
-          <article className="mapcard">
-            <div className="cardhead">
+            <section className="bottom">
               <div>
-                <h2>Карта города</h2>
-                <p>Карта 2ГИС · Местоположение водителей</p>
+                <Clock />
+                <b>Обновление данных</b>
+                <span>
+                  Заказы и список водителей автоматически обновляются каждые 15 секунд.
+                </span>
               </div>
-
-              <span className="live">
-                <i />
-                ОБОЛЕНСК
-              </span>
-            </div>
-
-            <div className="maparea" style={{
-              padding: 0,
-              minHeight: 300,
-            }}>
-              <VexaMap
-                drivers={drivers}
-                height={430}
-              />
-            </div>
-          </article>
-
-          <article className="orders">
-            <div className="cardhead">
-              <div>
-                <h2>Заказы</h2>
-                <p>{orders.length} заказов в текущем списке</p>
-              </div>
-
-              <button onClick={() => loadOrders(token)}>
-                Обновить
-              </button>
-            </div>
-
-            {loading && orders.length === 0 && (
-              <p style={mutedTextStyle}>Загрузка заказов...</p>
-            )}
-
-            {!loading && orders.length === 0 && (
-              <p style={mutedTextStyle}>Заказов пока нет.</p>
-            )}
-
-            {orders.map(order => (
-              <div className="order" key={order.id}>
-                <div className="ordericon">
-                  <CarFront />
-                </div>
-
-                <div className="orderinfo">
-                  <b>{order.public_number}</b>
-
-                  <span>
-                    {order.pickup_address} → {order.destination_address}
-                  </span>
-
-                  <small>
-                    {formatDate(order.created_at)}
-                    {' · '}
-                    {getPaymentLabel(order.payment_method)}
-                    {' · '}
-                    {Number(order.price_rub || 0).toLocaleString('ru-RU')} ₽
-                  </small>
-
-                  <small>
-                    Клиент: {order.customer_name || 'Анонимный заказ'}
-                    {order.customer_phone ? ` · ${order.customer_phone}` : ''}
-                  </small>
-
-                  <span
-                    className={`status ${getStatusClass(order.status)}`}
-                    style={{
-                      display: 'inline-block',
-                      width: 'fit-content',
-                      marginTop: 5,
-                    }}
-                  >
-                    {getStatusLabel(order.status)}
-                  </span>
-
-                  {order.status === 'new' && (
-                    <button
-                      onClick={() => acceptOrder(order)}
-                      disabled={acceptingId !== null}
-                      style={{
-                        ...primaryButtonStyle,
-                        marginTop: 8,
-                        width: 'fit-content',
-                        opacity: acceptingId !== null ? 0.6 : 1,
-                      }}
-                    >
-                      {acceptingId === order.id
-                        ? 'Принимаем...'
-                        : 'Принять и найти водителя'}
-                    </button>
-                  )}
-
-                  {order.status === 'accepted' && (
-                    <button
-                      onClick={() => openManualAssignment(order)}
-                      style={{
-                        ...primaryButtonStyle,
-                        marginTop: 8,
-                        width: 'fit-content',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 7,
-                      }}
-                    >
-                      <UserCheck size={15} />
-                      Назначить водителя
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </article>
-        </section>
-
-        <section className="bottom">
-          <div>
-            <Clock />
-            <b>Обновление данных</b>
-            <span>
-              Заказы и список водителей автоматически обновляются каждые 15 секунд.
-            </span>
-          </div>
-        </section>
+            </section>
+          </>
+        )}
       </main>
 
       {assignmentOrder && (

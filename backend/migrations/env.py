@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, pool
 from app.config import settings
 from app.database import Base
 from app import models  # noqa: F401 — register models in Base.metadata
+from app import driver_transfer_models  # noqa: F401 — register transfer models in Base.metadata
 
 
 config = context.config

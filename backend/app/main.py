@@ -1,11 +1,18 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import UUID
+from decimal import Decimal, ROUND_HALF_UP
 
 from app.passenger_auth import router as passenger_auth_router
 from app.driver_api import router as driver_router
+from app.driver_transfer_api import router as driver_transfer_router
 from app.phone_utils import normalize_phone
-
+from app.dispatch_order_api import router as dispatch_order_router
+from app.dynamic_pricing_api import router as dynamic_pricing_router
+from app.dynamic_pricing_service import calculate_order_dynamic_pricing
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
+from jose import JWTError, jwt
+from types import SimpleNamespace
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -34,6 +41,7 @@ from app.schemas import (
     DispatcherResponse,
     OrderCreate,
     OrderResponse,
+    OrderPricePreviewResponse,
     TokenResponse,
     TariffCreate,
     TariffUpdate,
@@ -49,7 +57,9 @@ from app.security import (
 app = FastAPI(title="VEXA API", version="0.6.0")
 app.include_router(passenger_auth_router)
 app.include_router(driver_router)
-
+app.include_router(driver_transfer_router)
+app.include_router(dispatch_order_router)
+app.include_router(dynamic_pricing_router)
 
 ORDER_STATUSES = {
     "new": {"accepted", "cancelled"},
@@ -106,7 +116,22 @@ def order_to_response(order: Order, city: City) -> dict:
         "payment_method": order.payment_method,
         "price_rub": order.price_rub,
         "price_kopecks": order.price_kopecks,
-
+        # Зафиксированный снимок динамического ценообразования.
+        "dynamic_pricing_settings_id": (
+            order.dynamic_pricing_settings_id
+        ),
+        "dynamic_pricing_multiplier": (
+            order.dynamic_pricing_multiplier
+        ),
+        "dynamic_driver_distance_km": (
+            order.dynamic_driver_distance_km
+        ),
+        "fare_dynamic_adjustment_kopecks": (
+            order.fare_dynamic_adjustment_kopecks
+        ),
+        "dynamic_pricing_breakdown": (
+            order.dynamic_pricing_breakdown
+        ),
         # Основная расшифровка стоимости.
         "fare_base_price_kopecks": (
             order.fare_base_price_kopecks
@@ -836,10 +861,431 @@ def get_tariff_history(
     }
 
 
+PRICE_QUOTE_TTL_MINUTES = 2
+
+
+def build_price_quote_fingerprint(
+    payload: OrderCreate,
+    is_anonymous: bool,
+) -> dict:
+    """
+    Параметры заказа, от которых зависит рассчитанная стоимость.
+    """
+
+    return {
+        "city_code": payload.city_code,
+        "tariff_id": str(payload.tariff_id),
+        "anonymous": bool(is_anonymous),
+        "pickup_address": payload.pickup_address.strip(),
+        "destination_address": payload.destination_address.strip(),
+        "pickup_latitude": payload.pickup_latitude,
+        "pickup_longitude": payload.pickup_longitude,
+        "destination_latitude": payload.destination_latitude,
+        "destination_longitude": payload.destination_longitude,
+        "child_seat": bool(payload.child_seat),
+        "animal_transport": bool(payload.animal_transport),
+        "cargo_vehicle": payload.cargo_vehicle,
+        "cargo_description": (
+            (payload.cargo_description or "").strip() or None
+        ),
+        "cargo_loaders": payload.cargo_loaders,
+    }
+
+
+def create_price_quote_token(
+    passenger: User,
+    city: City,
+    branch: Branch,
+    payload: OrderCreate,
+    is_anonymous: bool,
+    quote: dict,
+) -> tuple[str, datetime]:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=PRICE_QUOTE_TTL_MINUTES
+    )
+
+    claims = {
+        "sub": str(passenger.id),
+        "token_type": "price_quote",
+        "city_id": str(city.id),
+        "branch_id": str(branch.id),
+        "request": build_price_quote_fingerprint(
+            payload,
+            is_anonymous,
+        ),
+        "quote": jsonable_encoder(quote),
+        "exp": expires_at,
+    }
+
+    token = jwt.encode(
+        claims,
+        settings.secret_key,
+        algorithm="HS256",
+    )
+
+    return token, expires_at
+
+PRICE_QUOTE_TTL_MINUTES = 2
+
+
+def build_price_quote_fingerprint(
+    payload: OrderCreate,
+    is_anonymous: bool,
+) -> dict:
+    """
+    Параметры заказа, от которых зависит рассчитанная стоимость.
+    """
+
+    return {
+        "city_code": payload.city_code,
+        "tariff_id": str(payload.tariff_id),
+        "anonymous": bool(is_anonymous),
+        "pickup_address": payload.pickup_address.strip(),
+        "destination_address": payload.destination_address.strip(),
+        "pickup_latitude": payload.pickup_latitude,
+        "pickup_longitude": payload.pickup_longitude,
+        "destination_latitude": payload.destination_latitude,
+        "destination_longitude": payload.destination_longitude,
+        "child_seat": bool(payload.child_seat),
+        "animal_transport": bool(payload.animal_transport),
+        "cargo_vehicle": payload.cargo_vehicle,
+        "cargo_description": (
+            (payload.cargo_description or "").strip() or None
+        ),
+        "cargo_loaders": payload.cargo_loaders,
+    }
+
+
+def create_price_quote_token(
+    passenger: User,
+    city: City,
+    branch: Branch,
+    payload: OrderCreate,
+    is_anonymous: bool,
+    quote: dict,
+) -> tuple[str, datetime]:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=PRICE_QUOTE_TTL_MINUTES
+    )
+
+    claims = {
+        "sub": str(passenger.id),
+        "token_type": "price_quote",
+        "city_id": str(city.id),
+        "branch_id": str(branch.id),
+        "request": build_price_quote_fingerprint(
+            payload,
+            is_anonymous,
+        ),
+        "quote": jsonable_encoder(quote),
+        "exp": expires_at,
+    }
+
+    token = jwt.encode(
+        claims,
+        settings.secret_key,
+        algorithm="HS256",
+    )
+
+    return token, expires_at
+
+
 # ============================================================
 # CREATE ORDER
 # ============================================================
 
+@app.post(
+    "/api/v1/orders/price-preview",
+    response_model=OrderPricePreviewResponse,
+)
+def preview_order_price(
+    payload: OrderCreate,
+    passenger: User = Depends(get_current_passenger),
+    db: Session = Depends(get_db),
+):
+    if not passenger.phone:
+        raise HTTPException(
+            403,
+            "У аккаунта пассажира не подтверждён номер телефона",
+        )
+
+    request_phone = normalize_phone(
+        payload.customer_phone
+    )
+
+    if request_phone != passenger.phone:
+        raise HTTPException(
+            403,
+            "Номер заказа не совпадает с подтверждённым номером аккаунта",
+        )
+
+    city = db.scalar(
+        select(City).where(
+            City.code == payload.city_code,
+            City.is_active.is_(True),
+        )
+    )
+
+    if city is None:
+        raise HTTPException(
+            400,
+            "City is not enabled",
+        )
+
+    if payload.tariff_id is None:
+        raise HTTPException(
+            400,
+            "Необходимо выбрать тариф",
+        )
+
+    tariff = db.scalar(
+        select(Tariff).where(
+            Tariff.id == payload.tariff_id,
+            Tariff.city_id == city.id,
+            Tariff.is_active.is_(True),
+        )
+    )
+
+    if tariff is None:
+        raise HTTPException(
+            400,
+            "Выбранный тариф не найден или неактивен",
+        )
+
+    branches = db.scalars(
+        select(Branch).where(
+            Branch.city_id == city.id,
+            Branch.is_active.is_(True),
+        )
+    ).all()
+
+    if not branches:
+        raise HTTPException(
+            503,
+            "Для города не настроен активный филиал",
+        )
+
+    if len(branches) > 1:
+        raise HTTPException(
+            409,
+            "Для города требуется настройка выбора филиала",
+        )
+
+    branch = branches[0]
+
+    is_anonymous = (
+        payload.anonymous
+        or not (payload.customer_name or "").strip()
+    )
+
+    cargo_order = is_cargo_tariff(tariff)
+
+    if cargo_order:
+        if payload.child_seat or payload.animal_transport:
+            raise HTTPException(
+                422,
+                "Детское кресло и перевозка животного "
+                "не применяются к грузовому тарифу",
+            )
+
+        if payload.cargo_vehicle is None:
+            raise HTTPException(
+                422,
+                "Для грузового заказа необходимо выбрать автомобиль",
+            )
+
+        if payload.cargo_vehicle not in CARGO_VEHICLES:
+            raise HTTPException(
+                422,
+                "Недопустимый тип грузового автомобиля",
+            )
+
+    else:
+        if (
+            payload.cargo_vehicle is not None
+            or (payload.cargo_description or "").strip()
+            or payload.cargo_loaders > 0
+        ):
+            raise HTTPException(
+                422,
+                "Параметры грузового заказа доступны "
+                "только для грузового тарифа",
+            )
+
+    coordinates = (
+        payload.pickup_latitude,
+        payload.pickup_longitude,
+        payload.destination_latitude,
+        payload.destination_longitude,
+    )
+
+    if any(value is None for value in coordinates):
+        raise HTTPException(
+            400,
+            "Для расчёта стоимости необходимы координаты "
+            "подачи и назначения",
+        )
+
+    try:
+        route_pricing = calculate_order_route_price(
+            pickup_latitude=payload.pickup_latitude,
+            pickup_longitude=payload.pickup_longitude,
+            destination_latitude=payload.destination_latitude,
+            destination_longitude=payload.destination_longitude,
+            base_price_kopecks=tariff.base_price_kopecks,
+            price_per_km_kopecks=tariff.price_per_km_kopecks,
+            price_per_minute_kopecks=tariff.price_per_minute_kopecks,
+            anonymous=is_anonymous,
+            minimum_fare_kopecks=tariff.minimum_fare_kopecks,
+            maximum_fare_kopecks=tariff.maximum_fare_kopecks,
+        )
+
+        dynamic_pricing = calculate_order_dynamic_pricing(
+            db,
+            city=city,
+            branch=branch,
+            pickup_latitude=payload.pickup_latitude,
+            pickup_longitude=payload.pickup_longitude,
+        )
+
+    except RoutingError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Не удалось рассчитать маршрут. Попробуйте позже.",
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    fare = route_pricing.fare
+
+    dynamic_multiplier = Decimal(
+        str(dynamic_pricing["total_multiplier"])
+    )
+
+    trip_subtotal_kopecks = (
+        fare.base_price_kopecks
+        + fare.distance_price_kopecks
+        + fare.time_price_kopecks
+        + fare.fare_limit_adjustment_kopecks
+    )
+
+    dynamic_adjustment = int(
+        (
+            Decimal(trip_subtotal_kopecks)
+            * (dynamic_multiplier - Decimal("1"))
+        ).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP,
+        )
+    )
+
+    child_seat_surcharge = (
+        tariff.child_seat_surcharge_kopecks
+        if payload.child_seat
+        else 0
+    )
+
+    animal_transport_surcharge = (
+        tariff.animal_transport_surcharge_kopecks
+        if payload.animal_transport
+        else 0
+    )
+
+    cargo_vehicle_surcharge = 0
+
+    if cargo_order:
+        cargo_prices = tariff.cargo_vehicle_surcharges or {}
+
+        cargo_vehicle_surcharge = cargo_prices.get(
+            payload.cargo_vehicle,
+            0,
+        )
+
+    cargo_loaders_surcharge = (
+        payload.cargo_loaders
+        * tariff.cargo_loader_price_per_person_kopecks
+    )
+
+    total_kopecks = (
+        fare.total_price_kopecks
+        + dynamic_adjustment
+        + child_seat_surcharge
+        + animal_transport_surcharge
+        + cargo_vehicle_surcharge
+        + cargo_loaders_surcharge
+    )
+
+    total_rubles = (
+        total_kopecks + 50
+    ) // 100
+
+    result = {
+        "city_code": city.code,
+        "tariff_id": tariff.id,
+        "route_distance_meters": int(
+            route_pricing.route.distance_meters.to_integral_value()
+        ),
+        "route_duration_seconds": int(
+            route_pricing.route.duration_seconds.to_integral_value()
+        ),
+        "routing_provider": route_pricing.provider_name,
+
+        "fare_base_price_kopecks": fare.base_price_kopecks,
+        "fare_distance_price_kopecks": fare.distance_price_kopecks,
+        "fare_time_price_kopecks": fare.time_price_kopecks,
+        "fare_limit_adjustment_kopecks": (
+            fare.fare_limit_adjustment_kopecks
+        ),
+        "anonymous_surcharge_kopecks": (
+            fare.anonymous_surcharge_kopecks
+        ),
+
+        "dynamic_pricing_settings_id": (
+            dynamic_pricing["settings_id"]
+        ),
+        "dynamic_pricing_multiplier": dynamic_multiplier,
+        "dynamic_driver_distance_km": (
+            dynamic_pricing["driver_distance_km"]
+        ),
+        "fare_dynamic_adjustment_kopecks": dynamic_adjustment,
+        "dynamic_pricing_breakdown": (
+            dynamic_pricing["breakdown"]
+        ),
+
+        "child_seat_surcharge_kopecks": child_seat_surcharge,
+        "animal_transport_surcharge_kopecks": (
+            animal_transport_surcharge
+        ),
+        "cargo_vehicle_surcharge_kopecks": (
+            cargo_vehicle_surcharge
+        ),
+        "cargo_loaders_surcharge_kopecks": (
+            cargo_loaders_surcharge
+        ),
+
+        "price_kopecks": total_kopecks,
+        "price_rub": total_rubles,
+    }
+
+    price_quote_token, price_quote_expires_at = (
+        create_price_quote_token(
+            passenger=passenger,
+            city=city,
+            branch=branch,
+            payload=payload,
+            is_anonymous=is_anonymous,
+            quote=result,
+        )
+    )
+
+    result["price_quote_token"] = price_quote_token
+    result["price_quote_expires_at"] = price_quote_expires_at
+
+    return result
 @app.post(
     "/api/v1/orders",
     response_model=OrderResponse,
@@ -1006,94 +1452,161 @@ def create_order(
             ),
         )
 
-    try:
-        route_pricing = calculate_order_route_price(
-            pickup_latitude=payload.pickup_latitude,
-            pickup_longitude=payload.pickup_longitude,
-            destination_latitude=payload.destination_latitude,
-            destination_longitude=payload.destination_longitude,
-            base_price_kopecks=(
-                selected_tariff.base_price_kopecks
-            ),
-            price_per_km_kopecks=(
-                selected_tariff.price_per_km_kopecks
-            ),
-            price_per_minute_kopecks=(
-                selected_tariff.price_per_minute_kopecks
-            ),
-            anonymous=is_anonymous,
-            minimum_fare_kopecks=(
-                selected_tariff.minimum_fare_kopecks
-            ),
-            maximum_fare_kopecks=(
-                selected_tariff.maximum_fare_kopecks
-            ),
+    # Проверяем подписанное сервером ценовое предложение.
+    if not payload.price_quote_token:
+        raise HTTPException(
+            422,
+            "Необходимо заново рассчитать стоимость заказа",
         )
 
-    except RoutingError as exc:
+    try:
+        quote_claims = jwt.decode(
+            payload.price_quote_token,
+            settings.secret_key,
+            algorithms=["HS256"],
+        )
+    except JWTError as exc:
         raise HTTPException(
-            status_code=503,
-            detail=(
-                "Не удалось рассчитать маршрут. "
-                "Попробуйте позже."
-            ),
+            409,
+            "Ценовое предложение недействительно или истекло. "
+            "Рассчитайте стоимость повторно.",
         ) from exc
 
-    # Базовая стоимость маршрута уже содержит:
-    # базовую цену, расстояние, время, ограничения тарифа
-    # и анонимную доплату.
-    fare = route_pricing.fare
-
-    # Все дополнительные суммы берутся только из тарифа сервера.
-    child_seat_surcharge = (
-        selected_tariff.child_seat_surcharge_kopecks
-        if payload.child_seat
-        else 0
-    )
-
-    animal_transport_surcharge = (
-        selected_tariff.animal_transport_surcharge_kopecks
-        if payload.animal_transport
-        else 0
-    )
-
-    cargo_vehicle_surcharge = 0
-
-    if cargo_order:
-        cargo_prices = (
-            selected_tariff.cargo_vehicle_surcharges or {}
+    if (
+        quote_claims.get("token_type") != "price_quote"
+        or quote_claims.get("sub") != str(passenger.id)
+    ):
+        raise HTTPException(
+            409,
+            "Ценовое предложение не принадлежит этому пассажиру",
         )
 
-        cargo_vehicle_surcharge = cargo_prices.get(
-            payload.cargo_vehicle,
-            0,
+    expected_fingerprint = build_price_quote_fingerprint(
+        payload,
+        is_anonymous,
+    )
+
+    if quote_claims.get("request") != expected_fingerprint:
+        raise HTTPException(
+            409,
+            "Параметры заказа изменились. Рассчитайте стоимость повторно.",
         )
 
-    cargo_loaders_surcharge = (
-        payload.cargo_loaders
-        * selected_tariff.cargo_loader_price_per_person_kopecks
-    )
+    if (
+        quote_claims.get("city_id") != str(city.id)
+        or quote_claims.get("branch_id") != str(selected_branch.id)
+    ):
+        raise HTTPException(
+            409,
+            "Город или филиал ценового предложения изменился",
+        )
 
-    # Итоговая стоимость рассчитывается исключительно сервером.
-    total_kopecks = (
-        fare.total_price_kopecks
-        + child_seat_surcharge
-        + animal_transport_surcharge
-        + cargo_vehicle_surcharge
-        + cargo_loaders_surcharge
-    )
+    quote = quote_claims.get("quote")
+
+    if not isinstance(quote, dict):
+        raise HTTPException(
+            409,
+            "Некорректное ценовое предложение",
+        )
+
+    if (
+        quote.get("city_code") != city.code
+        or quote.get("tariff_id") != str(selected_tariff.id)
+    ):
+        raise HTTPException(
+            409,
+            "Тариф ценового предложения не совпадает с заказом",
+        )
+
+    try:
+        # Восстанавливаем расчёт исключительно из подписанного снимка.
+        # Повторного обращения к маршрутизатору и динамическим тарифам нет.
+        fare = SimpleNamespace(
+            base_price_kopecks=quote["fare_base_price_kopecks"],
+            distance_price_kopecks=quote["fare_distance_price_kopecks"],
+            time_price_kopecks=quote["fare_time_price_kopecks"],
+            fare_limit_adjustment_kopecks=(
+                quote["fare_limit_adjustment_kopecks"]
+            ),
+            anonymous_surcharge_kopecks=(
+                quote["anonymous_surcharge_kopecks"]
+            ),
+            total_price_kopecks=(
+                quote["fare_base_price_kopecks"]
+                + quote["fare_distance_price_kopecks"]
+                + quote["fare_time_price_kopecks"]
+                + quote["fare_limit_adjustment_kopecks"]
+                + quote["anonymous_surcharge_kopecks"]
+            ),
+        )
+
+        route_pricing = SimpleNamespace(
+            route=SimpleNamespace(
+                distance_meters=Decimal(
+                    str(quote["route_distance_meters"])
+                ),
+                duration_seconds=Decimal(
+                    str(quote["route_duration_seconds"])
+                ),
+            ),
+            provider_name=quote["routing_provider"],
+        )
+
+        dynamic_pricing = {
+            "settings_id": quote["dynamic_pricing_settings_id"],
+            "driver_distance_km": (
+                quote["dynamic_driver_distance_km"]
+            ),
+            "breakdown": quote["dynamic_pricing_breakdown"],
+        }
+
+        dynamic_multiplier = Decimal(
+            str(quote["dynamic_pricing_multiplier"])
+        )
+
+        fare_dynamic_adjustment_kopecks = (
+            quote["fare_dynamic_adjustment_kopecks"]
+        )
+
+        child_seat_surcharge = (
+            quote["child_seat_surcharge_kopecks"]
+        )
+        animal_transport_surcharge = (
+            quote["animal_transport_surcharge_kopecks"]
+        )
+        cargo_vehicle_surcharge = (
+            quote["cargo_vehicle_surcharge_kopecks"]
+        )
+        cargo_loaders_surcharge = (
+            quote["cargo_loaders_surcharge_kopecks"]
+        )
+
+        total_kopecks = quote["price_kopecks"]
+        total_rubles = quote["price_rub"]
+
+    except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+        raise HTTPException(
+            409,
+            "Не удалось проверить снимок ценового предложения",
+        ) from exc
+
+    if (
+        not isinstance(total_kopecks, int)
+        or total_kopecks < 0
+        or not isinstance(total_rubles, int)
+        or total_rubles < 0
+    ):
+        raise HTTPException(
+            409,
+            "Некорректная стоимость в ценовом предложении",
+        )
 
     route_distance_meters = int(
-        route_pricing.route.distance_meters.to_integral_value()
+        route_pricing.route.distance_meters
     )
-
     route_duration_seconds = int(
-        route_pricing.route.duration_seconds.to_integral_value()
+        route_pricing.route.duration_seconds
     )
-
-    total_rubles = (
-        total_kopecks + 50
-    ) // 100
 
     order = Order(
         public_number=next_order_number(
@@ -1130,6 +1643,23 @@ def create_order(
 
         price_rub=total_rubles,
         price_kopecks=total_kopecks,
+
+        # Снимок динамического ценообразования на момент заказа.
+        dynamic_pricing_settings_id=(
+            UUID(str(dynamic_pricing["settings_id"]))
+            if dynamic_pricing["settings_id"]
+            else None
+        ),
+        dynamic_pricing_multiplier=dynamic_multiplier,
+        dynamic_driver_distance_km=(
+            dynamic_pricing["driver_distance_km"]
+        ),
+        fare_dynamic_adjustment_kopecks=(
+            fare_dynamic_adjustment_kopecks
+        ),
+        dynamic_pricing_breakdown=(
+            dynamic_pricing["breakdown"]
+        ),
 
         # Основная расшифровка маршрута.
         fare_base_price_kopecks=(
