@@ -1,6 +1,6 @@
 package ru.vexa.client
 
-import android.app.Activity
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -96,13 +96,13 @@ import ru.dgis.sdk.routing.TaxiRouteSearchOptions
 import ru.dgis.sdk.routing.TrafficRouter
 
 import kotlin.math.abs
-class MainActivity : ComponentActivity() {
+
 private val Teal = Color(0xFF1ED9C6)
 private val Ink = Color(0xFF111827)
 private val PanelWhite = Color.White
 private val CancelRed = Color(0xFFE53935)
 
-
+class MainActivity : ComponentActivity() {
  private lateinit var mapViewModel: DefaultMapControllerViewModel
  private lateinit var trafficRouter: TrafficRouter
  private var mapObjectManager: MapObjectManager? = null
