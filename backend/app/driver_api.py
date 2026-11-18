@@ -300,13 +300,14 @@ def create_completed_trip_finance(
 
     driver_earning_kopecks = fare_kopecks - commission_kopecks
 
-    if order.payment_method == "cash":
+    # При наличных и прямом переводе водителю пассажир
+    # передаёт водителю полную стоимость поездки.
+    # Поэтому комиссия VEXA начисляется водителю в долг.
+    if order.payment_method in ("cash", "driver_transfer"):
         debt_change_kopecks = commission_kopecks
-    elif order.payment_method in (
-        "driver_transfer",
-        "card",
-        "sbp",
-    ):
+    elif order.payment_method in ("card", "sbp"):
+        # При электронной оплате комиссия удерживается
+        # без образования задолженности водителя.
         debt_change_kopecks = 0
     else:
         raise HTTPException(
