@@ -1,3 +1,4 @@
+
 from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,6 +17,9 @@ from app.models import (
     DriverFinanceTransaction,
     DriverLocation,
     DriverProfile,
+    DriverWallet,
+    DriverWalletTransaction,
+    Order,
     User,
 )
 from app.security import get_current_dispatcher
@@ -216,6 +220,8 @@ def list_driver_finance(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
+    """Текущий баланс кошелька водителей города или филиала."""
+
     profile = get_dispatcher_profile(
         db,
         dispatcher,
@@ -268,11 +274,13 @@ def list_driver_finance(
             City.name,
             Branch.name,
             func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.debt_change_kopecks
-                ),
+                DriverWallet.balance_kopecks,
                 0,
-            ).label("cash_debt_kopecks"),
+            ).label("balance_kopecks"),
+            func.coalesce(
+                DriverWallet.reserved_kopecks,
+                0,
+            ).label("reserved_kopecks"),
         )
         .join(
             User,
@@ -287,31 +295,14 @@ def list_driver_finance(
             Branch.id == DriverProfile.branch_id,
         )
         .outerjoin(
-            DriverFinanceTransaction,
-            (
-                DriverFinanceTransaction.driver_user_id
-                == DriverProfile.user_id
-            )
-            & (
-                DriverFinanceTransaction.city_id
-                == DriverProfile.city_id
-            ),
+            DriverWallet,
+            DriverWallet.driver_user_id == DriverProfile.user_id,
         )
         .where(
             DriverProfile.city_id == city.id,
             DriverProfile.is_active.is_(True),
             User.is_active.is_(True),
             City.is_active.is_(True),
-        )
-        .group_by(
-            DriverProfile.user_id,
-            User.username,
-            User.phone,
-            DriverProfile.rating,
-            DriverProfile.is_online,
-            City.code,
-            City.name,
-            Branch.name,
         )
     )
 
@@ -337,8 +328,11 @@ def list_driver_finance(
         driver_city_code,
         city_name,
         branch_name,
-        cash_debt_kopecks,
+        balance_kopecks,
+        reserved_kopecks,
     ) in rows:
+        balance = int(balance_kopecks or 0)
+        reserved = int(reserved_kopecks or 0)
         drivers.append(
             {
                 "driver_user_id": str(driver_user_id),
@@ -349,21 +343,16 @@ def list_driver_finance(
                 "city_code": driver_city_code,
                 "city_name": city_name,
                 "branch_name": branch_name,
-                "cash_debt_kopecks": int(cash_debt_kopecks),
-                "cash_debt_rub": round(
-                    int(cash_debt_kopecks) / 100,
-                    2,
-                ),
+                "balance_kopecks": balance,
+                "balance_rub": round(balance / 100, 2),
+                "reserved_kopecks": reserved,
+                "available_kopecks": max(balance - reserved, 0),
             }
         )
 
     return {
         "city_code": city.code,
         "drivers_count": len(drivers),
-        "total_cash_debt_kopecks": sum(
-            item["cash_debt_kopecks"]
-            for item in drivers
-        ),
         "drivers": drivers,
     }
 
@@ -664,7 +653,7 @@ def list_dispatch_driver_finance_transactions(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    """История финансовых операций водителя для диспетчерской."""
+    """История операций кошелька водителя для диспетчерской."""
 
     dispatcher_profile = get_dispatcher_profile(
         db,
@@ -733,47 +722,36 @@ def list_dispatch_driver_finance_transactions(
 
     driver_profile, driver_user = driver_row
 
-    running_debt = func.sum(
-        DriverFinanceTransaction.debt_change_kopecks
-    ).over(
-        order_by=(
-            DriverFinanceTransaction.created_at,
-            DriverFinanceTransaction.id,
-        ),
-        rows=(None, 0),
-    ).label("debt_after_kopecks")
+    wallet = db.scalar(
+        select(DriverWallet).where(
+            DriverWallet.driver_user_id == driver_user_id,
+            DriverWallet.city_id == city.id,
+        )
+    )
 
     base_filter = (
-        DriverFinanceTransaction.driver_user_id == driver_user_id,
-        DriverFinanceTransaction.city_id == city.id,
+        DriverWalletTransaction.driver_user_id == driver_user_id,
     )
 
     total_count = db.scalar(
-        select(func.count(DriverFinanceTransaction.id)).where(
+        select(func.count(DriverWalletTransaction.id)).where(
             *base_filter,
         )
     ) or 0
 
-    current_debt = db.scalar(
-        select(
-            func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.debt_change_kopecks
-                ),
-                0,
-            )
-        ).where(*base_filter)
-    )
-
     rows = db.execute(
         select(
-            DriverFinanceTransaction,
-            running_debt,
+            DriverWalletTransaction,
+            Order.public_number,
+        )
+        .outerjoin(
+            Order,
+            Order.id == DriverWalletTransaction.order_id,
         )
         .where(*base_filter)
         .order_by(
-            DriverFinanceTransaction.created_at.desc(),
-            DriverFinanceTransaction.id.desc(),
+            DriverWalletTransaction.created_at.desc(),
+            DriverWalletTransaction.id.desc(),
         )
         .offset(offset)
         .limit(limit)
@@ -781,27 +759,23 @@ def list_dispatch_driver_finance_transactions(
 
     transactions = []
 
-    for transaction, debt_after_kopecks in rows:
+    for transaction, order_public_number in rows:
         transactions.append(
             {
                 "id": str(transaction.id),
                 "transaction_type": transaction.transaction_type,
                 "payment_method": transaction.payment_method,
-                "amount_kopecks": (
-                    -transaction.debt_change_kopecks
-                    if transaction.transaction_type == "debt_repayment"
-                    else transaction.commission_kopecks
-                ),
-                "debt_change_kopecks": transaction.debt_change_kopecks,
-                "debt_after_kopecks": int(
-                    debt_after_kopecks or 0
-                ),
+                "amount_kopecks": transaction.balance_change_kopecks,
+                "balance_change_kopecks": transaction.balance_change_kopecks,
+                "balance_after_kopecks": transaction.balance_after_kopecks,
+                "reserved_after_kopecks": transaction.reserved_after_kopecks,
                 "description": transaction.description,
                 "order_id": (
                     str(transaction.order_id)
                     if transaction.order_id is not None
                     else None
                 ),
+                "order_public_number": order_public_number,
                 "created_at": transaction.created_at,
             }
         )
@@ -810,6 +784,17 @@ def list_dispatch_driver_finance_transactions(
         db.get(Branch, driver_profile.branch_id)
         if driver_profile.branch_id is not None
         else None
+    )
+
+    current_balance = (
+        int(wallet.balance_kopecks)
+        if wallet is not None
+        else 0
+    )
+    reserved_balance = (
+        int(wallet.reserved_kopecks)
+        if wallet is not None
+        else 0
     )
 
     return {
@@ -825,13 +810,17 @@ def list_dispatch_driver_finance_transactions(
                 else None
             ),
         },
-        "current_debt_kopecks": int(current_debt or 0),
+        "current_balance_kopecks": current_balance,
+        "reserved_kopecks": reserved_balance,
+        "available_kopecks": max(
+            current_balance - reserved_balance,
+            0,
+        ),
         "total_transactions": int(total_count),
         "limit": limit,
         "offset": offset,
         "transactions": transactions,
     }
-
 
 
 @router.get("/finance/export.xlsx")
