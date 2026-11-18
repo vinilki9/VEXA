@@ -447,19 +447,28 @@ function App() {
     setAssigning(false);
   }
 
-  function openOrderFromFinance(orderId: string) {
-    const order = orders.find(item => item.id === orderId);
-
-    if (!order) {
-      setError(
-        'Заказ не найден в текущем списке. Обновите список заказов и повторите попытку.',
-      );
-      loadOrders(token || '');
+  async function openOrderFromFinance(orderId: string) {
+    if (!token) {
+      setError('Для просмотра карточки заказа необходимо войти в систему.');
       return;
     }
 
     setError('');
-    setSelectedOrder(order);
+
+    try {
+      const order = await apiRequest(
+        `/api/v1/dispatch/orders/${encodeURIComponent(orderId)}?city_code=${CITY_CODE}`,
+        token,
+      );
+
+      setSelectedOrder(order as VexaOrder);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить карточку заказа',
+      );
+    }
   }
 
   function logout() {
