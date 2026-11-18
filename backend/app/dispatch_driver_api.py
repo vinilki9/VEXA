@@ -1,3 +1,4 @@
+
 from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,6 +17,9 @@ from app.models import (
     DriverFinanceTransaction,
     DriverLocation,
     DriverProfile,
+    DriverWallet,
+    DriverWalletTransaction,
+    Order,
     User,
 )
 from app.security import get_current_dispatcher
@@ -216,6 +220,8 @@ def list_driver_finance(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
+    """Текущий баланс кошелька водителей города или филиала."""
+
     profile = get_dispatcher_profile(
         db,
         dispatcher,
@@ -268,11 +274,13 @@ def list_driver_finance(
             City.name,
             Branch.name,
             func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.debt_change_kopecks
-                ),
+                DriverWallet.balance_kopecks,
                 0,
-            ).label("cash_debt_kopecks"),
+            ).label("balance_kopecks"),
+            func.coalesce(
+                DriverWallet.reserved_kopecks,
+                0,
+            ).label("reserved_kopecks"),
         )
         .join(
             User,
@@ -287,31 +295,14 @@ def list_driver_finance(
             Branch.id == DriverProfile.branch_id,
         )
         .outerjoin(
-            DriverFinanceTransaction,
-            (
-                DriverFinanceTransaction.driver_user_id
-                == DriverProfile.user_id
-            )
-            & (
-                DriverFinanceTransaction.city_id
-                == DriverProfile.city_id
-            ),
+            DriverWallet,
+            DriverWallet.driver_user_id == DriverProfile.user_id,
         )
         .where(
             DriverProfile.city_id == city.id,
             DriverProfile.is_active.is_(True),
             User.is_active.is_(True),
             City.is_active.is_(True),
-        )
-        .group_by(
-            DriverProfile.user_id,
-            User.username,
-            User.phone,
-            DriverProfile.rating,
-            DriverProfile.is_online,
-            City.code,
-            City.name,
-            Branch.name,
         )
     )
 
@@ -337,8 +328,11 @@ def list_driver_finance(
         driver_city_code,
         city_name,
         branch_name,
-        cash_debt_kopecks,
+        balance_kopecks,
+        reserved_kopecks,
     ) in rows:
+        balance = int(balance_kopecks or 0)
+        reserved = int(reserved_kopecks or 0)
         drivers.append(
             {
                 "driver_user_id": str(driver_user_id),
@@ -349,21 +343,16 @@ def list_driver_finance(
                 "city_code": driver_city_code,
                 "city_name": city_name,
                 "branch_name": branch_name,
-                "cash_debt_kopecks": int(cash_debt_kopecks),
-                "cash_debt_rub": round(
-                    int(cash_debt_kopecks) / 100,
-                    2,
-                ),
+                "balance_kopecks": balance,
+                "balance_rub": round(balance / 100, 2),
+                "reserved_kopecks": reserved,
+                "available_kopecks": max(balance - reserved, 0),
             }
         )
 
     return {
         "city_code": city.code,
         "drivers_count": len(drivers),
-        "total_cash_debt_kopecks": sum(
-            item["cash_debt_kopecks"]
-            for item in drivers
-        ),
         "drivers": drivers,
     }
 
@@ -375,282 +364,149 @@ def get_dispatch_finance_summary(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    """
-    Финансовая сводка города или филиала диспетчера.
-
-    Показатели поездок и погашений рассчитываются за выбранный период.
-    Текущая задолженность рассчитывается за всё время.
-    Денежные суммы возвращаются в копейках и рублях.
-    """
-
-    profile = get_dispatcher_profile(
-        db,
-        dispatcher,
-    )
-
+    """Сводка поездок за период и текущих балансов кошельков."""
+    profile = get_dispatcher_profile(db, dispatcher)
     if profile.role == "dispatcher":
-        branch = db.get(
-            Branch,
-            profile.branch_id,
-        )
-
+        branch = db.get(Branch, profile.branch_id)
         if branch is None or not branch.is_active:
-            raise HTTPException(
-                403,
-                "Филиал диспетчера недоступен",
-            )
-
-        city = db.get(
-            City,
-            branch.city_id,
-        )
-
+            raise HTTPException(403, "Филиал диспетчера недоступен")
+        city = db.get(City, branch.city_id)
         if city is None or not city.is_active:
-            raise HTTPException(
-                403,
-                "Город филиала недоступен",
-            )
-
+            raise HTTPException(403, "Город филиала недоступен")
         branch_id = branch.id
     else:
-        city = db.scalar(
-            select(City).where(
-                City.code == city_code,
-                City.is_active.is_(True),
-            )
-        )
-
+        city = db.scalar(select(City).where(
+            City.code == city_code,
+            City.is_active.is_(True),
+        ))
         if city is None:
-            raise HTTPException(
-                404,
-                "Город не найден или неактивен",
-            )
-
+            raise HTTPException(404, "Город не найден или неактивен")
         branch_id = None
 
     period_end = datetime.now(timezone.utc)
     period_start = period_end - timedelta(days=period_days)
-
-    transaction_filters = [
-        DriverFinanceTransaction.city_id == city.id,
-    ]
-
+    trip_filters = [DriverFinanceTransaction.city_id == city.id]
     if branch_id is not None:
-        transaction_filters.append(
-            DriverFinanceTransaction.branch_id == branch_id,
-        )
-
+        trip_filters.append(DriverFinanceTransaction.branch_id == branch_id)
     period_filters = [
-        *transaction_filters,
+        *trip_filters,
         DriverFinanceTransaction.created_at >= period_start,
         DriverFinanceTransaction.created_at <= period_end,
     ]
 
-    completed_trip = (
-        DriverFinanceTransaction.transaction_type
-        == "completed_trip"
+    completed_trip = DriverFinanceTransaction.transaction_type == "completed_trip"
+    electronic_method = DriverFinanceTransaction.payment_method.in_(["card", "sbp"])
+    pay_driver_method = DriverFinanceTransaction.payment_method.in_(["cash", "driver_transfer"])
+    totals = db.execute(select(
+        func.count(DriverFinanceTransaction.id).filter(completed_trip).label("completed_trips"),
+        func.coalesce(func.sum(DriverFinanceTransaction.fare_kopecks).filter(completed_trip), 0).label("total_fare_kopecks"),
+        func.coalesce(func.sum(DriverFinanceTransaction.commission_kopecks).filter(completed_trip), 0).label("commission_accrued_kopecks"),
+        func.coalesce(func.sum(DriverFinanceTransaction.commission_kopecks).filter(completed_trip & electronic_method), 0).label("electronic_commission_kopecks"),
+        func.coalesce(func.sum(DriverFinanceTransaction.fare_kopecks).filter(completed_trip & electronic_method), 0).label("electronic_trip_fare_kopecks"),
+        func.coalesce(func.sum(DriverFinanceTransaction.fare_kopecks).filter(completed_trip & pay_driver_method), 0).label("pay_driver_trip_fare_kopecks"),
+        func.coalesce(func.sum(DriverFinanceTransaction.fare_kopecks).filter(completed_trip & (DriverFinanceTransaction.payment_method == "cash")), 0).label("cash_trip_fare_kopecks"),
+        func.coalesce(func.sum(DriverFinanceTransaction.fare_kopecks).filter(completed_trip & (DriverFinanceTransaction.payment_method == "driver_transfer")), 0).label("transfer_trip_fare_kopecks"),
+    ).where(*period_filters)).one()
+
+    wallet_query = (
+        select(DriverWallet)
+        .join(DriverProfile, DriverProfile.user_id == DriverWallet.driver_user_id)
+        .where(DriverProfile.city_id == city.id)
     )
+    if branch_id is not None:
+        wallet_query = wallet_query.where(DriverProfile.branch_id == branch_id)
+    wallets = db.scalars(wallet_query).all()
 
-    debt_repayment = (
-        DriverFinanceTransaction.transaction_type
-        == "debt_repayment"
+    total_balance = sum(int(wallet.balance_kopecks or 0) for wallet in wallets)
+    total_reserved = sum(int(wallet.reserved_kopecks or 0) for wallet in wallets)
+    positive_balance = sum(max(int(wallet.balance_kopecks or 0), 0) for wallet in wallets)
+    available_balance = sum(
+        max(int(wallet.balance_kopecks or 0) - int(wallet.reserved_kopecks or 0), 0)
+        for wallet in wallets
     )
+    current_debt = sum(max(-int(wallet.balance_kopecks or 0), 0) for wallet in wallets)
+    negative_wallet_count = sum(1 for wallet in wallets if int(wallet.balance_kopecks or 0) < 0)
 
-    electronic_payment = (
-        DriverFinanceTransaction.payment_method.in_(
-            ["card", "sbp", "driver_transfer"]
-        )
-    )
+    wallet_tx_filters = [
+        DriverWalletTransaction.created_at >= period_start,
+        DriverWalletTransaction.created_at <= period_end,
+        DriverWalletTransaction.transaction_type.in_(["commission_debit", "electronic_earning_credit"]),
+        Order.city_id == city.id,
+    ]
+    if branch_id is not None:
+        wallet_tx_filters.append(Order.branch_id == branch_id)
+    wallet_transactions = db.scalars(
+        select(DriverWalletTransaction)
+        .join(Order, Order.id == DriverWalletTransaction.order_id)
+        .where(*wallet_tx_filters)
+        .order_by(DriverWalletTransaction.created_at, DriverWalletTransaction.id)
+    ).all()
 
-    totals = db.execute(
-        select(
-            func.count(
-                DriverFinanceTransaction.id
-            ).filter(
-                completed_trip
-            ).label("completed_trips"),
-
-            func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.fare_kopecks
-                ).filter(
-                    completed_trip
-                ),
+    commission_debt_accrued = 0
+    automatic_electronic_repayment = 0
+    for tx in wallet_transactions:
+        change = int(tx.balance_change_kopecks or 0)
+        after_balance = int(tx.balance_after_kopecks or 0)
+        before_balance = after_balance - change
+        if tx.transaction_type == "commission_debit" and tx.payment_method in ("cash", "driver_transfer"):
+            commission_debt_accrued += max(
+                max(-after_balance, 0) - max(-before_balance, 0),
                 0,
-            ).label("total_fare_kopecks"),
-
-            func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.commission_kopecks
-                ).filter(
-                    completed_trip
-                ),
-                0,
-            ).label("commission_accrued_kopecks"),
-
-            func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.commission_kopecks
-                ).filter(
-                    completed_trip & electronic_payment
-                ),
-                0,
-            ).label("electronic_commission_kopecks"),
-
-            func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.fare_kopecks
-                ).filter(
-                    completed_trip & electronic_payment
-                ),
-                0,
-            ).label("electronic_trip_fare_kopecks"),
-
-            func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.fare_kopecks
-                ).filter(
-                    completed_trip
-                    & (
-                        DriverFinanceTransaction.payment_method
-                        == "cash"
-                    )
-                ),
-                0,
-            ).label("cash_trip_fare_kopecks"),
-
-            func.coalesce(
-                func.sum(
-                    -DriverFinanceTransaction.debt_change_kopecks
-                ).filter(
-                    debt_repayment
-                ),
-                0,
-            ).label("debt_repaid_kopecks"),
-
-            func.coalesce(
-                func.sum(
-                    -DriverFinanceTransaction.debt_change_kopecks
-                ).filter(
-                    debt_repayment
-                    & (
-                        DriverFinanceTransaction.payment_method
-                        == "cash"
-                    )
-                ),
-                0,
-            ).label("cash_repaid_kopecks"),
-
-            func.coalesce(
-                func.sum(
-                    -DriverFinanceTransaction.debt_change_kopecks
-                ).filter(
-                    debt_repayment
-                    & (
-                        DriverFinanceTransaction.payment_method
-                        == "driver_transfer"
-                    )
-                ),
-                0,
-            ).label("transfer_repaid_kopecks"),
-
-            func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.debt_change_kopecks
-                ).filter(
-                    completed_trip
-                    & (
-                        DriverFinanceTransaction.payment_method
-                        == "cash"
-                    )
-                ),
-                0,
-            ).label("cash_commission_debt_kopecks"),
-        )
-        .where(*period_filters)
-    ).one()
-
-    current_debt_query = select(
-        func.coalesce(
-            func.sum(
-                DriverFinanceTransaction.debt_change_kopecks
-            ),
-            0,
-        )
-    ).where(*transaction_filters)
-
-    current_debt_kopecks = int(
-        db.scalar(current_debt_query) or 0
-    )
+            )
+        elif tx.transaction_type == "electronic_earning_credit" and tx.payment_method in ("card", "sbp"):
+            automatic_electronic_repayment += min(max(change, 0), max(-before_balance, 0))
 
     def amount_response(value: int) -> dict:
         amount = int(value or 0)
-
-        return {
-            "kopecks": amount,
-            "rub": round(amount / 100, 2),
-        }
+        return {"kopecks": amount, "rub": round(amount / 100, 2)}
 
     return {
-        "city": {
-            "code": city.code,
-            "name": city.name,
-        },
-        "branch_id": (
-            str(branch_id)
-            if branch_id is not None
-            else None
-        ),
+        "city": {"code": city.code, "name": city.name},
+        "branch_id": str(branch_id) if branch_id is not None else None,
         "period": {
             "days": period_days,
             "from": period_start,
             "to": period_end,
             "timezone": "UTC",
         },
-        "completed_trips": int(
-            totals.completed_trips or 0
-        ),
-        "total_trip_fare": amount_response(
-            totals.total_fare_kopecks
-        ),
-        "commission_accrued": amount_response(
-            totals.commission_accrued_kopecks
-        ),
+        "completed_trips": int(totals.completed_trips or 0),
+        "total_trip_fare": amount_response(totals.total_fare_kopecks),
+        "commission_accrued": amount_response(totals.commission_accrued_kopecks),
         "electronic_payments": {
-            "trip_fare_turnover": amount_response(
-                totals.electronic_trip_fare_kopecks
-            ),
-            "commission": amount_response(
-                totals.electronic_commission_kopecks
-            ),
+            "trip_fare_turnover": amount_response(totals.electronic_trip_fare_kopecks),
+            "commission": amount_response(totals.electronic_commission_kopecks),
         },
         "cash_payments": {
-            "trip_fare_turnover": amount_response(
-                totals.cash_trip_fare_kopecks
-            ),
-            "commission_debt_accrued": amount_response(
-                totals.cash_commission_debt_kopecks
-            ),
+            "trip_fare_turnover": amount_response(totals.pay_driver_trip_fare_kopecks),
+            "cash_trip_fare_turnover": amount_response(totals.cash_trip_fare_kopecks),
+            "commission_debt_accrued": amount_response(commission_debt_accrued),
+        },
+        "driver_transfer_payments": {
+            "trip_fare_turnover": amount_response(totals.transfer_trip_fare_kopecks),
         },
         "debt_repayments": {
-            "total": amount_response(
-                totals.debt_repaid_kopecks
-            ),
-            "cash": amount_response(
-                totals.cash_repaid_kopecks
-            ),
-            "driver_transfer": amount_response(
-                totals.transfer_repaid_kopecks
-            ),
+            "total": amount_response(automatic_electronic_repayment),
+            "automatic_electronic_credit": amount_response(automatic_electronic_repayment),
+            "cash": amount_response(0),
+            "driver_transfer": amount_response(0),
         },
-        "current_driver_debt": amount_response(
-            current_debt_kopecks
-        ),
+        "current_driver_debt": amount_response(current_debt),
+        "wallet_summary": {
+            "balance": amount_response(total_balance),
+            "positive_balance": amount_response(positive_balance),
+            "reserved": amount_response(total_reserved),
+            "available": amount_response(available_balance),
+            "negative_balance_debt": amount_response(current_debt),
+            "drivers_with_negative_balance": negative_wallet_count,
+            "drivers_count": len(wallets),
+        },
         "accounting_note": (
-            "Оборот поездок по электронным способам оплаты "
-            "не является подтверждением фактического зачисления "
-            "денег на расчётный счёт сервиса. Для учёта реальных "
-            "поступлений потребуется интеграция с платёжным провайдером."
+            "Отрицательный баланс каждого водителя отдельно отражает его долг VEXA. "
+            "Комиссия за наличные и перевод водителю списывается с кошелька; "
+            "при недостатке средств баланс становится отрицательным. "
+            "Электронные начисления сначала покрывают отрицательный баланс. "
+            "Наличные и перевод водителю не являются электронными поступлениями. "
+            "Фактические расчёты по картам и СБП требуют интеграции платёжного провайдера."
         ),
     }
 
@@ -664,7 +520,7 @@ def list_dispatch_driver_finance_transactions(
     dispatcher: User = Depends(get_current_dispatcher),
     db: Session = Depends(get_db),
 ):
-    """История финансовых операций водителя для диспетчерской."""
+    """История операций кошелька водителя для диспетчерской."""
 
     dispatcher_profile = get_dispatcher_profile(
         db,
@@ -733,47 +589,36 @@ def list_dispatch_driver_finance_transactions(
 
     driver_profile, driver_user = driver_row
 
-    running_debt = func.sum(
-        DriverFinanceTransaction.debt_change_kopecks
-    ).over(
-        order_by=(
-            DriverFinanceTransaction.created_at,
-            DriverFinanceTransaction.id,
-        ),
-        rows=(None, 0),
-    ).label("debt_after_kopecks")
+    wallet = db.scalar(
+        select(DriverWallet).where(
+            DriverWallet.driver_user_id == driver_user_id,
+            DriverWallet.city_id == city.id,
+        )
+    )
 
     base_filter = (
-        DriverFinanceTransaction.driver_user_id == driver_user_id,
-        DriverFinanceTransaction.city_id == city.id,
+        DriverWalletTransaction.driver_user_id == driver_user_id,
     )
 
     total_count = db.scalar(
-        select(func.count(DriverFinanceTransaction.id)).where(
+        select(func.count(DriverWalletTransaction.id)).where(
             *base_filter,
         )
     ) or 0
 
-    current_debt = db.scalar(
-        select(
-            func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.debt_change_kopecks
-                ),
-                0,
-            )
-        ).where(*base_filter)
-    )
-
     rows = db.execute(
         select(
-            DriverFinanceTransaction,
-            running_debt,
+            DriverWalletTransaction,
+            Order.public_number,
+        )
+        .outerjoin(
+            Order,
+            Order.id == DriverWalletTransaction.order_id,
         )
         .where(*base_filter)
         .order_by(
-            DriverFinanceTransaction.created_at.desc(),
-            DriverFinanceTransaction.id.desc(),
+            DriverWalletTransaction.created_at.desc(),
+            DriverWalletTransaction.id.desc(),
         )
         .offset(offset)
         .limit(limit)
@@ -781,27 +626,23 @@ def list_dispatch_driver_finance_transactions(
 
     transactions = []
 
-    for transaction, debt_after_kopecks in rows:
+    for transaction, order_public_number in rows:
         transactions.append(
             {
                 "id": str(transaction.id),
                 "transaction_type": transaction.transaction_type,
                 "payment_method": transaction.payment_method,
-                "amount_kopecks": (
-                    -transaction.debt_change_kopecks
-                    if transaction.transaction_type == "debt_repayment"
-                    else transaction.commission_kopecks
-                ),
-                "debt_change_kopecks": transaction.debt_change_kopecks,
-                "debt_after_kopecks": int(
-                    debt_after_kopecks or 0
-                ),
+                "amount_kopecks": transaction.balance_change_kopecks,
+                "balance_change_kopecks": transaction.balance_change_kopecks,
+                "balance_after_kopecks": transaction.balance_after_kopecks,
+                "reserved_after_kopecks": transaction.reserved_after_kopecks,
                 "description": transaction.description,
                 "order_id": (
                     str(transaction.order_id)
                     if transaction.order_id is not None
                     else None
                 ),
+                "order_public_number": order_public_number,
                 "created_at": transaction.created_at,
             }
         )
@@ -810,6 +651,17 @@ def list_dispatch_driver_finance_transactions(
         db.get(Branch, driver_profile.branch_id)
         if driver_profile.branch_id is not None
         else None
+    )
+
+    current_balance = (
+        int(wallet.balance_kopecks)
+        if wallet is not None
+        else 0
+    )
+    reserved_balance = (
+        int(wallet.reserved_kopecks)
+        if wallet is not None
+        else 0
     )
 
     return {
@@ -825,13 +677,17 @@ def list_dispatch_driver_finance_transactions(
                 else None
             ),
         },
-        "current_debt_kopecks": int(current_debt or 0),
+        "current_balance_kopecks": current_balance,
+        "reserved_kopecks": reserved_balance,
+        "available_kopecks": max(
+            current_balance - reserved_balance,
+            0,
+        ),
         "total_transactions": int(total_count),
         "limit": limit,
         "offset": offset,
         "transactions": transactions,
     }
-
 
 
 @router.get("/finance/export.xlsx")
@@ -846,19 +702,11 @@ def export_dispatch_finance_excel(
     """Экспорт финансового отчёта города или филиала в Excel."""
 
     if date_to < date_from:
-        raise HTTPException(
-            422,
-            "Дата окончания не может быть раньше даты начала",
-        )
-
+        raise HTTPException(422, "Дата окончания не может быть раньше даты начала")
     if (date_to - date_from).days > 366:
-        raise HTTPException(
-            422,
-            "Период экспорта не может превышать 367 календарных дней",
-        )
+        raise HTTPException(422, "Период экспорта не может превышать 367 календарных дней")
 
     profile = get_dispatcher_profile(db, dispatcher)
-
     if profile.role == "dispatcher":
         selected_branch = db.get(Branch, profile.branch_id)
         if selected_branch is None or not selected_branch.is_active:
@@ -868,18 +716,16 @@ def export_dispatch_finance_excel(
         selected_branch_id = selected_branch.id
         city = db.get(City, selected_branch.city_id)
     else:
-        city = db.scalar(
-            select(City).where(
-                City.code == city_code,
-                City.is_active.is_(True),
-            )
-        )
+        city = db.scalar(select(City).where(
+            City.code == city_code,
+            City.is_active.is_(True),
+        ))
         selected_branch_id = branch_id
-
         if selected_branch_id is not None:
             selected_branch = db.get(Branch, selected_branch_id)
             if (
-                selected_branch is None
+                city is None
+                or selected_branch is None
                 or not selected_branch.is_active
                 or selected_branch.city_id != city.id
             ):
@@ -888,23 +734,14 @@ def export_dispatch_finance_excel(
     if city is None or not city.is_active:
         raise HTTPException(404, "Город не найден или неактивен")
 
-    period_start = datetime.combine(
-        date_from, time.min, tzinfo=timezone.utc
-    )
-    period_end_exclusive = datetime.combine(
-        date_to + timedelta(days=1), time.min, tzinfo=timezone.utc
-    )
+    period_start = datetime.combine(date_from, time.min, tzinfo=timezone.utc)
+    period_end_exclusive = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=timezone.utc)
 
-    scope_filters = [
-        DriverFinanceTransaction.city_id == city.id,
-    ]
+    trip_scope_filters = [DriverFinanceTransaction.city_id == city.id]
     if selected_branch_id is not None:
-        scope_filters.append(
-            DriverFinanceTransaction.branch_id == selected_branch_id
-        )
-
-    period_filters = [
-        *scope_filters,
+        trip_scope_filters.append(DriverFinanceTransaction.branch_id == selected_branch_id)
+    trip_period_filters = [
+        *trip_scope_filters,
         DriverFinanceTransaction.created_at >= period_start,
         DriverFinanceTransaction.created_at < period_end_exclusive,
     ]
@@ -916,37 +753,64 @@ def export_dispatch_finance_excel(
             User.phone,
             Branch.name,
         )
-        .join(
-            User,
-            User.id == DriverFinanceTransaction.driver_user_id,
-        )
-        .outerjoin(
-            Branch,
-            Branch.id == DriverFinanceTransaction.branch_id,
-        )
-        .where(*period_filters)
-        .order_by(
-            User.username,
-            DriverFinanceTransaction.created_at,
-            DriverFinanceTransaction.id,
-        )
+        .join(User, User.id == DriverFinanceTransaction.driver_user_id)
+        .outerjoin(Branch, Branch.id == DriverFinanceTransaction.branch_id)
+        .where(*trip_period_filters)
+        .order_by(User.username, DriverFinanceTransaction.created_at, DriverFinanceTransaction.id)
     ).all()
 
-    debt_rows = db.execute(
-        select(
-            DriverFinanceTransaction.driver_user_id,
-            func.coalesce(
-                func.sum(DriverFinanceTransaction.debt_change_kopecks),
-                0,
-            ),
-        )
-        .where(*scope_filters)
-        .group_by(DriverFinanceTransaction.driver_user_id)
-    ).all()
+    wallet_query = (
+        select(DriverWallet, User.username, User.phone, Branch.name)
+        .join(DriverProfile, DriverProfile.user_id == DriverWallet.driver_user_id)
+        .join(User, User.id == DriverWallet.driver_user_id)
+        .outerjoin(Branch, Branch.id == DriverProfile.branch_id)
+        .where(DriverProfile.city_id == city.id)
+    )
+    if selected_branch_id is not None:
+        wallet_query = wallet_query.where(DriverProfile.branch_id == selected_branch_id)
+    wallet_rows = db.execute(wallet_query.order_by(User.username)).all()
+
     current_debts = {
-        driver_id: int(debt or 0)
-        for driver_id, debt in debt_rows
+        wallet.driver_user_id: max(-int(wallet.balance_kopecks or 0), 0)
+        for wallet, username, phone, branch_name in wallet_rows
     }
+    wallet_by_driver = {
+        wallet.driver_user_id: wallet
+        for wallet, username, phone, branch_name in wallet_rows
+    }
+    driver_meta = {
+        wallet.driver_user_id: {
+            "username": username or "",
+            "phone": phone or "",
+            "branch": branch_name or "",
+        }
+        for wallet, username, phone, branch_name in wallet_rows
+    }
+
+    wallet_tx_query = (
+        select(
+            DriverWalletTransaction,
+            User.username,
+            User.phone,
+            Order.public_number,
+        )
+        .join(User, User.id == DriverWalletTransaction.driver_user_id)
+        .outerjoin(Order, Order.id == DriverWalletTransaction.order_id)
+        .outerjoin(DriverProfile, DriverProfile.user_id == DriverWalletTransaction.driver_user_id)
+        .where(
+            DriverWalletTransaction.created_at >= period_start,
+            DriverWalletTransaction.created_at < period_end_exclusive,
+            func.coalesce(Order.city_id, DriverProfile.city_id) == city.id,
+        )
+    )
+    if selected_branch_id is not None:
+        wallet_tx_query = wallet_tx_query.where(
+            func.coalesce(Order.branch_id, DriverProfile.branch_id) == selected_branch_id
+        )
+    wallet_tx_rows = db.execute(wallet_tx_query.order_by(
+        DriverWalletTransaction.created_at,
+        DriverWalletTransaction.id,
+    )).all()
 
     driver_summary = {}
     for transaction, username, phone, branch_name in transaction_rows:
@@ -959,62 +823,90 @@ def export_dispatch_finance_excel(
                 "trips": 0,
                 "fare": 0,
                 "commission": 0,
-                "repayments": 0,
-                "debt_change": 0,
             }
-
         item = driver_summary[driver_id]
         if transaction.transaction_type == "completed_trip":
             item["trips"] += 1
             item["fare"] += int(transaction.fare_kopecks or 0)
             item["commission"] += int(transaction.commission_kopecks or 0)
-        elif transaction.transaction_type == "debt_repayment":
-            item["repayments"] += max(
-                0, -int(transaction.debt_change_kopecks or 0)
+        driver_meta.setdefault(driver_id, {
+            "username": username or "",
+            "phone": phone or "",
+            "branch": branch_name or "",
+        })
+
+    driver_wallet_ops = {}
+    for tx, username, phone, order_number in wallet_tx_rows:
+        driver_id = tx.driver_user_id
+        if driver_id not in driver_wallet_ops:
+            driver_wallet_ops[driver_id] = {
+                "commission_debt_accrued": 0,
+                "automatic_repayment": 0,
+            }
+        change = int(tx.balance_change_kopecks or 0)
+        after_balance = int(tx.balance_after_kopecks or 0)
+        before_balance = after_balance - change
+        if tx.transaction_type == "commission_debit" and tx.payment_method in ("cash", "driver_transfer"):
+            driver_wallet_ops[driver_id]["commission_debt_accrued"] += max(
+                max(-after_balance, 0) - max(-before_balance, 0), 0
             )
-        item["debt_change"] += int(
-            transaction.debt_change_kopecks or 0
-        )
+        elif tx.transaction_type == "electronic_earning_credit" and tx.payment_method in ("card", "sbp"):
+            driver_wallet_ops[driver_id]["automatic_repayment"] += min(
+                max(change, 0), max(-before_balance, 0)
+            )
 
     workbook = Workbook()
     summary_sheet = workbook.active
     summary_sheet.title = "Сводка"
     summary_sheet.append(["Финансовый отчёт VEXA"])
     summary_sheet.append(["Город", city.name])
-    summary_sheet.append(["Филиал", "Все филиалы" if selected_branch_id is None else db.get(Branch, selected_branch_id).name])
+    selected_branch_name = "Все филиалы"
+    if selected_branch_id is not None:
+        selected_branch_name = db.get(Branch, selected_branch_id).name
+    summary_sheet.append(["Филиал", selected_branch_name])
     summary_sheet.append(["Период с", date_from.isoformat()])
     summary_sheet.append(["Период по", date_to.isoformat()])
     summary_sheet.append([])
     summary_sheet.append([
         "Водитель", "Телефон", "Филиал", "Поездок",
-        "Оборот, ₽", "Комиссия, ₽", "Погашения, ₽",
-        "Изменение долга за период, ₽", "Текущий долг, ₽",
+        "Оборот поездок, ₽", "Комиссия начислена, ₽",
+        "Прирост долга по комиссии, ₽", "Автопогашение электронными начислениями, ₽",
+        "Текущий долг, ₽", "Текущий баланс, ₽", "Резерв, ₽", "Доступно, ₽",
     ])
 
-    for driver_id, item in sorted(
-        driver_summary.items(),
-        key=lambda pair: pair[1]["username"].casefold(),
+    all_driver_ids = set(driver_summary) | set(driver_wallet_ops) | set(current_debts)
+    for driver_id in sorted(
+        all_driver_ids,
+        key=lambda value: driver_meta.get(value, {}).get("username", "").casefold(),
     ):
+        meta = driver_meta.get(driver_id, {})
+        trip = driver_summary.get(driver_id, {})
+        ops = driver_wallet_ops.get(driver_id, {})
+        wallet = wallet_by_driver.get(driver_id)
+        balance = int(wallet.balance_kopecks or 0) if wallet else 0
+        reserved = int(wallet.reserved_kopecks or 0) if wallet else 0
         summary_sheet.append([
-            item["username"],
-            item["phone"],
-            item["branch"],
-            item["trips"],
-            item["fare"] / 100,
-            item["commission"] / 100,
-            item["repayments"] / 100,
-            item["debt_change"] / 100,
+            meta.get("username", ""),
+            meta.get("phone", ""),
+            meta.get("branch", ""),
+            trip.get("trips", 0),
+            trip.get("fare", 0) / 100,
+            trip.get("commission", 0) / 100,
+            ops.get("commission_debt_accrued", 0) / 100,
+            ops.get("automatic_repayment", 0) / 100,
             current_debts.get(driver_id, 0) / 100,
+            balance / 100,
+            reserved / 100,
+            max(balance - reserved, 0) / 100,
         ])
 
-    details_sheet = workbook.create_sheet("Операции")
+    details_sheet = workbook.create_sheet("Поездки")
     details_sheet.append([
         "Дата и время UTC", "Город", "Филиал", "Водитель",
         "Тип операции", "Способ оплаты", "Стоимость поездки, ₽",
         "Ставка комиссии, %", "Комиссия, ₽", "Заработок водителя, ₽",
-        "Изменение долга, ₽", "Описание", "ID заказа",
+        "Изменение баланса, ₽", "Описание", "ID заказа",
     ])
-
     for transaction, username, phone, branch_name in transaction_rows:
         created_at = transaction.created_at
         if created_at is not None and created_at.tzinfo is not None:
@@ -1030,58 +922,66 @@ def export_dispatch_finance_excel(
             float(transaction.commission_rate_percent or 0),
             int(transaction.commission_kopecks or 0) / 100,
             int(transaction.driver_earning_kopecks or 0) / 100,
-            int(transaction.debt_change_kopecks or 0) / 100,
+            int(transaction.balance_change_kopecks or 0) / 100,
             transaction.description or "",
             str(transaction.order_id) if transaction.order_id else "",
+        ])
+
+    wallet_sheet = workbook.create_sheet("Операции кошелька")
+    wallet_sheet.append([
+        "Дата и время UTC", "Водитель", "Телефон", "Тип операции",
+        "Способ оплаты", "Изменение баланса, ₽", "Баланс после, ₽",
+        "Резерв после, ₽", "ID заказа", "Номер заказа", "Описание",
+    ])
+    for tx, username, phone, order_number in wallet_tx_rows:
+        created_at = tx.created_at
+        if created_at is not None and created_at.tzinfo is not None:
+            created_at = created_at.astimezone(timezone.utc).replace(tzinfo=None)
+        wallet_sheet.append([
+            created_at,
+            username or "",
+            phone or "",
+            tx.transaction_type,
+            tx.payment_method or "",
+            int(tx.balance_change_kopecks or 0) / 100,
+            int(tx.balance_after_kopecks or 0) / 100,
+            int(tx.reserved_after_kopecks or 0) / 100,
+            str(tx.order_id) if tx.order_id else "",
+            order_number or "",
+            tx.description or "",
         ])
 
     branches_sheet = workbook.create_sheet("Филиалы")
     branches_sheet.append([
         "Город", "Филиал", "Водителей с операциями", "Поездок",
-        "Оборот, ₽", "Комиссия, ₽", "Погашения, ₽",
-        "Текущий долг, ₽",
+        "Оборот, ₽", "Комиссия, ₽", "Текущий долг, ₽",
     ])
     branches_summary = {}
     for driver_id, item in driver_summary.items():
         key = item["branch"] or "Без филиала"
         branch_item = branches_summary.setdefault(key, {
-            "drivers": 0, "trips": 0, "fare": 0,
-            "commission": 0, "repayments": 0,
+            "drivers": set(), "trips": 0, "fare": 0, "commission": 0,
         })
-        branch_item["drivers"] += 1
+        branch_item["drivers"].add(driver_id)
         branch_item["trips"] += item["trips"]
         branch_item["fare"] += item["fare"]
         branch_item["commission"] += item["commission"]
-        branch_item["repayments"] += item["repayments"]
 
-    branch_debts = {}
-    debt_by_branch_rows = db.execute(
-        select(
-            Branch.name,
-            func.coalesce(
-                func.sum(DriverFinanceTransaction.debt_change_kopecks),
-                0,
-            ),
+    current_branch_debts = {}
+    for wallet, username, phone, branch_name in wallet_rows:
+        key = branch_name or "Без филиала"
+        current_branch_debts[key] = current_branch_debts.get(key, 0) + max(
+            -int(wallet.balance_kopecks or 0), 0
         )
-        .outerjoin(
-            DriverFinanceTransaction,
-            DriverFinanceTransaction.branch_id == Branch.id,
-        )
-        .where(Branch.city_id == city.id)
-        .group_by(Branch.name)
-    ).all()
-    branch_debts = {name: int(debt or 0) for name, debt in debt_by_branch_rows}
-
     for branch_name, item in sorted(branches_summary.items()):
         branches_sheet.append([
             city.name,
             branch_name,
-            item["drivers"],
+            len(item["drivers"]),
             item["trips"],
             item["fare"] / 100,
             item["commission"] / 100,
-            item["repayments"] / 100,
-            branch_debts.get(branch_name, 0) / 100,
+            current_branch_debts.get(branch_name, 0) / 100,
         ])
 
     header_fill = PatternFill("solid", fgColor="17365D")
@@ -1105,19 +1005,9 @@ def export_dispatch_finance_excel(
     output = BytesIO()
     workbook.save(output)
     output.seek(0)
-
-    filename = (
-        f"vexa_finance_{city.code}_{date_from.isoformat()}_"
-        f"{date_to.isoformat()}.xlsx"
-    )
-
+    filename = f"vexa_finance_{city.code}_{date_from.isoformat()}_{date_to.isoformat()}.xlsx"
     return StreamingResponse(
         output,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        ),
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"'
-        },
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

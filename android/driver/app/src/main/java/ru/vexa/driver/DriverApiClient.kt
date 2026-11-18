@@ -2,8 +2,6 @@
 package ru.vexa.driver
 
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -199,6 +197,26 @@ object DriverApiClient {
     }
 
     /**
+     * Получить карточку заказа из истории кошелька.
+     *
+     * GET /api/v1/driver/orders/{order_id}
+     * Сервер проверяет, что заказ принадлежит текущему водителю
+     * и относится к его городу.
+     */
+    fun getOrder(orderId: String): JSONObject {
+        require(orderId.isNotBlank()) {
+            "Не указан номер заказа"
+        }
+
+        val response = request(
+            path = "/api/v1/driver/orders/$orderId"
+        )
+
+        return JSONObject(response).optJSONObject("order")
+            ?: throw Exception("Сервер не вернул карточку заказа")
+    }
+
+    /**
      * Изменить статус поездки.
      */
     fun updateOrderStatus(
@@ -258,6 +276,57 @@ object DriverApiClient {
     }
 
     /**
+     * Получить текущий кошелёк водителя.
+     *
+     * GET /api/v1/driver/wallet
+     *
+     * Ответ содержит:
+     * balance_kopecks — текущий баланс, включая отрицательный;
+     * reserved_kopecks — зарезервированная сумма;
+     * available_kopecks — доступная к выводу сумма;
+     * payouts — параметры и остаток дневного лимита.
+     */
+    fun getWallet(): JSONObject {
+        val response = request(
+            path = "/api/v1/driver/wallet"
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
+     * Получить историю операций кошелька.
+     *
+     * GET /api/v1/driver/wallet/transactions
+     *
+     * Ответ содержит:
+     * order_public_number — номер заказа;
+     * balance_change_kopecks — изменение баланса;
+     * balance_after_kopecks — баланс после операции;
+     * description — описание операции;
+     * created_at — дата и время операции.
+     */
+    fun getWalletTransactions(
+        limit: Int = 50,
+        offset: Int = 0
+    ): JSONObject {
+        require(limit in 1..100) {
+            "Количество записей должно быть от 1 до 100"
+        }
+
+        require(offset >= 0) {
+            "Смещение не может быть отрицательным"
+        }
+
+        val response = request(
+            path = "/api/v1/driver/wallet/transactions" +
+                "?limit=$limit&offset=$offset"
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
      * Получить финансовую сводку водителя.
      *
      * GET /api/v1/driver/finance
@@ -271,7 +340,7 @@ object DriverApiClient {
     }
 
     /**
-     * Получить историю финансовых операций.
+     * Получить историю финансовых операций водителя.
      *
      * GET /api/v1/driver/finance/transactions
      */

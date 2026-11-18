@@ -1,3 +1,4 @@
+
 package ru.vexa.driver
 
 import android.content.Intent
@@ -23,6 +24,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
+import java.text.NumberFormat
+import java.util.Locale
 import java.util.concurrent.Executors
 
 private val VexaTeal = Color(0xFF20C6B7)
@@ -30,6 +33,14 @@ private val VexaInk = Color(0xFF111827)
 private val VexaNavy = Color(0xFF1E293B)
 private val VexaBackground = Color(0xFFF5F7FA)
 private val VexaMuted = Color(0xFF64748B)
+
+private fun formatWalletRubles(kopecks: Long): String {
+ val formatter = NumberFormat.getNumberInstance(Locale("ru", "RU"))
+ formatter.minimumFractionDigits = 2
+ formatter.maximumFractionDigits = 2
+ val sign = if (kopecks < 0) "−" else ""
+ return sign + formatter.format(kotlin.math.abs(kopecks) / 100.0)
+}
 
 private val apiExecutor = Executors.newSingleThreadExecutor()
 private val mainHandler = Handler(Looper.getMainLooper())
@@ -129,6 +140,8 @@ fun DriverScreen() {
  var vehicleDescription by remember { mutableStateOf("") }
 
  var orders by remember { mutableStateOf(listOf<JSONObject>()) }
+ var walletBalanceKopecks by remember { mutableStateOf<Long?>(null) }
+ var walletAvailableKopecks by remember { mutableStateOf<Long?>(null) }
 
  var errorMessage by remember { mutableStateOf("") }
  var infoMessage by remember { mutableStateOf("") }
@@ -160,7 +173,8 @@ fun DriverScreen() {
    action = {
     val profile = DriverApiClient.getProfile()
     val activeOrders = DriverApiClient.getActiveOrders()
-    Pair(profile, activeOrders)
+    val wallet = DriverApiClient.getWallet()
+    Triple(profile, activeOrders, wallet)
    },
    onResult = { result, error ->
     loading = false
@@ -170,9 +184,13 @@ fun DriverScreen() {
      return@runApiCall
     }
 
-    val data = result as Pair<*, *>
+    val data = result as Triple<*, *, *>
     val profile = data.first as JSONObject
     val activeOrders = data.second as JSONObject
+    val wallet = data.third as JSONObject
+
+    walletBalanceKopecks = wallet.optLong("balance_kopecks", 0L)
+    walletAvailableKopecks = wallet.optLong("available_kopecks", 0L)
 
     driverName = profile.optString("username", "Водитель")
     phone = profile.optString("phone", "")
@@ -308,18 +326,34 @@ fun DriverScreen() {
 
   runApiCall(
    action = {
-    DriverApiClient.updateOrderStatus(
+    val response = DriverApiClient.updateOrderStatus(
      orderId = orderId,
      status = nextStatus
     )
+    val wallet = if (nextStatus == "completed") {
+     DriverApiClient.getWallet()
+    } else {
+     null
+    }
+    Pair(response, wallet)
    },
-   onResult = { _, error ->
+   onResult = { result, error ->
     loading = false
 
     if (error != null) {
      errorMessage = error
     } else {
-     infoMessage = "Статус заказа обновлён"
+     val data = result as Pair<*, *>
+     val wallet = data.second as? JSONObject
+     if (wallet != null) {
+      walletBalanceKopecks = wallet.optLong("balance_kopecks", 0L)
+      walletAvailableKopecks = wallet.optLong("available_kopecks", 0L)
+     }
+     infoMessage = if (nextStatus == "completed") {
+      "Поездка завершена. Баланс обновлён"
+     } else {
+      "Статус заказа обновлён"
+     }
      refreshOrders()
     }
    }
@@ -630,6 +664,36 @@ fun DriverScreen() {
         fontSize = 13.sp,
         fontWeight = FontWeight.Medium
        )
+      }
+     }
+
+     item {
+      VexaCard(dark = dark) {
+       Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+       ) {
+        Text(
+         text = "ТЕКУЩИЙ БАЛАНС",
+         color = secondaryText,
+         fontSize = 11.sp,
+         fontWeight = FontWeight.Bold,
+         letterSpacing = 1.sp
+        )
+        Text(
+         text = walletBalanceKopecks?.let { "${formatWalletRubles(it)} ₽" } ?: "—",
+         color = if (dark) VexaTeal else Color(0xFF087F75),
+         fontSize = 32.sp,
+         fontWeight = FontWeight.ExtraBold
+        )
+        Text(
+         text = walletAvailableKopecks?.let {
+          "Доступно к выводу: ${formatWalletRubles(it)} ₽"
+         } ?: "Доступно к выводу: —",
+         color = secondaryText,
+         fontSize = 12.sp
+        )
+       }
       }
      }
 
