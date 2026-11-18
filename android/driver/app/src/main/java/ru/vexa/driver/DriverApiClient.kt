@@ -197,6 +197,26 @@ object DriverApiClient {
     }
 
     /**
+     * Получить карточку заказа из истории кошелька.
+     *
+     * GET /api/v1/driver/orders/{order_id}
+     * Сервер проверяет, что заказ принадлежит текущему водителю
+     * и относится к его городу.
+     */
+    fun getOrder(orderId: String): JSONObject {
+        require(orderId.isNotBlank()) {
+            "Не указан номер заказа"
+        }
+
+        val response = request(
+            path = "/api/v1/driver/orders/$orderId"
+        )
+
+        return JSONObject(response).optJSONObject("order")
+            ?: throw Exception("Сервер не вернул карточку заказа")
+    }
+
+    /**
      * Изменить статус поездки.
      */
     fun updateOrderStatus(
