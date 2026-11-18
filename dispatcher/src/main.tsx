@@ -325,6 +325,7 @@ function App() {
   const [driversError, setDriversError] = useState('');
 
   const [assignmentOrder, setAssignmentOrder] = useState<VexaOrder | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<VexaOrder | null>(null);
   const [availableDrivers, setAvailableDrivers] = useState<AvailableDriver[]>([]);
   const [selectedDriver, setSelectedDriver] = useState<AvailableDriver | null>(null);
   const [loadingDrivers, setLoadingDrivers] = useState(false);
@@ -446,6 +447,21 @@ function App() {
     setAssigning(false);
   }
 
+  function openOrderFromFinance(orderId: string) {
+    const order = orders.find(item => item.id === orderId);
+
+    if (!order) {
+      setError(
+        'Заказ не найден в текущем списке. Обновите список заказов и повторите попытку.',
+      );
+      loadOrders(token || '');
+      return;
+    }
+
+    setError('');
+    setSelectedOrder(order);
+  }
+
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
@@ -454,6 +470,7 @@ function App() {
     setDrivers([]);
     setError('');
     setNotice('');
+    setSelectedOrder(null);
     closeAssignment();
   }
 
@@ -717,18 +734,19 @@ function App() {
           </div>
         )}
 
-{activeSection === 'finance' ? (
-  <>
-    <FinanceSummaryPanel
-      token={token}
-      cityCode={CITY_CODE}
-    />
-    <DriverFinancePanel
-      token={token}
-      cityCode={CITY_CODE}
-    />
-  </>
-) : (
+        {activeSection === 'finance' ? (
+          <>
+            <FinanceSummaryPanel
+              token={token}
+              cityCode={CITY_CODE}
+            />
+            <DriverFinancePanel
+              token={token}
+              cityCode={CITY_CODE}
+              onOpenOrder={openOrderFromFinance}
+            />
+          </>
+        ) : (
           <>
             <section className="stats">
               <article>
@@ -1112,6 +1130,137 @@ function App() {
           </>
         )}
       </main>
+
+      {selectedOrder && (
+        <div
+          style={modalOverlayStyle}
+          onClick={() => setSelectedOrder(null)}
+        >
+          <div
+            style={modalStyle}
+            onClick={event => event.stopPropagation()}
+          >
+            <div style={modalHeaderStyle}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18 }}>
+                  Карточка заказа
+                </h2>
+
+                <p style={{
+                  margin: '6px 0 0',
+                  color: '#8994a3',
+                  fontSize: 12,
+                }}>
+                  Заказ №{selectedOrder.public_number}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedOrder(null)}
+                style={iconButtonStyle}
+                title="Закрыть карточку заказа"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gap: 13,
+              marginTop: 20,
+            }}>
+              <div>
+                <span style={orderDetailLabelStyle}>Статус заказа</span>
+                <span
+                  className={`status ${getStatusClass(selectedOrder.status)}`}
+                  style={{
+                    display: 'inline-block',
+                    width: 'fit-content',
+                    marginTop: 5,
+                  }}
+                >
+                  {getStatusLabel(selectedOrder.status)}
+                </span>
+              </div>
+
+              <div style={modalDividerStyle} />
+
+              <div>
+                <span style={orderDetailLabelStyle}>Клиент</span>
+                <b style={orderDetailValueStyle}>
+                  {selectedOrder.customer_name || 'Анонимный заказ'}
+                </b>
+                {selectedOrder.customer_phone && (
+                  <span style={orderDetailSecondaryStyle}>
+                    {selectedOrder.customer_phone}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <span style={orderDetailLabelStyle}>Откуда</span>
+                <b style={orderDetailValueStyle}>
+                  {selectedOrder.pickup_address}
+                </b>
+              </div>
+
+              <div>
+                <span style={orderDetailLabelStyle}>Куда</span>
+                <b style={orderDetailValueStyle}>
+                  {selectedOrder.destination_address}
+                </b>
+              </div>
+
+              <div style={modalDividerStyle} />
+
+              <div style={orderDetailGridStyle}>
+                <div>
+                  <span style={orderDetailLabelStyle}>Стоимость</span>
+                  <b style={orderDetailValueStyle}>
+                    {Number(selectedOrder.price_rub || 0).toLocaleString('ru-RU')} ₽
+                  </b>
+                </div>
+
+                <div>
+                  <span style={orderDetailLabelStyle}>Способ оплаты</span>
+                  <b style={orderDetailValueStyle}>
+                    {getPaymentLabel(selectedOrder.payment_method)}
+                  </b>
+                </div>
+
+                <div>
+                  <span style={orderDetailLabelStyle}>Дата создания</span>
+                  <b style={orderDetailValueStyle}>
+                    {formatDate(selectedOrder.created_at)}
+                  </b>
+                </div>
+
+                <div>
+                  <span style={orderDetailLabelStyle}>Город</span>
+                  <b style={orderDetailValueStyle}>
+                    {selectedOrder.city_code}
+                  </b>
+                </div>
+              </div>
+
+              <div style={modalDividerStyle} />
+
+              <span style={orderDetailSecondaryStyle}>
+                ID заказа: {selectedOrder.id}
+              </span>
+            </div>
+
+            <div style={modalActionsStyle}>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                style={secondaryButtonStyle}
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {assignmentOrder && (
         <div style={modalOverlayStyle}>
@@ -1578,6 +1727,35 @@ const modalActionsStyle: React.CSSProperties = {
   marginTop: 20,
   paddingTop: 15,
   borderTop: '1px solid #edf0f3',
+};
+
+const orderDetailLabelStyle: React.CSSProperties = {
+  display: 'block',
+  color: '#8994a3',
+  fontSize: 11,
+  marginBottom: 4,
+};
+
+const orderDetailValueStyle: React.CSSProperties = {
+  display: 'block',
+  color: '#172033',
+  fontSize: 13,
+  lineHeight: 1.5,
+  overflowWrap: 'anywhere',
+};
+
+const orderDetailSecondaryStyle: React.CSSProperties = {
+  display: 'block',
+  color: '#8994a3',
+  fontSize: 11,
+  marginTop: 4,
+  overflowWrap: 'anywhere',
+};
+
+const orderDetailGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: 14,
 };
 
 createRoot(document.getElementById('root')!).render(<App />);
