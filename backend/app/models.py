@@ -790,6 +790,7 @@ class Order(Base):
             ondelete="RESTRICT",
         ),
         nullable=True,
+        index=True,
     )
 
     dynamic_pricing_multiplier: Mapped[Decimal | None] = mapped_column(
@@ -1018,7 +1019,7 @@ class TariffChangeHistory(Base):
         nullable=False,
         index=True,
     )
-    
+
 # ============================================================
 # DYNAMIC PRICING SETTINGS
 # Настройки динамического коэффициента по городу и филиалу
