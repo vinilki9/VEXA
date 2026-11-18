@@ -370,12 +370,7 @@ CREATE TABLE orders (
                     + cargo_vehicle_surcharge_kopecks
                     + cargo_loaders_surcharge_kopecks
             )
-        ),
-
-    CONSTRAINT fk_orders_dynamic_pricing_settings_id_dynamic_pricing_settings
-        FOREIGN KEY (dynamic_pricing_settings_id)
-        REFERENCES dynamic_pricing_settings(id)
-        ON DELETE RESTRICT
+        )
 );
 
 CREATE INDEX ix_orders_city_id
@@ -741,6 +736,14 @@ CREATE INDEX ix_dynamic_pricing_settings_branch_id
 
 CREATE INDEX ix_dynamic_pricing_city_branch
     ON dynamic_pricing_settings (city_id, branch_id);
+
+-- Внешний ключ добавляется после создания таблицы
+-- dynamic_pricing_settings, на которую он ссылается.
+ALTER TABLE orders
+    ADD CONSTRAINT fk_orders_dynamic_pricing_settings_id_dynamic_pricing_settings
+    FOREIGN KEY (dynamic_pricing_settings_id)
+    REFERENCES dynamic_pricing_settings(id)
+    ON DELETE RESTRICT;
 
 
 -- ============================================================
