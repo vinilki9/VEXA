@@ -275,6 +275,38 @@ object DriverApiClient {
     }
 
     /**
+     * Получить историю операций кошелька.
+     *
+     * GET /api/v1/driver/wallet/transactions
+     *
+     * Ответ содержит:
+     * order_public_number — номер заказа;
+     * balance_change_kopecks — изменение баланса;
+     * balance_after_kopecks — баланс после операции;
+     * description — описание операции;
+     * created_at — дата и время операции.
+     */
+    fun getWalletTransactions(
+        limit: Int = 50,
+        offset: Int = 0
+    ): JSONObject {
+        require(limit in 1..100) {
+            "Количество записей должно быть от 1 до 100"
+        }
+
+        require(offset >= 0) {
+            "Смещение не может быть отрицательным"
+        }
+
+        val response = request(
+            path = "/api/v1/driver/wallet/transactions" +
+                "?limit=$limit&offset=$offset"
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
      * Получить финансовую сводку водителя.
      *
      * GET /api/v1/driver/finance
@@ -288,7 +320,7 @@ object DriverApiClient {
     }
 
     /**
-     * Получить историю финансовых операций.
+     * Получить историю финансовых операций водителя.
      *
      * GET /api/v1/driver/finance/transactions
      */
