@@ -2,12 +2,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   History,
   RefreshCw,
-  Wallet,
 } from 'lucide-react';
 
 type FinanceDriver = {
@@ -19,22 +17,16 @@ type FinanceDriver = {
   city_code: string;
   city_name: string;
   branch_name?: string | null;
-  cash_debt_kopecks: number;
-  cash_debt_rub: number;
+  balance_kopecks: number;
+  balance_rub: number;
+  reserved_kopecks: number;
+  available_kopecks: number;
 };
 
 type FinanceResponse = {
   city_code: string;
   drivers_count: number;
-  total_cash_debt_kopecks: number;
   drivers: FinanceDriver[];
-};
-
-type RepaymentResponse = {
-  success: boolean;
-  message: string;
-  paid_kopecks: number;
-  remaining_debt_kopecks: number;
 };
 
 type FinanceTransaction = {
@@ -42,10 +34,12 @@ type FinanceTransaction = {
   transaction_type: string;
   payment_method?: string | null;
   amount_kopecks: number;
-  debt_change_kopecks: number;
-  debt_after_kopecks: number;
+  balance_change_kopecks: number;
+  balance_after_kopecks: number;
+  reserved_after_kopecks: number;
   description?: string | null;
   order_id?: string | null;
+  order_public_number?: string | null;
   created_at: string;
 };
 
@@ -58,7 +52,9 @@ type FinanceHistoryResponse = {
     city_name: string;
     branch_name?: string | null;
   };
-  current_debt_kopecks: number;
+  current_balance_kopecks: number;
+  reserved_kopecks: number;
+  available_kopecks: number;
   total_transactions: number;
   limit: number;
   offset: number;
@@ -78,30 +74,6 @@ const money = (kopecks: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} ₽`;
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  height: 43,
-  boxSizing: 'border-box',
-  border: '1px solid #dfe6eb',
-  borderRadius: 8,
-  padding: '0 12px',
-  fontSize: 13,
-  outline: 'none',
-  background: '#fff',
-  color: '#172033',
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  border: 0,
-  borderRadius: 8,
-  background: '#20b8aa',
-  color: '#fff',
-  padding: '11px 15px',
-  fontSize: 12,
-  fontWeight: 700,
-  cursor: 'pointer',
-};
 
 const secondaryButtonStyle: React.CSSProperties = {
   border: '1px solid #dfe6eb',
@@ -126,27 +98,6 @@ const cardStyle: React.CSSProperties = {
   background: '#fff',
 };
 
-function parseRublesToKopecks(value: string): number | null {
-  const normalized = value.trim().replace(',', '.');
-
-  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
-    return null;
-  }
-
-  const [rubles, fraction = ''] = normalized.split('.');
-  const kopecks = Number(rubles) * 100 + Number(fraction.padEnd(2, '0'));
-
-  if (
-    !Number.isSafeInteger(kopecks) ||
-    kopecks <= 0 ||
-    kopecks > 2147483647
-  ) {
-    return null;
-  }
-
-  return kopecks;
-}
-
 function formatDate(value: string): string {
   const date = new Date(value);
 
@@ -167,11 +118,15 @@ function transactionTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     trip_commission: 'Комиссия за поездку',
     commission: 'Комиссия за поездку',
-    debt_repayment: 'Погашение задолженности',
-    adjustment: 'Корректировка',
+    completed_trip: 'Расчёт по завершённой поездке',
+    payout: 'Выплата водителю',
+    payout_reserve: 'Резервирование выплаты',
+    payout_release: 'Отмена резерва выплаты',
+    adjustment: 'Корректировка баланса',
+    refund: 'Возврат средств',
   };
 
-  return labels[type] || 'Финансовая операция';
+  return labels[type] || 'Операция по кошельку';
 }
 
 function paymentMethodLabel(method?: string | null): string {
@@ -217,24 +172,13 @@ export default function DriverFinancePanel({
   cityCode,
 }: Props) {
   const [drivers, setDrivers] = useState<FinanceDriver[]>([]);
-  const [totalDebt, setTotalDebt] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  const [selectedDriverId, setSelectedDriverId] = useState('');
-  const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<
-    'cash' | 'driver_transfer'
-  >('cash');
-
   const [historyDriverId, setHistoryDriverId] = useState('');
   const [history, setHistory] = useState<FinanceHistoryResponse | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [historyOffset, setHistoryOffset] = useState(0);
-
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
 
   const loadFinance = useCallback(async () => {
     if (!token) return;
@@ -249,7 +193,6 @@ export default function DriverFinancePanel({
       );
 
       setDrivers(Array.isArray(data?.drivers) ? data.drivers : []);
-      setTotalDebt(Number(data?.total_cash_debt_kopecks || 0));
     } catch (err) {
       setError(
         err instanceof Error
@@ -295,80 +238,6 @@ export default function DriverFinancePanel({
     loadFinance();
   }, [loadFinance]);
 
-  const selectedDriver = drivers.find(
-    driver => driver.driver_user_id === selectedDriverId,
-  );
-
-  async function submitRepayment(event: React.FormEvent) {
-    event.preventDefault();
-
-    if (!selectedDriver || submitting) return;
-
-    setError('');
-    setNotice('');
-
-    const amountKopecks = parseRublesToKopecks(amount);
-
-    if (amountKopecks === null) {
-      setError('Введите корректную сумму в рублях.');
-      return;
-    }
-
-    if (amountKopecks > selectedDriver.cash_debt_kopecks) {
-      setError('Сумма превышает текущую задолженность водителя.');
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Зарегистрировать погашение ${money(amountKopecks)}?\n` +
-      `Водитель: ${selectedDriver.username}\n` +
-      `Способ: ${
-        paymentMethod === 'cash'
-          ? 'Наличные'
-          : 'Перевод водителю'
-      }`,
-    );
-
-    if (!confirmed) return;
-
-    setSubmitting(true);
-
-    try {
-      const result: RepaymentResponse = await financeRequest(
-        `/api/v1/dispatch/drivers/${selectedDriver.driver_user_id}/finance/repayments`,
-        token,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            amount_kopecks: amountKopecks,
-            payment_method: paymentMethod,
-          }),
-        },
-      );
-
-      setNotice(
-        `Погашение зарегистрировано. Оплачено: ` +
-        `${money(result.paid_kopecks)}. Остаток долга: ` +
-        `${money(result.remaining_debt_kopecks)}.`,
-      );
-
-      setAmount('');
-      await loadFinance();
-
-      if (historyDriverId === selectedDriver.driver_user_id) {
-        await loadHistory(selectedDriver.driver_user_id, 0);
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось зарегистрировать погашение',
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   function toggleHistory(driverId: string) {
     if (historyDriverId === driverId) {
       setHistoryDriverId('');
@@ -382,8 +251,13 @@ export default function DriverFinancePanel({
     loadHistory(driverId, 0);
   }
 
-  const indebtedDrivers = drivers.filter(
-    driver => driver.cash_debt_kopecks > 0,
+  const totalBalance = drivers.reduce(
+    (sum, driver) => sum + Number(driver.balance_kopecks || 0),
+    0,
+  );
+
+  const negativeBalanceDrivers = drivers.filter(
+    driver => Number(driver.balance_kopecks || 0) < 0,
   );
 
   return (
@@ -411,7 +285,7 @@ export default function DriverFinancePanel({
             ...mutedStyle,
             margin: '6px 0 0',
           }}>
-            Задолженность по наличным поездкам и её погашение
+            Балансы кошельков и история финансовых операций
           </p>
         </div>
 
@@ -442,16 +316,16 @@ export default function DriverFinancePanel({
           background: '#f7f9fb',
         }}>
           <span style={mutedStyle}>
-            Общая задолженность водителей
+            Суммарный баланс кошельков
           </span>
 
           <strong style={{
             display: 'block',
             fontSize: 25,
-            color: '#172033',
+            color: totalBalance < 0 ? '#b54708' : '#087e70',
             marginTop: 8,
           }}>
-            {money(totalDebt)}
+            {money(totalBalance)}
           </strong>
         </div>
 
@@ -460,7 +334,25 @@ export default function DriverFinancePanel({
           background: '#f7f9fb',
         }}>
           <span style={mutedStyle}>
-            Водителей с задолженностью
+            Водителей с отрицательным балансом
+          </span>
+
+          <strong style={{
+            display: 'block',
+            fontSize: 25,
+            color: '#b54708',
+            marginTop: 8,
+          }}>
+            {negativeBalanceDrivers.length}
+          </strong>
+        </div>
+
+        <div style={{
+          ...cardStyle,
+          background: '#f7f9fb',
+        }}>
+          <span style={mutedStyle}>
+            Активных водителей в списке
           </span>
 
           <strong style={{
@@ -469,7 +361,7 @@ export default function DriverFinancePanel({
             color: '#172033',
             marginTop: 8,
           }}>
-            {indebtedDrivers.length}
+            {drivers.length}
           </strong>
         </div>
       </div>
@@ -490,176 +382,13 @@ export default function DriverFinancePanel({
         </div>
       )}
 
-      {notice && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          color: '#087e70',
-          background: '#e8f8f4',
-          borderRadius: 8,
-          padding: 11,
-          fontSize: 12,
-        }}>
-          <CheckCircle2 size={16} />
-          {notice}
-        </div>
-      )}
-
-      <div style={cardStyle}>
-        <h3 style={{
-          margin: '0 0 13px',
-          fontSize: 15,
-          color: '#172033',
-        }}>
-          Регистрация погашения задолженности
-        </h3>
-
-        <form
-          onSubmit={submitRepayment}
-          style={{
-            display: 'grid',
-            gap: 13,
-          }}
-        >
-          <label style={{
-            display: 'grid',
-            gap: 6,
-            color: '#526174',
-            fontSize: 12,
-            fontWeight: 600,
-          }}>
-            Водитель
-
-            <select
-              value={selectedDriverId}
-              onChange={event => {
-                setSelectedDriverId(event.target.value);
-                setAmount('');
-                setNotice('');
-              }}
-              required
-              style={inputStyle}
-            >
-              <option value="">Выберите водителя</option>
-
-              {indebtedDrivers.map(driver => (
-                <option
-                  key={driver.driver_user_id}
-                  value={driver.driver_user_id}
-                >
-                  {driver.username} — {money(driver.cash_debt_kopecks)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {selectedDriver && (
-            <div style={{
-              background: '#f7f9fb',
-              borderRadius: 9,
-              padding: 12,
-              display: 'grid',
-              gap: 6,
-              fontSize: 12,
-              color: '#526174',
-            }}>
-              <b style={{ color: '#172033' }}>
-                {selectedDriver.username}
-              </b>
-
-              <span>
-                Телефон: {selectedDriver.phone || 'Не указан'}
-              </span>
-
-              <span>
-                Филиал: {selectedDriver.branch_name || 'Не указан'}
-              </span>
-
-              <span>
-                Рейтинг: {selectedDriver.rating}
-              </span>
-
-              <strong style={{
-                color: '#b54708',
-                fontSize: 15,
-              }}>
-                Текущий долг: {money(selectedDriver.cash_debt_kopecks)}
-              </strong>
-            </div>
-          )}
-
-          <label style={{
-            display: 'grid',
-            gap: 6,
-            color: '#526174',
-            fontSize: 12,
-            fontWeight: 600,
-          }}>
-            Сумма погашения, ₽
-
-            <input
-              type="text"
-              inputMode="decimal"
-              value={amount}
-              onChange={event => setAmount(event.target.value)}
-              placeholder="Например, 500.00"
-              required
-              style={inputStyle}
-            />
-          </label>
-
-          <label style={{
-            display: 'grid',
-            gap: 6,
-            color: '#526174',
-            fontSize: 12,
-            fontWeight: 600,
-          }}>
-            Способ погашения
-
-            <select
-              value={paymentMethod}
-              onChange={event => setPaymentMethod(
-                event.target.value as 'cash' | 'driver_transfer',
-              )}
-              style={inputStyle}
-            >
-              <option value="cash">Наличные</option>
-              <option value="driver_transfer">Перевод водителю</option>
-            </select>
-          </label>
-
-          <button
-            type="submit"
-            disabled={!selectedDriver || submitting || loading}
-            style={{
-              ...primaryButtonStyle,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              opacity: !selectedDriver || submitting || loading ? 0.55 : 1,
-              cursor: !selectedDriver || submitting || loading
-                ? 'not-allowed'
-                : 'pointer',
-            }}
-          >
-            <Wallet size={16} />
-            {submitting
-              ? 'Регистрируем погашение...'
-              : 'Зарегистрировать погашение'}
-          </button>
-        </form>
-      </div>
-
       <div style={cardStyle}>
         <h3 style={{
           margin: '0 0 12px',
           fontSize: 15,
           color: '#172033',
         }}>
-          Задолженность и история операций
+          Кошельки водителей и история операций
         </h3>
 
         {loading && drivers.length === 0 && (
@@ -677,6 +406,9 @@ export default function DriverFinancePanel({
           }}>
             {drivers.map(driver => {
               const isHistoryOpen = historyDriverId === driver.driver_user_id;
+              const balance = Number(driver.balance_kopecks || 0);
+              const reserved = Number(driver.reserved_kopecks || 0);
+              const available = Number(driver.available_kopecks || 0);
 
               return (
                 <div
@@ -708,6 +440,8 @@ export default function DriverFinancePanel({
                         {driver.branch_name || 'Без филиала'}
                         {' · '}
                         {driver.is_online ? 'На линии' : 'Не на линии'}
+                        {' · '}
+                        Рейтинг: {driver.rating}
                       </span>
                     </div>
 
@@ -717,14 +451,21 @@ export default function DriverFinancePanel({
                       gap: 12,
                       flexWrap: 'wrap',
                     }}>
-                      <strong style={{
-                        color: driver.cash_debt_kopecks > 0
-                          ? '#b54708'
-                          : '#087e70',
-                        fontSize: 14,
+                      <div style={{
+                        display: 'grid',
+                        gap: 3,
+                        textAlign: 'right',
                       }}>
-                        {money(driver.cash_debt_kopecks)}
-                      </strong>
+                        <strong style={{
+                          color: balance < 0 ? '#b54708' : '#087e70',
+                          fontSize: 15,
+                        }}>
+                          {money(balance)}
+                        </strong>
+                        <span style={mutedStyle}>
+                          {balance < 0 ? 'Отрицательный баланс' : 'Баланс кошелька'}
+                        </span>
+                      </div>
 
                       <button
                         type="button"
@@ -744,6 +485,19 @@ export default function DriverFinancePanel({
                           : <ChevronDown size={14} />}
                       </button>
                     </div>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    gap: 16,
+                    flexWrap: 'wrap',
+                    marginTop: 8,
+                    color: '#526174',
+                    fontSize: 11,
+                  }}>
+                    <span>Доступно: {money(available)}</span>
+                    <span>В резерве: {money(reserved)}</span>
+                    {driver.phone && <span>Телефон: {driver.phone}</span>}
                   </div>
 
                   {isHistoryOpen && (
@@ -767,7 +521,7 @@ export default function DriverFinancePanel({
                             fontSize: 13,
                             color: '#172033',
                           }}>
-                            История финансовых операций
+                            История операций кошелька
                           </b>
 
                           {history && (
@@ -776,6 +530,8 @@ export default function DriverFinancePanel({
                               margin: '4px 0 0',
                             }}>
                               Всего записей: {history.total_transactions}
+                              {' · '}
+                              Текущий баланс: {money(history.current_balance_kopecks)}
                             </p>
                           )}
                         </div>
@@ -810,7 +566,7 @@ export default function DriverFinancePanel({
                       {!historyLoading && !historyError &&
                         history && history.transactions.length === 0 && (
                           <p style={mutedStyle}>
-                            У этого водителя пока нет финансовых операций.
+                            У этого водителя пока нет операций по кошельку.
                           </p>
                         )}
 
@@ -820,88 +576,89 @@ export default function DriverFinancePanel({
                             display: 'grid',
                             gap: 9,
                           }}>
-                            {history.transactions.map(transaction => (
-                              <div
-                                key={transaction.id}
-                                style={{
-                                  background: '#fff',
-                                  border: '1px solid #e8edf2',
-                                  borderRadius: 8,
-                                  padding: 11,
-                                  display: 'grid',
-                                  gap: 7,
-                                }}
-                              >
-                                <div style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'flex-start',
-                                  gap: 10,
-                                  flexWrap: 'wrap',
-                                }}>
-                                  <div style={{
-                                    display: 'grid',
-                                    gap: 4,
-                                  }}>
-                                    <b style={{
-                                      color: '#172033',
-                                      fontSize: 12,
-                                    }}>
-                                      {transactionTypeLabel(transaction.transaction_type)}
-                                    </b>
+                            {history.transactions.map(transaction => {
+                              const change = Number(
+                                transaction.balance_change_kopecks ??
+                                transaction.amount_kopecks ??
+                                0,
+                              );
 
-                                    <span style={mutedStyle}>
-                                      {formatDate(transaction.created_at)}
-                                    </span>
+                              return (
+                                <div
+                                  key={transaction.id}
+                                  style={{
+                                    background: '#fff',
+                                    border: '1px solid #e8edf2',
+                                    borderRadius: 8,
+                                    padding: 11,
+                                    display: 'grid',
+                                    gap: 7,
+                                  }}
+                                >
+                                  <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'flex-start',
+                                    gap: 10,
+                                    flexWrap: 'wrap',
+                                  }}>
+                                    <div style={{
+                                      display: 'grid',
+                                      gap: 4,
+                                    }}>
+                                      <b style={{
+                                        color: '#172033',
+                                        fontSize: 12,
+                                      }}>
+                                        {transactionTypeLabel(transaction.transaction_type)}
+                                      </b>
+
+                                      <span style={mutedStyle}>
+                                        {formatDate(transaction.created_at)}
+                                      </span>
+                                    </div>
+
+                                    <strong style={{
+                                      color: change < 0 ? '#b54708' : '#087e70',
+                                      fontSize: 13,
+                                    }}>
+                                      {change < 0 ? '−' : '+'}
+                                      {money(Math.abs(change))}
+                                    </strong>
                                   </div>
 
-                                  <strong style={{
-                                    color: transaction.debt_change_kopecks < 0
-                                      ? '#087e70'
-                                      : '#b54708',
-                                    fontSize: 13,
-                                  }}>
-                                    {transaction.debt_change_kopecks < 0 ? '−' : '+'}
-                                    {money(transaction.amount_kopecks)}
-                                  </strong>
-                                </div>
-
-                                <div style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  gap: 8,
-                                  flexWrap: 'wrap',
-                                  color: '#526174',
-                                  fontSize: 11,
-                                }}>
-                                  <span>
-                                    Способ: {paymentMethodLabel(transaction.payment_method)}
-                                  </span>
-
-                                  <b style={{ color: '#172033' }}>
-                                    Остаток долга: {money(transaction.debt_after_kopecks)}
-                                  </b>
-                                </div>
-
-                                {transaction.description && (
-                                  <span style={{
-                                    color: '#8994a3',
+                                  <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    gap: 8,
+                                    flexWrap: 'wrap',
+                                    color: '#526174',
                                     fontSize: 11,
                                   }}>
-                                    {transaction.description}
-                                  </span>
-                                )}
+                                    <span>
+                                      Способ: {paymentMethodLabel(transaction.payment_method)}
+                                    </span>
 
-                                {transaction.order_id && (
-                                  <span style={{
-                                    color: '#8994a3',
-                                    fontSize: 10,
-                                  }}>
-                                    ID заказа: {transaction.order_id}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
+                                    <b style={{
+                                      color: transaction.balance_after_kopecks < 0
+                                        ? '#b54708'
+                                        : '#172033',
+                                    }}>
+                                      Баланс после операции: {money(transaction.balance_after_kopecks)}
+                                    </b>
+                                  </div>
+
+                                  {transaction.order_public_number && (
+                                    <span style={{
+                                      color: '#526174',
+                                      fontSize: 11,
+                                    }}>
+                                      Заказ № {transaction.order_public_number}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
 
                           <div style={{
@@ -974,10 +731,9 @@ export default function DriverFinancePanel({
         lineHeight: 1.5,
         margin: 0,
       }}>
-        История загружается с сервера отдельно для каждого водителя.
-        Доступные записи показывают тип операции, дату, способ оплаты,
-        сумму и остаток задолженности после операции. Просмотр истории
-        не изменяет финансовые данные.
+        Баланс и история загружаются из кошелька водителя.
+        Отрицательное значение отражает задолженность перед VEXA.
+        Ручная регистрация погашения через диспетчерскую не используется.
       </p>
     </section>
   );
