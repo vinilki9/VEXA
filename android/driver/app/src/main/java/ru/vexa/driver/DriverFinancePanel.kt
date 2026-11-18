@@ -254,8 +254,6 @@ fun DriverFinancePanel(
                     data.optLong("commission_total_kopecks")
                 val earnings =
                     data.optLong("earnings_total_kopecks")
-                val debt =
-                    data.optLong("cash_debt_kopecks")
 
                 val trips = data.optInt("completed_trips")
                 val rating = data.optString("current_rating", "—")
@@ -288,18 +286,6 @@ fun DriverFinancePanel(
                 FinanceMetric(
                     title = "Комиссия сервиса",
                     value = formatFinanceMoney(commission),
-                    foregroundColor = foregroundColor,
-                    secondaryText = secondaryText
-                )
-
-                FinanceMetric(
-                    title = "Задолженность за наличные и переводы",
-                    value = formatFinanceMoney(debt),
-                    valueColor = if (debt > 0) {
-                        Color(0xFFE59A36)
-                    } else {
-                        FinanceTeal
-                    },
                     foregroundColor = foregroundColor,
                     secondaryText = secondaryText
                 )
