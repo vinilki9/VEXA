@@ -255,7 +255,7 @@ fun DriverFinancePanel(
                 )
 
                 FinanceMetric(
-                    title = "Задолженность за наличные заказы",
+                    title = "Задолженность за наличные и переводы",
                     value = formatFinanceMoney(debt),
                     valueColor = if (debt > 0) {
                         Color(0xFFE59A36)
@@ -317,6 +317,11 @@ fun DriverFinancePanel(
             }
 
             transactions.forEach { transaction ->
+                val transactionType = transaction.optString(
+                    "transaction_type",
+                    ""
+                )
+
                 val description = transaction.optString(
                     "description",
                     "Финансовая операция"
@@ -368,36 +373,99 @@ fun DriverFinancePanel(
                         fontSize = 10.sp
                     )
 
-                    FinanceMetric(
-                        title = "Стоимость",
-                        value = formatFinanceMoney(fareAmount),
-                        foregroundColor = foregroundColor,
-                        secondaryText = secondaryText
-                    )
+                    when (transactionType) {
+                        "debt_repayment" -> {
+                            val repaymentAmount =
+                                kotlin.math.abs(debtChange)
 
-                    FinanceMetric(
-                        title = "Комиссия $rate%",
-                        value = formatFinanceMoney(commissionAmount),
-                        foregroundColor = foregroundColor,
-                        secondaryText = secondaryText
-                    )
+                            FinanceMetric(
+                                title = "Погашено",
+                                value = formatFinanceMoney(
+                                    repaymentAmount
+                                ),
+                                valueColor = FinanceTeal,
+                                foregroundColor = foregroundColor,
+                                secondaryText = secondaryText,
+                                large = true
+                            )
 
-                    FinanceMetric(
-                        title = "Вам начислено",
-                        value = formatFinanceMoney(earningAmount),
-                        valueColor = FinanceTeal,
-                        foregroundColor = foregroundColor,
-                        secondaryText = secondaryText
-                    )
+                            FinanceMetric(
+                                title = "Изменение задолженности",
+                                value = "-${formatFinanceMoney(repaymentAmount)}",
+                                valueColor = FinanceTeal,
+                                foregroundColor = foregroundColor,
+                                secondaryText = secondaryText
+                            )
 
-                    if (debtChange > 0) {
-                        FinanceMetric(
-                            title = "Увеличение долга",
-                            value = formatFinanceMoney(debtChange),
-                            valueColor = Color(0xFFE59A36),
-                            foregroundColor = foregroundColor,
-                            secondaryText = secondaryText
-                        )
+                            Text(
+                                text = "Задолженность уменьшена",
+                                color = FinanceTeal,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        "completed_trip" -> {
+                            FinanceMetric(
+                                title = "Стоимость",
+                                value = formatFinanceMoney(fareAmount),
+                                foregroundColor = foregroundColor,
+                                secondaryText = secondaryText
+                            )
+
+                            FinanceMetric(
+                                title = "Комиссия $rate%",
+                                value = formatFinanceMoney(
+                                    commissionAmount
+                                ),
+                                foregroundColor = foregroundColor,
+                                secondaryText = secondaryText
+                            )
+
+                            FinanceMetric(
+                                title = "Вам начислено",
+                                value = formatFinanceMoney(
+                                    earningAmount
+                                ),
+                                valueColor = FinanceTeal,
+                                foregroundColor = foregroundColor,
+                                secondaryText = secondaryText
+                            )
+
+                            if (debtChange > 0) {
+                                FinanceMetric(
+                                    title = "Увеличение долга",
+                                    value = formatFinanceMoney(
+                                        debtChange
+                                    ),
+                                    valueColor = Color(0xFFE59A36),
+                                    foregroundColor = foregroundColor,
+                                    secondaryText = secondaryText
+                                )
+                            }
+                        }
+
+                        else -> {
+                            if (debtChange != 0L) {
+                                FinanceMetric(
+                                    title = if (debtChange > 0) {
+                                        "Увеличение долга"
+                                    } else {
+                                        "Уменьшение долга"
+                                    },
+                                    value = formatFinanceMoney(
+                                        kotlin.math.abs(debtChange)
+                                    ),
+                                    valueColor = if (debtChange > 0) {
+                                        Color(0xFFE59A36)
+                                    } else {
+                                        FinanceTeal
+                                    },
+                                    foregroundColor = foregroundColor,
+                                    secondaryText = secondaryText
+                                )
+                            }
+                        }
                     }
                 }
 
