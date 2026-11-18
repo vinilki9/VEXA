@@ -1,4 +1,3 @@
-
 import uuid
 
 from datetime import datetime
@@ -42,17 +41,17 @@ class DriverBranchTransfer(Base):
             name="driver_branch_transfers_different_branches",
         ),
         Index(
-            "ix_driver_branch_transfers_driver_created",
+            "ix_driver_branch_transfers_driver_user_id_created_at",
             "driver_user_id",
             "created_at",
         ),
         Index(
-            "ix_driver_branch_transfers_from_city_created",
+            "ix_driver_branch_transfers_from_city_id_created_at",
             "from_city_id",
             "created_at",
         ),
         Index(
-            "ix_driver_branch_transfers_to_city_created",
+            "ix_driver_branch_transfers_to_city_id_created_at",
             "to_city_id",
             "created_at",
         ),
