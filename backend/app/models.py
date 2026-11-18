@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -1020,6 +1021,7 @@ class TariffChangeHistory(Base):
         index=True,
     )
 
+
 # ============================================================
 # DYNAMIC PRICING SETTINGS
 # Настройки динамического коэффициента по городу и филиалу
@@ -1403,7 +1405,7 @@ class DriverFinanceTransaction(Base):
         nullable=False,
     )
 
-    debt_change_kopecks: Mapped[int] = mapped_column(
+    balance_change_kopecks: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         default=0,
@@ -1418,4 +1420,375 @@ class DriverFinanceTransaction(Base):
         DateTime(timezone=True),
         default=now_utc,
         nullable=False,
+    )
+
+
+# ============================================================
+# DRIVER WALLETS
+# Баланс водителя. Отрицательное значение означает долг перед VEXA.
+# ============================================================
+
+class DriverWallet(Base):
+    __tablename__ = "driver_wallets"
+
+    __table_args__ = (
+        CheckConstraint(
+            "reserved_kopecks >= 0",
+            name="driver_wallet_reserved_nonnegative",
+        ),
+        CheckConstraint(
+            "reserved_kopecks = 0 OR reserved_kopecks <= balance_kopecks",
+            name="driver_wallet_reserved_lte_balance",
+        ),
+        Index(
+            "ix_driver_wallets_city_branch",
+            "city_id",
+            "branch_id",
+        ),
+    )
+
+    driver_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "driver_profiles.user_id",
+            ondelete="RESTRICT",
+        ),
+        primary_key=True,
+    )
+
+    city_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("cities.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("branches.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+
+    balance_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    reserved_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        onupdate=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# DRIVER WALLET TRANSACTIONS
+# Неизменяемый журнал изменения баланса и резерва
+# ============================================================
+
+class DriverWalletTransaction(Base):
+    __tablename__ = "driver_wallet_transactions"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "driver_user_id",
+            "idempotency_key",
+            name="uq_driver_wallet_transaction_idempotency",
+        ),
+        CheckConstraint(
+            "reserved_after_kopecks >= 0",
+            name="driver_wallet_tx_reserved_after_nonnegative",
+        ),
+        Index(
+            "ix_driver_wallet_tx_driver_created",
+            "driver_user_id",
+            "created_at",
+        ),
+        Index(
+            "ix_driver_wallet_tx_order",
+            "order_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    driver_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "driver_wallets.driver_user_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("orders.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+
+    transaction_type: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+    )
+
+    payment_method: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+
+    balance_change_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    reserved_change_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    balance_after_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    reserved_after_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    idempotency_key: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# DRIVER PAYOUT METHODS
+# Токенизированные реквизиты для выплат: карта или СБП
+# Полные платёжные реквизиты здесь не хранятся.
+# ============================================================
+
+class DriverPayoutMethod(Base):
+    __tablename__ = "driver_payout_methods"
+
+    __table_args__ = (
+        CheckConstraint(
+            "method_type IN ('card', 'sbp')",
+            name="driver_payout_method_type_valid",
+        ),
+        Index(
+            "ix_driver_payout_methods_driver_active",
+            "driver_user_id",
+            "is_active",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    driver_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "driver_profiles.user_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    method_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    provider: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+    )
+
+    provider_method_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    masked_details: Mapped[str] = mapped_column(
+        String(120),
+        nullable=False,
+    )
+
+    display_label: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+    )
+
+    is_default: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        onupdate=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# DRIVER PAYOUT REQUESTS
+# Заявки водителей на автоматический вывод средств
+# ============================================================
+
+class DriverPayoutRequest(Base):
+    __tablename__ = "driver_payout_requests"
+
+    __table_args__ = (
+        CheckConstraint(
+            "amount_kopecks >= 1000",
+            name="driver_payout_amount_minimum",
+        ),
+        CheckConstraint(
+            "status IN "
+            "('pending', 'processing', 'completed', 'rejected', 'failed')",
+            name="driver_payout_status_valid",
+        ),
+        UniqueConstraint(
+            "provider",
+            "provider_payout_id",
+            name="uq_driver_payout_provider_reference",
+        ),
+        Index(
+            "ix_driver_payout_driver_created",
+            "driver_user_id",
+            "created_at",
+        ),
+        Index(
+            "ix_driver_payout_status_created",
+            "status",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    driver_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "driver_profiles.user_id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    payout_method_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "driver_payout_methods.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    amount_kopecks: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="pending",
+        index=True,
+    )
+
+    provider: Mapped[str | None] = mapped_column(
+        String(80),
+        nullable=True,
+    )
+
+    provider_payout_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    failure_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    idempotency_key: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        unique=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
+
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
