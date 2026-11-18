@@ -65,6 +65,7 @@ type FinanceHistoryResponse = {
 type Props = {
   token: string;
   cityCode: string;
+  onOpenOrder?: (orderId: string) => void;
 };
 
 const API_BASE = 'https://109.120.184.20';
@@ -122,8 +123,10 @@ function transactionTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     trip_commission: 'Комиссия за поездку',
     commission: 'Комиссия за поездку',
+    commission_debit: 'Списание комиссии VEXA',
     completed_trip: 'Завершение поездки',
     electronic_payment: 'Электронное зачисление',
+    electronic_earning_credit: 'Зачисление заработка после комиссии',
     payout: 'Вывод средств',
     withdrawal: 'Вывод средств',
     adjustment: 'Корректировка баланса',
@@ -174,6 +177,7 @@ async function financeRequest(
 export default function DriverFinancePanel({
   token,
   cityCode,
+  onOpenOrder,
 }: Props) {
   const [drivers, setDrivers] = useState<FinanceDriver[]>([]);
   const [loading, setLoading] = useState(false);
@@ -674,24 +678,37 @@ export default function DriverFinancePanel({
                                     </span>
                                   )}
 
-                                  {transaction.order_public_number && (
+                                  {transaction.order_id ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => onOpenOrder?.(transaction.order_id!)}
+                                      disabled={!onOpenOrder}
+                                      style={{
+                                        justifySelf: 'start',
+                                        border: 0,
+                                        padding: 0,
+                                        background: 'transparent',
+                                        color: onOpenOrder ? '#087e70' : '#526174',
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        textDecoration: onOpenOrder ? 'underline' : 'none',
+                                        textUnderlineOffset: 3,
+                                        cursor: onOpenOrder ? 'pointer' : 'default',
+                                      }}
+                                      title={onOpenOrder ? 'Открыть карточку заказа' : undefined}
+                                    >
+                                      {transaction.order_public_number
+                                        ? `Заказ №${transaction.order_public_number}`
+                                        : `Открыть заказ ${transaction.order_id}`}
+                                    </button>
+                                  ) : transaction.order_public_number ? (
                                     <b style={{
                                       color: '#526174',
                                       fontSize: 11,
                                     }}>
                                       Заказ №{transaction.order_public_number}
                                     </b>
-                                  )}
-
-                                  {!transaction.order_public_number &&
-                                    transaction.order_id && (
-                                      <span style={{
-                                        color: '#8994a3',
-                                        fontSize: 10,
-                                      }}>
-                                        ID заказа: {transaction.order_id}
-                                      </span>
-                                    )}
+                                  ) : null}
                                 </div>
                               );
                             })}
