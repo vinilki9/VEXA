@@ -476,6 +476,82 @@ def create_next_driver_offer(
     }
 
 
+def process_expired_driver_offers(
+    db: Session,
+    limit: int = 100,
+) -> int:
+    """
+    Обрабатывает просроченные предложения.
+
+    Заказ блокируется перед изменением предложения, чтобы
+    обработчик не конкурировал с принятием заказа водителем
+    или ручным назначением диспетчера.
+    """
+    now = datetime.now(timezone.utc)
+
+    expired_order_ids = db.scalars(
+        select(DriverOrderOffer.order_id)
+        .where(
+            DriverOrderOffer.status == "pending",
+            DriverOrderOffer.expires_at <= now,
+        )
+        .order_by(DriverOrderOffer.expires_at)
+        .limit(limit)
+    ).all()
+
+    processed_orders = 0
+
+    for order_id in dict.fromkeys(expired_order_ids):
+        order = db.scalar(
+            select(Order)
+            .where(Order.id == order_id)
+            .with_for_update()
+        )
+
+        if order is None:
+            continue
+
+        if order.status != "accepted" or order.driver_user_id is not None:
+            stale_offers = db.scalars(
+                select(DriverOrderOffer)
+                .where(
+                    DriverOrderOffer.order_id == order.id,
+                    DriverOrderOffer.status == "pending",
+                )
+                .with_for_update()
+            ).all()
+
+            for offer in stale_offers:
+                offer.status = "cancelled"
+                offer.responded_at = now
+
+            db.commit()
+            processed_orders += 1
+            continue
+
+        try:
+            create_next_driver_offer(
+                db=db,
+                order=order,
+            )
+            processed_orders += 1
+        except HTTPException as exc:
+            if (
+                exc.status_code == 409
+                and exc.detail == NO_AVAILABLE_DRIVERS_MESSAGE
+            ):
+                # Истёкшее предложение уже сохранено как expired.
+                # Заказ остаётся принятым и ждёт диспетчера.
+                processed_orders += 1
+                continue
+
+            db.rollback()
+            raise
+
+
+    return processed_orders
+
+
 def save_driver_assignment(
     db: Session,
     order: Order,
