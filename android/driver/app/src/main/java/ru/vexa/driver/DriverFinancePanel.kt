@@ -1,6 +1,7 @@
 
 package ru.vexa.driver
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -17,10 +19,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import kotlinx.coroutines.launch
 
 private val FinanceTeal = Color(0xFF20C6B7)
 private val FinanceMuted = Color(0xFF64748B)
@@ -57,6 +62,25 @@ private fun paymentMethodLabel(method: String): String {
     }
 }
 
+private fun walletTransactionLabel(type: String): String {
+    return when (type) {
+        "commission_debit" -> "Комиссия VEXA"
+        "electronic_earning_credit" -> "Зачисление за поездку"
+        "payout_reserve" -> "Резервирование выплаты"
+        "payout_release" -> "Возврат резерва выплаты"
+        "payout_completed" -> "Выплата"
+        "manual_adjustment" -> "Корректировка баланса"
+        else -> "Операция по кошельку"
+    }
+}
+
+private fun formatWalletDate(value: String): String {
+    if (value.isBlank()) return "Дата не указана"
+    return value.replace("T", " ")
+        .removeSuffix("Z")
+        .take(16)
+}
+
 @Composable
 fun DriverFinancePanel(
     dark: Boolean,
@@ -70,6 +94,20 @@ fun DriverFinancePanel(
     var transactions by remember {
         mutableStateOf(listOf<JSONObject>())
     }
+
+    var selectedOrder by remember {
+        mutableStateOf<JSONObject?>(null)
+    }
+
+    var orderLoading by remember {
+        mutableStateOf(false)
+    }
+
+    var orderError by remember {
+        mutableStateOf("")
+    }
+
+    val coroutineScope = rememberCoroutineScope()
 
     var loading by remember {
         mutableStateOf(false)
@@ -93,8 +131,8 @@ fun DriverFinancePanel(
                     DriverApiClient.getFinanceSummary()
 
                 val history =
-                    DriverApiClient.getFinanceTransactions(
-                        limit = 20,
+                    DriverApiClient.getWalletTransactions(
+                        limit = 50,
                         offset = 0
                     )
 
@@ -302,7 +340,7 @@ fun DriverFinancePanel(
             )
 
             Text(
-                text = "История операций",
+                text = "История кошелька",
                 color = foregroundColor,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
@@ -310,163 +348,87 @@ fun DriverFinancePanel(
 
             if (transactions.isEmpty() && !loading) {
                 Text(
-                    text = "Финансовых операций пока нет",
+                    text = "Операций по кошельку пока нет",
                     color = secondaryText,
                     fontSize = 12.sp
                 )
             }
 
             transactions.forEach { transaction ->
-                val transactionType = transaction.optString(
-                    "transaction_type",
-                    ""
-                )
-
-                val description = transaction.optString(
-                    "description",
-                    "Финансовая операция"
-                )
-
-                val payment = paymentMethodLabel(
-                    transaction.optString("payment_method", "")
-                )
-
-                val fareAmount = transaction.optLong(
-                    "fare_kopecks"
-                )
-
-                val commissionAmount = transaction.optLong(
-                    "commission_kopecks"
-                )
-
-                val earningAmount = transaction.optLong(
-                    "driver_earning_kopecks"
-                )
-
-                val debtChange = transaction.optLong(
-                    "debt_change_kopecks"
-                )
-
-                val rate = transaction.optString(
-                    "commission_rate_percent",
-                    "—"
-                )
-
-                val date = transaction.optString(
-                    "created_at",
-                    ""
-                ).replace("T", " ").take(16)
+                val transactionType = transaction.optString("transaction_type", "")
+                val orderId = transaction.optString("order_id", "")
+                val orderNumber = transaction.optString("order_public_number", "")
+                val change = transaction.optLong("balance_change_kopecks")
+                val balanceAfter = transaction.optLong("balance_after_kopecks")
+                val paymentMethod = transaction.optString("payment_method", "")
+                val date = formatWalletDate(transaction.optString("created_at", ""))
 
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = description,
+                        text = walletTransactionLabel(transactionType),
                         color = foregroundColor,
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold
                     )
 
                     Text(
-                        text = "$date · $payment",
+                        text = buildString {
+                            append(date)
+                            if (paymentMethod.isNotBlank()) {
+                                append(" · ")
+                                append(paymentMethodLabel(paymentMethod))
+                            }
+                        },
                         color = secondaryText,
                         fontSize = 10.sp
                     )
 
-                    when (transactionType) {
-                        "debt_repayment" -> {
-                            val repaymentAmount =
-                                kotlin.math.abs(debtChange)
-
-                            FinanceMetric(
-                                title = "Погашено",
-                                value = formatFinanceMoney(
-                                    repaymentAmount
-                                ),
-                                valueColor = FinanceTeal,
-                                foregroundColor = foregroundColor,
-                                secondaryText = secondaryText,
-                                large = true
-                            )
-
-                            FinanceMetric(
-                                title = "Изменение задолженности",
-                                value = "-${formatFinanceMoney(repaymentAmount)}",
-                                valueColor = FinanceTeal,
-                                foregroundColor = foregroundColor,
-                                secondaryText = secondaryText
-                            )
-
-                            Text(
-                                text = "Задолженность уменьшена",
-                                color = FinanceTeal,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        "completed_trip" -> {
-                            FinanceMetric(
-                                title = "Стоимость",
-                                value = formatFinanceMoney(fareAmount),
-                                foregroundColor = foregroundColor,
-                                secondaryText = secondaryText
-                            )
-
-                            FinanceMetric(
-                                title = "Комиссия $rate%",
-                                value = formatFinanceMoney(
-                                    commissionAmount
-                                ),
-                                foregroundColor = foregroundColor,
-                                secondaryText = secondaryText
-                            )
-
-                            FinanceMetric(
-                                title = "Вам начислено",
-                                value = formatFinanceMoney(
-                                    earningAmount
-                                ),
-                                valueColor = FinanceTeal,
-                                foregroundColor = foregroundColor,
-                                secondaryText = secondaryText
-                            )
-
-                            if (debtChange > 0) {
-                                FinanceMetric(
-                                    title = "Увеличение долга",
-                                    value = formatFinanceMoney(
-                                        debtChange
-                                    ),
-                                    valueColor = Color(0xFFE59A36),
-                                    foregroundColor = foregroundColor,
-                                    secondaryText = secondaryText
-                                )
-                            }
-                        }
-
-                        else -> {
-                            if (debtChange != 0L) {
-                                FinanceMetric(
-                                    title = if (debtChange > 0) {
-                                        "Увеличение долга"
-                                    } else {
-                                        "Уменьшение долга"
-                                    },
-                                    value = formatFinanceMoney(
-                                        kotlin.math.abs(debtChange)
-                                    ),
-                                    valueColor = if (debtChange > 0) {
-                                        Color(0xFFE59A36)
-                                    } else {
-                                        FinanceTeal
-                                    },
-                                    foregroundColor = foregroundColor,
-                                    secondaryText = secondaryText
-                                )
-                            }
-                        }
+                    if (orderNumber.isNotBlank() && orderId.isNotBlank()) {
+                        Text(
+                            text = "Заказ №$orderNumber",
+                            modifier = Modifier.clickable {
+                                if (!orderLoading) {
+                                    orderLoading = true
+                                    orderError = ""
+                                    selectedOrder = null
+                                    coroutineScope.launch {
+                                        try {
+                                            selectedOrder = withContext(Dispatchers.IO) {
+                                                DriverApiClient.getOrder(orderId)
+                                            }
+                                        } catch (exception: Exception) {
+                                            orderError = exception.message
+                                                ?: "Не удалось загрузить заказ"
+                                        } finally {
+                                            orderLoading = false
+                                        }
+                                    }
+                                }
+                            },
+                            color = FinanceTeal,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
+
+                    FinanceMetric(
+                        title = if (change >= 0) "Зачислено" else "Списано",
+                        value = formatFinanceMoney(kotlin.math.abs(change)),
+                        valueColor = if (change >= 0) FinanceTeal else Color(0xFFE59A36),
+                        foregroundColor = foregroundColor,
+                        secondaryText = secondaryText,
+                        large = true
+                    )
+
+                    FinanceMetric(
+                        title = "Баланс после операции",
+                        value = formatFinanceMoney(balanceAfter),
+                        foregroundColor = foregroundColor,
+                        secondaryText = secondaryText
+                    )
                 }
 
                 HorizontalDivider(
@@ -475,11 +437,100 @@ fun DriverFinancePanel(
             }
 
             Text(
-                text = "Данные загружаются с сервера VEXA. " +
-                    "История показывает последние 20 операций.",
+                text = "Показаны последние 50 операций. Причины изменения баланса не отображаются.",
                 color = secondaryText,
                 fontSize = 10.sp
             )
+
+            if (orderLoading || orderError.isNotBlank() || selectedOrder != null) {
+                AlertDialog(
+                    onDismissRequest = {
+                        if (!orderLoading) {
+                            selectedOrder = null
+                            orderError = ""
+                        }
+                    },
+                    title = {
+                        Text("Карточка поездки", fontWeight = FontWeight.Bold)
+                    },
+                    text = {
+                        when {
+                            orderLoading -> CircularProgressIndicator(color = FinanceTeal)
+                            orderError.isNotBlank() -> Text(
+                                text = orderError,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            selectedOrder != null -> {
+                                val order = selectedOrder!!
+                                val pickup = order.optJSONObject("pickup")
+                                    ?.optString("address").orEmpty()
+                                val destination = order.optJSONObject("destination")
+                                    ?.optString("address").orEmpty()
+                                val vehicle = order.optJSONObject("vehicle")
+                                val vehicleText = if (vehicle != null) {
+                                    listOf(
+                                        vehicle.optString("make"),
+                                        vehicle.optString("model"),
+                                        vehicle.optString("color")
+                                    ).filter { it.isNotBlank() }.joinToString(" ")
+                                } else ""
+
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Заказ №${order.optString("public_number", "—")}",
+                                        color = foregroundColor,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = "Статус: ${order.optString("status", "—")}",
+                                        color = foregroundColor,
+                                        fontSize = 12.sp
+                                    )
+                                    if (pickup.isNotBlank()) {
+                                        Text("Откуда: $pickup", color = foregroundColor, fontSize = 12.sp)
+                                    }
+                                    if (destination.isNotBlank()) {
+                                        Text("Куда: $destination", color = foregroundColor, fontSize = 12.sp)
+                                    }
+                                    Text(
+                                        text = "Стоимость: ${formatFinanceMoney(order.optLong("price_kopecks"))}",
+                                        color = foregroundColor,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (vehicleText.isNotBlank()) {
+                                        Text("Автомобиль: $vehicleText", color = foregroundColor, fontSize = 12.sp)
+                                    }
+                                    vehicle?.optString("license_plate")
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?.let { plate ->
+                                            Text(
+                                                text = "Госномер: $plate",
+                                                color = foregroundColor,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                selectedOrder = null
+                                orderError = ""
+                            },
+                            enabled = !orderLoading
+                        ) {
+                            Text("Закрыть")
+                        }
+                    }
+                )
+            }
         }
     }
 }
