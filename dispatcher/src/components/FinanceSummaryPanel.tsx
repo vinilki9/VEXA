@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Wallet,
@@ -10,6 +11,7 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   Download,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 type MoneyValue = {
@@ -38,14 +40,28 @@ type FinanceSummary = {
   };
   cash_payments: {
     trip_fare_turnover: MoneyValue;
+    cash_trip_fare_turnover: MoneyValue;
     commission_debt_accrued: MoneyValue;
+  };
+  driver_transfer_payments: {
+    trip_fare_turnover: MoneyValue;
   };
   debt_repayments: {
     total: MoneyValue;
+    automatic_electronic_credit: MoneyValue;
     cash: MoneyValue;
     driver_transfer: MoneyValue;
   };
   current_driver_debt: MoneyValue;
+  wallet_summary: {
+    balance: MoneyValue;
+    positive_balance: MoneyValue;
+    reserved: MoneyValue;
+    available: MoneyValue;
+    negative_balance_debt: MoneyValue;
+    drivers_with_negative_balance: number;
+    drivers_count: number;
+  };
   accounting_note: string;
 };
 
@@ -456,6 +472,7 @@ export default function FinanceSummaryPanel({
                 aria-label="Начало периода экспорта"
               />
             </label>
+
             <label style={{ ...mutedStyle, display: 'grid', gap: 4 }}>
               По дату
               <input
@@ -468,6 +485,7 @@ export default function FinanceSummaryPanel({
                 aria-label="Окончание периода экспорта"
               />
             </label>
+
             <button
               type="button"
               onClick={handleExport}
@@ -557,16 +575,24 @@ export default function FinanceSummaryPanel({
 
             <SummaryCard
               title="Текущий долг водителей"
-              value={money(summary.current_driver_debt)}
-              description="Общая непогашенная задолженность за всё время"
+              value={money(summary.wallet_summary.negative_balance_debt)}
+              description={`${summary.wallet_summary.drivers_with_negative_balance} водителей с отрицательным балансом`}
               icon={<Wallet size={18} />}
               valueColor="#b54708"
             />
 
             <SummaryCard
-              title="Погашено задолженности"
-              value={money(summary.debt_repayments.total)}
-              description="Зарегистрированные погашения за выбранный период"
+              title="Доступно на кошельках"
+              value={money(summary.wallet_summary.available)}
+              description={`Зарезервировано: ${money(summary.wallet_summary.reserved)}`}
+              icon={<Wallet size={18} />}
+              valueColor="#087e70"
+            />
+
+            <SummaryCard
+              title="Погашено автоматически"
+              value={money(summary.debt_repayments.automatic_electronic_credit)}
+              description="Часть электронных начислений, направленная на покрытие долга"
               icon={<CheckCircle2 size={18} />}
               valueColor="#087e70"
             />
@@ -622,8 +648,8 @@ export default function FinanceSummaryPanel({
                 lineHeight: 1.5,
                 margin: '11px 0 0',
               }}>
-                Карта, СБП и перевод водителю. Показан учётный оборот,
-                а не подтверждённое банковское зачисление.
+                Банковские карты и СБП. Переводы пассажиров непосредственно водителям
+                в эту категорию не входят.
               </p>
             </div>
 
@@ -641,17 +667,28 @@ export default function FinanceSummaryPanel({
                   color: '#172033',
                   fontSize: 14,
                 }}>
-                  Наличные платежи
+                  Оплата водителю
                 </h3>
               </div>
 
               <BreakdownRow
-                label="Оборот поездок"
+                label="Общий оборот"
                 value={money(summary.cash_payments.trip_fare_turnover)}
+                strong
               />
 
               <BreakdownRow
-                label="Начислено в долг водителям"
+                label="Наличные"
+                value={money(summary.cash_payments.cash_trip_fare_turnover)}
+              />
+
+              <BreakdownRow
+                label="Перевод водителю"
+                value={money(summary.driver_transfer_payments.trip_fare_turnover)}
+              />
+
+              <BreakdownRow
+                label="Комиссия, начисленная в долг"
                 value={money(
                   summary.cash_payments.commission_debt_accrued,
                 )}
@@ -663,8 +700,9 @@ export default function FinanceSummaryPanel({
                 lineHeight: 1.5,
                 margin: '11px 0 0',
               }}>
-                Комиссия с наличных поездок формирует задолженность
-                водителя перед сервисом.
+                Пассажир рассчитывается непосредственно с водителем.
+                Комиссия VEXA списывается с кошелька водителя.
+                При недостатке средств баланс становится отрицательным.
               </p>
             </div>
 
@@ -675,7 +713,7 @@ export default function FinanceSummaryPanel({
                 gap: 9,
                 marginBottom: 7,
               }}>
-                <Wallet size={18} color="#15998d" />
+                <ArrowRightLeft size={18} color="#15998d" />
 
                 <h3 style={{
                   margin: 0,
@@ -693,14 +731,76 @@ export default function FinanceSummaryPanel({
               />
 
               <BreakdownRow
-                label="Наличными"
-                value={money(summary.debt_repayments.cash)}
+                label="Автоматически электронными начислениями"
+                value={money(
+                  summary.debt_repayments.automatic_electronic_credit,
+                )}
+              />
+
+              <p style={{
+                ...mutedStyle,
+                lineHeight: 1.5,
+                margin: '11px 0 0',
+              }}>
+                Электронные начисления сначала покрывают отрицательный
+                баланс водителя. Наличные и переводы водителю не считаются
+                отдельным погашением долга.
+              </p>
+            </div>
+
+            <div style={cardStyle}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 9,
+                marginBottom: 7,
+              }}>
+                <Wallet size={18} color="#15998d" />
+
+                <h3 style={{
+                  margin: 0,
+                  color: '#172033',
+                  fontSize: 14,
+                }}>
+                  Состояние кошельков
+                </h3>
+              </div>
+
+              <BreakdownRow
+                label="Суммарный баланс"
+                value={money(summary.wallet_summary.balance)}
+                strong
               />
 
               <BreakdownRow
-                label="Переводом водителю"
-                value={money(summary.debt_repayments.driver_transfer)}
+                label="Положительные балансы"
+                value={money(summary.wallet_summary.positive_balance)}
               />
+
+              <BreakdownRow
+                label="Зарезервировано"
+                value={money(summary.wallet_summary.reserved)}
+              />
+
+              <BreakdownRow
+                label="Доступно"
+                value={money(summary.wallet_summary.available)}
+                strong
+              />
+
+              <BreakdownRow
+                label="Водителей с кошельками"
+                value={String(summary.wallet_summary.drivers_count)}
+              />
+
+              <p style={{
+                ...mutedStyle,
+                lineHeight: 1.5,
+                margin: '11px 0 0',
+              }}>
+                Отрицательные балансы учитываются отдельно как задолженность
+                водителей перед VEXA.
+              </p>
             </div>
           </div>
 
