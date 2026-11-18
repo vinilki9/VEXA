@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
@@ -15,6 +14,15 @@ const API_BASE = 'https://109.120.184.20';
 const CITY_CODE = 'obolensk';
 const TOKEN_KEY = 'vexa_dispatch_token';
 
+type OrderTimelineEvent = {
+  event_id: string;
+  event_type: string;
+  occurred_at: string;
+  title: string;
+  description?: string | null;
+  actor?: string | null;
+};
+
 type VexaOrder = {
   id: string;
   public_number: string;
@@ -28,6 +36,7 @@ type VexaOrder = {
   price_rub: number;
   created_at: string;
   driver_user_id?: string | null;
+  timeline?: OrderTimelineEvent[];
 };
 
 type DispatcherProfile = {
@@ -388,6 +397,7 @@ function App() {
     if (!savedToken) return;
 
     setToken(savedToken);
+  }, []);
 
     Promise.all([
       loadProfile(savedToken),
@@ -788,6 +798,7 @@ function App() {
                 <div>
                   <h2 style={panelTitleStyle}>Водители на линии</h2>
                   <p style={mutedTextStyle}>
+
                     Последние сохранённые сведения о водителях · Оболенск
                   </p>
                 </div>
@@ -1188,6 +1199,7 @@ function App() {
                     marginTop: 5,
                   }}
                 >
+
                   {getStatusLabel(selectedOrder.status)}
                 </span>
               </div>
@@ -1251,6 +1263,115 @@ function App() {
                   </b>
                 </div>
               </div>
+
+              <div style={modalDividerStyle} />
+
+              <section style={{ display: 'grid', gap: 12 }}>
+                <div>
+                  <span style={orderDetailLabelStyle}>Хронология событий</span>
+                  <p style={{
+                    margin: '5px 0 0',
+                    color: '#8994a3',
+                    fontSize: 11,
+                    lineHeight: 1.5,
+                  }}>
+                    История создания заказа, изменения статусов и предложений водителям.
+                  </p>
+                </div>
+
+                {Array.isArray(selectedOrder.timeline) && selectedOrder.timeline.length > 0 ? (
+                  <div style={{ display: 'grid', gap: 0 }}>
+                    {selectedOrder.timeline.map((event, index) => (
+                      <div
+                        key={event.event_id}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '14px minmax(0, 1fr)',
+                          columnGap: 10,
+                        }}
+                      >
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                        }}>
+                          <span style={{
+                            width: 9,
+                            height: 9,
+                            marginTop: 4,
+                            borderRadius: '50%',
+                            background: event.event_type === 'order_status'
+                              ? '#0f9f91'
+                              : event.event_type === 'order_created'
+                                ? '#64748b'
+                                : '#3b82f6',
+                            flexShrink: 0,
+                          }} />
+                          {index < selectedOrder.timeline!.length - 1 && (
+                            <span style={{
+                              width: 1,
+                              flex: 1,
+                              minHeight: 28,
+                              background: '#e2e8f0',
+                              marginTop: 4,
+                            }} />
+                          )}
+                        </div>
+
+                        <div style={{
+                          display: 'grid',
+                          gap: 3,
+                          paddingBottom: index < selectedOrder.timeline!.length - 1 ? 15 : 0,
+                          minWidth: 0,
+                        }}>
+                          <b style={{
+                            color: '#172033',
+                            fontSize: 12,
+                            lineHeight: 1.4,
+                          }}>
+                            {event.title}
+                          </b>
+                          <span style={{
+                            color: '#8994a3',
+                            fontSize: 10,
+                          }}>
+                            {formatDate(event.occurred_at)}
+                          </span>
+                          {event.description && (
+                            <span style={{
+                              color: '#526174',
+                              fontSize: 11,
+                              lineHeight: 1.5,
+                              overflowWrap: 'anywhere',
+                            }}>
+                              {event.description}
+                            </span>
+                          )}
+                          {event.actor && (
+                            <span style={{
+                              color: '#64748b',
+                              fontSize: 10,
+                            }}>
+                              Участник: {event.actor}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{
+                    margin: 0,
+                    padding: '12px',
+                    borderRadius: 10,
+                    background: '#f8fafc',
+                    color: '#8994a3',
+                    fontSize: 11,
+                  }}>
+                    События пока не записаны.
+                  </p>
+                )}
+              </section>
 
               <div style={modalDividerStyle} />
 
@@ -1479,6 +1600,7 @@ const successStyle: React.CSSProperties = {
   background: '#e8f8f4',
   borderRadius: 9,
   padding: 12,
+
   fontSize: 11,
   marginBottom: 15,
 };
