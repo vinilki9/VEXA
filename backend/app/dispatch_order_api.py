@@ -104,6 +104,202 @@ def ensure_order_access(
             )
 
 
+def build_order_timeline(
+    db: Session,
+    order: Order,
+) -> list[dict]:
+    """
+    Собирает хронологию заказа из существующих журналов.
+    Использует только сохранённые даты и статусы.
+    """
+    status_labels = {
+        "new": "Новый",
+        "accepted": "Принят диспетчером",
+        "assigned": "Водитель назначен",
+        "arrived": "Водитель прибыл",
+        "in_progress": "Поездка началась",
+        "completed": "Поездка завершена",
+        "cancelled": "Заказ отменён",
+    }
+    offer_status_labels = {
+        "accepted": "Водитель принял предложение",
+        "rejected": "Водитель отказался от предложения",
+        "expired": "Время ожидания ответа истекло",
+        "cancelled": "Предложение отменено",
+    }
+
+    history_rows = db.scalars(
+        select(OrderStatusHistory)
+        .where(OrderStatusHistory.order_id == order.id)
+        .order_by(
+            OrderStatusHistory.created_at.asc(),
+            OrderStatusHistory.id.asc(),
+        )
+    ).all()
+    offer_rows = db.scalars(
+        select(DriverOrderOffer)
+        .where(DriverOrderOffer.order_id == order.id)
+        .order_by(
+            DriverOrderOffer.offered_at.asc(),
+            DriverOrderOffer.created_at.asc(),
+            DriverOrderOffer.attempt_number.asc(),
+        )
+    ).all()
+
+    user_ids = {
+        row.changed_by_user_id
+        for row in history_rows
+        if row.changed_by_user_id is not None
+    }
+    user_ids.update(
+        row.driver_user_id
+        for row in offer_rows
+        if row.driver_user_id is not None
+    )
+
+    users_by_id = {}
+    if user_ids:
+        users = db.scalars(
+            select(User).where(User.id.in_(user_ids))
+        ).all()
+        users_by_id = {user.id: user for user in users}
+
+    vehicle_ids = {
+        row.vehicle_id
+        for row in offer_rows
+        if row.vehicle_id is not None
+    }
+    vehicles_by_id = {}
+    if vehicle_ids:
+        vehicles = db.scalars(
+            select(Vehicle).where(Vehicle.id.in_(vehicle_ids))
+        ).all()
+        vehicles_by_id = {
+            vehicle.id: vehicle
+            for vehicle in vehicles
+        }
+
+    events = [
+        {
+            "event_id": f"created:{order.id}",
+            "event_type": "order_created",
+            "occurred_at": order.created_at,
+            "title": "Заказ создан",
+            "description": "Клиент оформил заказ",
+            "actor": None,
+        }
+    ]
+
+    for row in history_rows:
+        actor = users_by_id.get(row.changed_by_user_id)
+        old_label = status_labels.get(
+            row.old_status,
+            row.old_status or "—",
+        )
+        new_label = status_labels.get(
+            row.new_status,
+            row.new_status,
+        )
+        events.append(
+            {
+                "event_id": f"status:{row.id}",
+                "event_type": "order_status",
+                "occurred_at": row.created_at,
+                "title": new_label,
+                "description": (
+                    f"Статус изменён: {old_label} → {new_label}"
+                ),
+                "actor": (
+                    actor.username
+                    if actor is not None
+                    else None
+                ),
+            }
+        )
+
+    for offer in offer_rows:
+        driver = users_by_id.get(offer.driver_user_id)
+        vehicle = vehicles_by_id.get(offer.vehicle_id)
+        driver_name = (
+            driver.username
+            if driver is not None and driver.username
+            else "Водитель"
+        )
+
+        vehicle_description = None
+        if vehicle is not None:
+            vehicle_description = " ".join(
+                part
+                for part in (
+                    vehicle.make,
+                    vehicle.model,
+                    vehicle.color,
+                )
+                if part
+            )
+            if vehicle.license_plate:
+                vehicle_description = (
+                    f"{vehicle_description} · {vehicle.license_plate}"
+                    if vehicle_description
+                    else vehicle.license_plate
+                )
+
+        offer_details = [
+            f"Попытка №{offer.attempt_number}",
+            f"Водитель: {driver_name}",
+        ]
+        if vehicle_description:
+            offer_details.append(
+                f"Автомобиль: {vehicle_description}"
+            )
+        if offer.distance_meters is not None:
+            offer_details.append(
+                f"Расстояние до подачи: {offer.distance_meters} м"
+            )
+
+        events.append(
+            {
+                "event_id": f"offer:{offer.id}:sent",
+                "event_type": "driver_offer_sent",
+                "occurred_at": offer.offered_at,
+                "title": "Заказ предложен водителю",
+                "description": " · ".join(offer_details),
+                "actor": None,
+            }
+        )
+
+        if offer.status == "pending" or offer.responded_at is None:
+            continue
+
+        events.append(
+            {
+                "event_id": f"offer:{offer.id}:response",
+                "event_type": f"driver_offer_{offer.status}",
+                "occurred_at": offer.responded_at,
+                "title": offer_status_labels.get(
+                    offer.status,
+                    "Статус предложения изменён",
+                ),
+                "description": (
+                    f"Попытка №{offer.attempt_number} · "
+                    f"Водитель: {driver_name}"
+                ),
+                "actor": (
+                    driver_name
+                    if offer.status in ("accepted", "rejected")
+                    else None
+                ),
+            }
+        )
+
+    events.sort(
+        key=lambda event: normalize_datetime(
+            event["occurred_at"]
+        )
+    )
+    return events
+
+
 @router.get("/orders/{order_id}")
 def get_dispatch_order(
     order_id: UUID,
@@ -236,6 +432,7 @@ def get_dispatch_order(
         "comment": order.comment,
         "created_at": order.created_at,
         "updated_at": order.updated_at,
+        "timeline": build_order_timeline(db, order),
     }
 
 
