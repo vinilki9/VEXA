@@ -397,7 +397,6 @@ function App() {
     if (!savedToken) return;
 
     setToken(savedToken);
-  }, []);
 
     Promise.all([
       loadProfile(savedToken),
