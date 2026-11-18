@@ -338,6 +338,7 @@ def create_completed_trip_finance(db: Session, order: Order, driver: User, profi
     if fare_kopecks is None and order.price_rub is not None:
         fare_kopecks = order.price_rub * 100
     if fare_kopecks is None or fare_kopecks < 0:
+
         raise HTTPException(409, "Невозможно завершить поездку: стоимость заказа не указана")
     rating = Decimal(str(profile.rating))
     commission_rate = get_driver_commission_rate(rating)
@@ -710,7 +711,6 @@ def driver_payout_requests(
         "offset": offset,
     }
 
-
 @router.post("/api/v1/driver/payout-requests")
 def create_driver_payout_request(driver: User = Depends(get_current_driver), db: Session = Depends(get_db)):
     get_driver_profile(db, driver)
@@ -954,6 +954,38 @@ def driver_order_offers(
     return {
         "offers_count": len(result),
         "offers": result,
+    }
+
+
+@router.get("/api/v1/driver/orders/{order_id}")
+def driver_order_details(
+    order_id: UUID,
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    profile = get_driver_profile(db, driver)
+    order = db.scalar(
+        select(Order).where(
+            Order.id == order_id,
+            Order.driver_user_id == driver.id,
+            Order.city_id == profile.city_id,
+        )
+    )
+
+    if order is None:
+        raise HTTPException(404, "Заказ не найден")
+
+    vehicle = (
+        db.get(Vehicle, order.vehicle_id)
+        if order.vehicle_id is not None
+        else None
+    )
+
+    return {
+        "order": driver_order_response(
+            order,
+            vehicle,
+        )
     }
 
 
