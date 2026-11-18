@@ -1,4 +1,7 @@
 
+import asyncio
+import logging
+
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
@@ -9,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.models import (
     Branch,
     DispatcherProfile,
@@ -22,6 +25,7 @@ from app.models import (
     User,
     Vehicle,
 )
+from app.driver_order_offer_models import DriverOrderOffer
 from app.security import (
     create_driver_access_token,
     get_current_dispatcher,
@@ -30,7 +34,12 @@ from app.security import (
 )
 
 from app.dispatch_driver_api import router as dispatch_driver_router
-from app.dispatch_order_api import router as dispatch_order_router
+from app.dispatch_order_api import (
+    NO_AVAILABLE_DRIVERS_MESSAGE,
+    create_next_driver_offer,
+    process_expired_driver_offers,
+    router as dispatch_order_router,
+)
 
 
 router = APIRouter(tags=["Driver"])
@@ -592,8 +601,6 @@ def driver_finance_summary(
         ),
     }
 
- 
-
 
 @router.post(
     "/api/v1/dispatch/drivers/{driver_user_id}/finance/repayments"
@@ -741,7 +748,6 @@ def driver_finance_transactions(
         "offset": offset,
     }
 
- 
 
 @router.post("/api/v1/driver/online")
 def set_driver_online(
@@ -808,3 +814,502 @@ router.include_router(dispatch_driver_router)
 
 # Подключаем ручное и автоматическое назначение водителей.
 router.include_router(dispatch_order_router)
+
+
+# ============================================================
+# DRIVER ORDER OFFERS
+# ============================================================
+
+logger = logging.getLogger(__name__)
+
+DRIVER_OFFER_ACTIVE_ORDER_STATUSES = (
+    "assigned",
+    "arrived",
+    "in_progress",
+)
+
+_driver_offer_worker_task: asyncio.Task | None = None
+
+
+def _advance_after_driver_offer(
+    db: Session,
+    order_id: UUID,
+) -> dict:
+    """
+    После отказа, истечения срока или отмены предложения
+    создаёт предложение следующему подходящему водителю.
+    """
+    order = db.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .with_for_update()
+    )
+
+    if (
+        order is None
+        or order.status != "accepted"
+        or order.driver_user_id is not None
+    ):
+        return {
+            "success": True,
+            "offered": False,
+            "waiting_for_dispatcher": True,
+            "message": "Заказ больше не ожидает назначения водителя",
+        }
+
+    try:
+        return create_next_driver_offer(
+            db=db,
+            order=order,
+        )
+    except HTTPException as exc:
+        if (
+            exc.status_code == 409
+            and exc.detail == NO_AVAILABLE_DRIVERS_MESSAGE
+        ):
+            return {
+                "success": True,
+                "offered": False,
+                "waiting_for_dispatcher": True,
+                "message": (
+                    "Свободных водителей нет. "
+                    "Заказ ожидает назначения диспетчером."
+                ),
+            }
+        raise
+
+
+@router.get("/api/v1/driver/orders/offers")
+def driver_order_offers(
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    profile = get_driver_profile(db, driver)
+
+    if not profile.is_online:
+        return {
+            "offers_count": 0,
+            "offers": [],
+        }
+
+    now = datetime.now(timezone.utc)
+
+    offers = db.scalars(
+        select(DriverOrderOffer)
+        .where(
+            DriverOrderOffer.driver_user_id == driver.id,
+            DriverOrderOffer.status == "pending",
+            DriverOrderOffer.expires_at > now,
+        )
+        .order_by(
+            DriverOrderOffer.offered_at.asc(),
+            DriverOrderOffer.created_at.asc(),
+        )
+    ).all()
+
+    result = []
+
+    for offer in offers:
+        order = db.get(Order, offer.order_id)
+
+        if (
+            order is None
+            or order.status != "accepted"
+            or order.driver_user_id is not None
+            or order.city_id != profile.city_id
+        ):
+            continue
+
+        vehicle = db.get(Vehicle, offer.vehicle_id)
+
+        if (
+            vehicle is None
+            or not vehicle.is_active
+            or vehicle.driver_user_id != driver.id
+            or vehicle.city_id != profile.city_id
+        ):
+            continue
+
+        result.append(
+            {
+                "offer_id": str(offer.id),
+                "attempt_number": offer.attempt_number,
+                "response_timeout_seconds": (
+                    offer.response_timeout_seconds
+                ),
+                "offered_at": offer.offered_at,
+                "expires_at": offer.expires_at,
+                "distance_to_pickup_meters": (
+                    offer.distance_meters
+                ),
+                "order": driver_order_response(
+                    order,
+                    vehicle,
+                ),
+            }
+        )
+
+    return {
+        "offers_count": len(result),
+        "offers": result,
+    }
+
+
+@router.post(
+    "/api/v1/driver/orders/offers/{offer_id}/accept"
+)
+def accept_driver_order_offer(
+    offer_id: UUID,
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    get_driver_profile(db, driver)
+
+    # Единый порядок блокировок: сначала заказ, затем предложение.
+    offer_reference = db.scalar(
+        select(DriverOrderOffer).where(
+            DriverOrderOffer.id == offer_id,
+            DriverOrderOffer.driver_user_id == driver.id,
+        )
+    )
+
+    if offer_reference is None:
+        raise HTTPException(404, "Предложение заказа не найдено")
+
+    order = db.scalar(
+        select(Order)
+        .where(Order.id == offer_reference.order_id)
+        .with_for_update()
+    )
+
+    if order is None:
+        raise HTTPException(404, "Заказ не найден")
+
+    offer = db.scalar(
+        select(DriverOrderOffer)
+        .where(
+            DriverOrderOffer.id == offer_id,
+            DriverOrderOffer.driver_user_id == driver.id,
+        )
+        .with_for_update()
+    )
+
+    if offer is None:
+        raise HTTPException(404, "Предложение заказа не найдено")
+
+    if offer.status != "pending":
+        raise HTTPException(
+            409,
+            "Предложение больше не ожидает ответа",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    expires_at = offer.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at <= now:
+        offer.status = "expired"
+        offer.responded_at = now
+        db.commit()
+
+        next_offer = _advance_after_driver_offer(
+            db,
+            order.id,
+        )
+
+        return {
+            "success": False,
+            "expired": True,
+            "message": "Время принятия заказа истекло",
+            "next_offer": next_offer,
+        }
+
+    if (
+        order.status != "accepted"
+        or order.driver_user_id is not None
+    ):
+        offer.status = "cancelled"
+        offer.responded_at = now
+        db.commit()
+
+        return {
+            "success": False,
+            "cancelled": True,
+            "message": "Заказ уже недоступен для принятия",
+        }
+
+    locked_profile = db.scalar(
+        select(DriverProfile)
+        .where(DriverProfile.user_id == driver.id)
+        .with_for_update()
+    )
+
+    if (
+        locked_profile is None
+        or not locked_profile.is_active
+        or not locked_profile.is_online
+        or locked_profile.city_id != order.city_id
+    ):
+        offer.status = "cancelled"
+        offer.responded_at = now
+        db.commit()
+
+        next_offer = _advance_after_driver_offer(
+            db,
+            order.id,
+        )
+
+        return {
+            "success": False,
+            "cancelled": True,
+            "message": "Водитель больше не может принять заказ",
+            "next_offer": next_offer,
+        }
+
+    branch_is_eligible = (
+        locked_profile.branch_id == order.branch_id
+        or locked_profile.branch_id is None
+    )
+
+    vehicle = db.get(Vehicle, offer.vehicle_id)
+
+    if (
+        not branch_is_eligible
+        or vehicle is None
+        or not vehicle.is_active
+        or vehicle.driver_user_id != driver.id
+        or vehicle.city_id != order.city_id
+    ):
+        offer.status = "cancelled"
+        offer.responded_at = now
+        db.commit()
+
+        next_offer = _advance_after_driver_offer(
+            db,
+            order.id,
+        )
+
+        return {
+            "success": False,
+            "cancelled": True,
+            "message": "Автомобиль или водитель больше не подходят для заказа",
+            "next_offer": next_offer,
+        }
+
+    busy_order_id = db.scalar(
+        select(Order.id)
+        .where(
+            Order.driver_user_id == driver.id,
+            Order.status.in_(
+                DRIVER_OFFER_ACTIVE_ORDER_STATUSES
+            ),
+            Order.id != order.id,
+        )
+        .limit(1)
+    )
+
+    if busy_order_id is not None:
+        offer.status = "cancelled"
+        offer.responded_at = now
+        db.commit()
+
+        next_offer = _advance_after_driver_offer(
+            db,
+            order.id,
+        )
+
+        return {
+            "success": False,
+            "cancelled": True,
+            "message": "У водителя уже есть активный заказ",
+            "next_offer": next_offer,
+        }
+
+    old_status = order.status
+
+    offer.status = "accepted"
+    offer.responded_at = now
+
+    order.driver_user_id = driver.id
+    order.vehicle_id = vehicle.id
+    order.status = "assigned"
+    order.updated_at = now
+
+    db.add(
+        OrderStatusHistory(
+            order_id=order.id,
+            old_status=old_status,
+            new_status="assigned",
+            changed_by_user_id=driver.id,
+        )
+    )
+
+    other_pending_offers = db.scalars(
+        select(DriverOrderOffer)
+        .where(
+            DriverOrderOffer.order_id == order.id,
+            DriverOrderOffer.id != offer.id,
+            DriverOrderOffer.status == "pending",
+        )
+        .with_for_update()
+    ).all()
+
+    for other_offer in other_pending_offers:
+        other_offer.status = "cancelled"
+        other_offer.responded_at = now
+
+    try:
+        db.commit()
+        db.refresh(order)
+    except Exception:
+        db.rollback()
+        raise
+
+    return {
+        "success": True,
+        "accepted": True,
+        "message": "Заказ принят водителем",
+        "order": driver_order_response(
+            order,
+            vehicle,
+        ),
+    }
+
+
+@router.post(
+    "/api/v1/driver/orders/offers/{offer_id}/reject"
+)
+def reject_driver_order_offer(
+    offer_id: UUID,
+    driver: User = Depends(get_current_driver),
+    db: Session = Depends(get_db),
+):
+    get_driver_profile(db, driver)
+
+    offer_reference = db.scalar(
+        select(DriverOrderOffer).where(
+            DriverOrderOffer.id == offer_id,
+            DriverOrderOffer.driver_user_id == driver.id,
+        )
+    )
+
+    if offer_reference is None:
+        raise HTTPException(404, "Предложение заказа не найдено")
+
+    # Единый порядок блокировок: сначала заказ, затем предложение.
+    order = db.scalar(
+        select(Order)
+        .where(Order.id == offer_reference.order_id)
+        .with_for_update()
+    )
+
+    if order is None:
+        raise HTTPException(404, "Заказ не найден")
+
+    offer = db.scalar(
+        select(DriverOrderOffer)
+        .where(
+            DriverOrderOffer.id == offer_id,
+            DriverOrderOffer.driver_user_id == driver.id,
+        )
+        .with_for_update()
+    )
+
+    if offer is None:
+        raise HTTPException(404, "Предложение заказа не найдено")
+
+    if offer.status != "pending":
+        raise HTTPException(
+            409,
+            "Предложение больше не ожидает ответа",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    expires_at = offer.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at <= now:
+        offer.status = "expired"
+        message = "Время принятия заказа истекло"
+        expired = True
+    else:
+        offer.status = "rejected"
+        message = "Вы отказались от заказа"
+        expired = False
+
+    offer.responded_at = now
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    next_offer = _advance_after_driver_offer(
+        db,
+        order.id,
+    )
+
+    return {
+        "success": True,
+        "rejected": not expired,
+        "expired": expired,
+        "message": message,
+        "next_offer": next_offer,
+    }
+
+
+async def _driver_offer_expiry_worker() -> None:
+    """
+    Периодически обрабатывает предложения, на которые водитель
+    не ответил за установленное время.
+    """
+    while True:
+        await asyncio.sleep(1)
+
+        db = SessionLocal()
+
+        try:
+            process_expired_driver_offers(
+                db=db,
+                limit=100,
+            )
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Ошибка фоновой обработки просроченных предложений заказов"
+            )
+        finally:
+            db.close()
+
+
+@router.on_event("startup")
+async def start_driver_offer_expiry_worker() -> None:
+    global _driver_offer_worker_task
+
+    if (
+        _driver_offer_worker_task is None
+        or _driver_offer_worker_task.done()
+    ):
+        _driver_offer_worker_task = asyncio.create_task(
+            _driver_offer_expiry_worker()
+        )
+
+
+@router.on_event("shutdown")
+async def stop_driver_offer_expiry_worker() -> None:
+    global _driver_offer_worker_task
+
+    if _driver_offer_worker_task is not None:
+        _driver_offer_worker_task.cancel()
+
+        try:
+            await _driver_offer_worker_task
+        except asyncio.CancelledError:
+            pass
+
+        _driver_offer_worker_task = None
