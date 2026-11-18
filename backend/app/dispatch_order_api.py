@@ -104,6 +104,141 @@ def ensure_order_access(
             )
 
 
+@router.get("/orders/{order_id}")
+def get_dispatch_order(
+    order_id: UUID,
+    city_code: str | None = None,
+    dispatcher: User = Depends(get_current_dispatcher),
+    db: Session = Depends(get_db),
+):
+    """
+    Возвращает полную карточку заказа для диспетчера.
+
+    Обычный диспетчер видит только заказы своего филиала.
+    Главный диспетчер может дополнительно ограничить запрос
+    выбранным городом через city_code.
+    """
+    profile = get_dispatcher_profile(
+        db,
+        dispatcher,
+    )
+
+    order = db.get(
+        Order,
+        order_id,
+    )
+
+    if order is None:
+        raise HTTPException(
+            404,
+            "Заказ не найден",
+        )
+
+    ensure_order_access(
+        profile,
+        order,
+    )
+
+    city = db.get(
+        City,
+        order.city_id,
+    )
+
+    if city is None or not city.is_active:
+        raise HTTPException(
+            404,
+            "Заказ не найден",
+        )
+
+    if (
+        profile.role == "chief_dispatcher"
+        and city_code
+        and city.code != city_code
+    ):
+        raise HTTPException(
+            404,
+            "Заказ не найден",
+        )
+
+    return {
+        "id": order.id,
+        "public_number": order.public_number,
+        "city_id": order.city_id,
+        "tariff_id": order.tariff_id,
+        "branch_id": order.branch_id,
+        "city_code": city.code,
+        "passenger_user_id": order.passenger_user_id,
+        "driver_user_id": order.driver_user_id,
+        "vehicle_id": order.vehicle_id,
+        "customer_name": order.customer_name,
+        "customer_phone": order.customer_phone,
+        "anonymous": order.anonymous,
+        "pickup_address": order.pickup_address,
+        "destination_address": order.destination_address,
+        "pickup_latitude": order.pickup_latitude,
+        "pickup_longitude": order.pickup_longitude,
+        "destination_latitude": order.destination_latitude,
+        "destination_longitude": order.destination_longitude,
+        "route_distance_meters": order.route_distance_meters,
+        "route_duration_seconds": order.route_duration_seconds,
+        "routing_provider": order.routing_provider,
+        "status": order.status,
+        "payment_method": order.payment_method,
+        "price_rub": order.price_rub,
+        "price_kopecks": order.price_kopecks,
+        "dynamic_pricing_settings_id": (
+            order.dynamic_pricing_settings_id
+        ),
+        "dynamic_pricing_multiplier": (
+            order.dynamic_pricing_multiplier
+        ),
+        "dynamic_driver_distance_km": (
+            order.dynamic_driver_distance_km
+        ),
+        "fare_dynamic_adjustment_kopecks": (
+            order.fare_dynamic_adjustment_kopecks
+        ),
+        "dynamic_pricing_breakdown": (
+            order.dynamic_pricing_breakdown
+        ),
+        "fare_base_price_kopecks": (
+            order.fare_base_price_kopecks
+        ),
+        "fare_distance_price_kopecks": (
+            order.fare_distance_price_kopecks
+        ),
+        "fare_time_price_kopecks": (
+            order.fare_time_price_kopecks
+        ),
+        "fare_limit_adjustment_kopecks": (
+            order.fare_limit_adjustment_kopecks
+        ),
+        "anonymous_surcharge_kopecks": (
+            order.anonymous_surcharge_kopecks
+        ),
+        "child_seat": order.child_seat,
+        "animal_transport": order.animal_transport,
+        "cargo_vehicle": order.cargo_vehicle,
+        "cargo_description": order.cargo_description,
+        "cargo_loaders": order.cargo_loaders,
+        "child_seat_surcharge_kopecks": (
+            order.child_seat_surcharge_kopecks
+        ),
+        "animal_transport_surcharge_kopecks": (
+            order.animal_transport_surcharge_kopecks
+        ),
+        "cargo_vehicle_surcharge_kopecks": (
+            order.cargo_vehicle_surcharge_kopecks
+        ),
+        "cargo_loaders_surcharge_kopecks": (
+            order.cargo_loaders_surcharge_kopecks
+        ),
+        "comment": order.comment,
+        "created_at": order.created_at,
+        "updated_at": order.updated_at,
+    }
+
+
 def normalize_datetime(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
