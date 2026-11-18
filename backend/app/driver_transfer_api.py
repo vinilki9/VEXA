@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -13,8 +13,8 @@ from app.models import (
     Branch,
     City,
     DispatcherProfile,
-    DriverFinanceTransaction,
     DriverProfile,
+    DriverWallet,
     User,
 )
 from app.security import get_current_dispatcher
@@ -63,7 +63,9 @@ def transfer_driver(
     """
     Перевод водителя между филиалами и городами.
 
-    Общий долг водителя сохраняется.
+    Баланс и резерв кошелька сохраняются.
+    Отрицательный баланс продолжает отражать долг VEXA.
+    Привязка кошелька обновляется вместе с профилем водителя.
     Исторические финансовые операции не изменяются.
     Перевод записывается отдельной неизменяемой операцией.
     """
@@ -137,30 +139,29 @@ def transfer_driver(
             detail="Водитель уже числится в выбранном филиале",
         )
 
-    current_debt = db.scalar(
-        select(
-            func.coalesce(
-                func.sum(
-                    DriverFinanceTransaction.debt_change_kopecks
-                ),
-                0,
-            )
-        ).where(
-            DriverFinanceTransaction.driver_user_id
-            == driver_user_id
+    wallet = db.scalar(
+        select(DriverWallet)
+        .where(
+            DriverWallet.driver_user_id == driver_user_id,
         )
+        .with_for_update()
     )
 
-    debt_kopecks = int(current_debt or 0)
-
-    if debt_kopecks < 0:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Обнаружен отрицательный общий баланс долга. "
-                "Необходимо проверить финансовые операции до перевода."
-            ),
+    if wallet is None:
+        wallet = DriverWallet(
+            driver_user_id=driver_user_id,
+            city_id=from_city_id,
+            branch_id=from_branch_id,
+            balance_kopecks=0,
+            reserved_kopecks=0,
         )
+        db.add(wallet)
+
+    # Долг определяется исключительно по текущему балансу кошелька.
+    # Отрицательный баланс не обнуляется и не переносится отдельной операцией.
+    current_balance = int(wallet.balance_kopecks or 0)
+    current_reserved = int(wallet.reserved_kopecks or 0)
+    debt_kopecks = max(-current_balance, 0)
 
     transfer = DriverBranchTransfer(
         driver_user_id=driver_user_id,
@@ -172,8 +173,15 @@ def transfer_driver(
         transferred_by_user_id=dispatcher.id,
     )
 
+    # Меняем только географическую привязку.
+    # Баланс и зарезервированные средства остаются без изменений.
     driver_profile.city_id = target_city.id
     driver_profile.branch_id = target_branch.id
+
+    wallet.city_id = target_city.id
+    wallet.branch_id = target_branch.id
+    wallet.balance_kopecks = current_balance
+    wallet.reserved_kopecks = current_reserved
 
     db.add(transfer)
 
