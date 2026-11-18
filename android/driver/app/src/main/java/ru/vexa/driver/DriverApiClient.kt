@@ -2,8 +2,6 @@
 package ru.vexa.driver
 
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -252,6 +250,25 @@ object DriverApiClient {
             path = "/api/v1/driver/location",
             method = "POST",
             body = json
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
+     * Получить текущий кошелёк водителя.
+     *
+     * GET /api/v1/driver/wallet
+     *
+     * Ответ содержит:
+     * balance_kopecks — текущий баланс, включая отрицательный;
+     * reserved_kopecks — зарезервированная сумма;
+     * available_kopecks — доступная к выводу сумма;
+     * payouts — параметры и остаток дневного лимита.
+     */
+    fun getWallet(): JSONObject {
+        val response = request(
+            path = "/api/v1/driver/wallet"
         )
 
         return JSONObject(response)
