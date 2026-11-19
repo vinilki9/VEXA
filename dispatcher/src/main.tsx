@@ -22,7 +22,6 @@ type OrderTimelineEvent = {
   description?: string | null;
   actor?: string | null;
 };
-
 type VexaOrder = {
   id: string;
   public_number: string;
