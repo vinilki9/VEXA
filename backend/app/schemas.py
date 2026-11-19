@@ -46,8 +46,8 @@ class OrderCreate(APIModel):
 
     tariff_id: UUID | None = None
 
-    customer_name: str | None = Field(
-        default=None,
+    customer_name: str = Field(
+        min_length=1,
         max_length=120,
     )
 
@@ -55,8 +55,6 @@ class OrderCreate(APIModel):
         min_length=5,
         max_length=40,
     )
-
-    anonymous: bool = False
 
     pickup_address: str = Field(
         min_length=2,
@@ -135,6 +133,16 @@ class OrderCreate(APIModel):
         max_length=2000,
     )
 
+    @field_validator("customer_name")
+    @classmethod
+    def validate_customer_name(cls, value):
+        normalized = value.strip()
+
+        if not normalized:
+            raise ValueError("Укажите имя пассажира")
+
+        return normalized
+
     @field_validator("cargo_vehicle")
     @classmethod
     def validate_cargo_vehicle(cls, value):
@@ -158,9 +166,8 @@ class OrderResponse(APIModel):
     driver_user_id: UUID | None = None
     vehicle_id: UUID | None = None
 
-    customer_name: str | None = None
+    customer_name: str
     customer_phone: str
-    anonymous: bool
 
     pickup_address: str
     destination_address: str
@@ -192,7 +199,6 @@ class OrderResponse(APIModel):
     fare_distance_price_kopecks: int | None = None
     fare_time_price_kopecks: int | None = None
     fare_limit_adjustment_kopecks: int | None = None
-    anonymous_surcharge_kopecks: int | None = None
 
     # Выбранные дополнительные услуги.
     child_seat: bool = False
@@ -228,7 +234,6 @@ class OrderPricePreviewResponse(APIModel):
     fare_distance_price_kopecks: int
     fare_time_price_kopecks: int
     fare_limit_adjustment_kopecks: int
-    anonymous_surcharge_kopecks: int
 
     # Динамическое ценообразование.
     dynamic_pricing_settings_id: UUID | None = None
