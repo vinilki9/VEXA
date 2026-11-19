@@ -22,6 +22,9 @@ def main():
     if not username:
         raise SystemExit("Логин не может быть пустым")
 
+    if len(username) > 80:
+        raise SystemExit("Логин не должен превышать 80 символов")
+
     password = getpass("Введите пароль главного администратора: ")
     password_confirm = getpass("Повторите пароль: ")
 
@@ -30,6 +33,9 @@ def main():
 
     if len(password) < 12:
         raise SystemExit("Пароль должен содержать не менее 12 символов")
+
+    if len(password.encode("utf-8")) > 72:
+        raise SystemExit("Пароль не должен превышать 72 байта в UTF-8")
 
     db = SessionLocal()
 
