@@ -448,6 +448,7 @@ class DriverLocation(Base):
     )
 
     updated_at: Mapped[datetime] = mapped_column(
+
         DateTime(timezone=True),
         nullable=False,
     )
@@ -711,9 +712,9 @@ class Order(Base):
         ForeignKey("vehicles.id"),
     )
 
-    customer_name: Mapped[str | None] = mapped_column(
+    customer_name: Mapped[str] = mapped_column(
         String(120),
-        nullable=True,
+        nullable=False,
     )
 
     customer_phone: Mapped[str] = mapped_column(
@@ -1043,22 +1044,6 @@ class DynamicPricingSettings(Base):
         CheckConstraint(
             "driver_distance_step_multiplier >= 0",
             name="dynamic_pricing_driver_step_multiplier_nonnegative",
-        ),
-        CheckConstraint(
-            "weather_addition >= 0",
-            name="dynamic_pricing_weather_addition_nonnegative",
-        ),
-        CheckConstraint(
-            "traffic_addition >= 0",
-            name="dynamic_pricing_traffic_addition_nonnegative",
-        ),
-        CheckConstraint(
-            "demand_addition >= 0",
-            name="dynamic_pricing_demand_addition_nonnegative",
-        ),
-        CheckConstraint(
-            "other_addition >= 0",
-            name="dynamic_pricing_other_addition_nonnegative",
         ),
         UniqueConstraint(
             "city_id",
