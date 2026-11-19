@@ -273,7 +273,6 @@ def driver_order_response(
         "status": order.status,
         "customer_name": order.customer_name,
         "customer_phone": order.customer_phone,
-        "anonymous": order.anonymous,
         "pickup": {
             "address": order.pickup_address,
             "latitude": order.pickup_latitude,
