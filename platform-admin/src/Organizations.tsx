@@ -21,6 +21,16 @@ type City = {
   is_active: boolean;
 };
 
+type Branch = {
+  id: string;
+  branch_id: string;
+  branch_name: string;
+  city_id: string;
+  city_name: string;
+  is_active: boolean;
+  branch_is_active: boolean;
+};
+
 type OrganizationDetail = {
   id: string;
   name: string;
@@ -44,6 +54,10 @@ type OrganizationsResponse = {
 
 type CitiesResponse = {
   items: City[];
+};
+
+type BranchesResponse = {
+  items: Branch[];
 };
 
 type Props = {
@@ -115,8 +129,11 @@ export default function Organizations({ token, onBack }: Props) {
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [detail, setDetail] = useState<OrganizationDetail | null>(null);
   const [cities, setCities] = useState<City[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
+
   const [cityAction, setCityAction] = useState("");
+  const [branchAction, setBranchAction] = useState("");
 
   async function apiRequest<T>(
     path: string,
@@ -182,19 +199,25 @@ export default function Organizations({ token, onBack }: Props) {
       setSuccess("");
 
       try {
-        const [organization, cityCatalog] = await Promise.all([
+        const [organization, cityCatalog, branchCatalog] = await Promise.all([
           apiRequest<OrganizationDetail>(
             `/organizations/${organizationId}`,
           ),
           apiRequest<CitiesResponse>(
             "/organizations/catalog/cities?active_only=true",
           ),
+          apiRequest<BranchesResponse>(
+            `/organizations/${organizationId}/branches`,
+          ),
         ]);
 
         setDetail(organization);
         setCities(cityCatalog.items || []);
+        setBranches(branchCatalog.items || []);
       } catch (err) {
         setDetail(null);
+        setCities([]);
+        setBranches([]);
         setError(
           err instanceof Error
             ? err.message
@@ -210,15 +233,6 @@ export default function Organizations({ token, onBack }: Props) {
   useEffect(() => {
     void loadOrganizations();
   }, [loadOrganizations]);
-
-  function generateSlug(value: string): string {
-    return value
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 120);
-  }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -340,6 +354,60 @@ export default function Organizations({ token, onBack }: Props) {
       );
     } finally {
       setCityAction("");
+    }
+  }
+
+  async function changeBranchAssignment(
+    branch: Branch,
+    assigned: boolean,
+  ) {
+    if (!selectedOrgId) return;
+
+    if (!detail || detail.status !== "active") {
+      setError("Подключать филиалы можно только к активной организации.");
+      return;
+    }
+
+    if (!assigned && !branch.branch_is_active) {
+      setError("Нельзя подключить неактивный филиал.");
+      return;
+    }
+
+    const actionText = assigned ? "отключить" : "подключить";
+
+    const confirmed = window.confirm(
+      `Вы действительно хотите ${actionText} филиал «${branch.branch_name}»?`,
+    );
+
+    if (!confirmed) return;
+
+    setBranchAction(branch.branch_id);
+    setError("");
+    setSuccess("");
+
+    try {
+      const method = assigned ? "DELETE" : "POST";
+
+      await apiRequest(
+        `/organizations/${selectedOrgId}/branches/${branch.branch_id}`,
+        { method },
+      );
+
+      setSuccess(
+        assigned
+          ? "Филиал отключён от организации."
+          : "Филиал подключён к организации.",
+      );
+
+      await loadOrganizationDetail(selectedOrgId);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Не удалось изменить привязку филиала",
+      );
+    } finally {
+      setBranchAction("");
     }
   }
 
@@ -481,9 +549,7 @@ export default function Organizations({ token, onBack }: Props) {
                 <div className="org-list-main">
                   <h3>{organization.name}</h3>
                   <p>Идентификатор: {organization.slug}</p>
-                  <p>
-                    Создана: {formatDate(organization.created_at)}
-                  </p>
+                  <p>Создана: {formatDate(organization.created_at)}</p>
                   <span className={`org-status org-status-${organization.status}`}>
                     {STATUS_LABELS[organization.status]}
                   </span>
@@ -531,7 +597,7 @@ export default function Organizations({ token, onBack }: Props) {
             <div>
               <h2>Управление организацией</h2>
               <p>
-                Настройка городов, подключённых к выбранной организации.
+                Настройка городов и филиалов выбранной организации.
               </p>
             </div>
 
@@ -541,6 +607,8 @@ export default function Organizations({ token, onBack }: Props) {
               onClick={() => {
                 setSelectedOrgId("");
                 setDetail(null);
+                setCities([]);
+                setBranches([]);
               }}
             >
               Закрыть
@@ -620,9 +688,75 @@ export default function Organizations({ token, onBack }: Props) {
                 )}
               </div>
 
-              <div className="org-form-hint">
-                Филиалы будут настраиваться отдельно. Сейчас доступно
-                управление организациями и подключением городов.
+              <div className="org-branch-section">
+                <h3>Филиалы организации</h3>
+                <p>
+                  Управляйте подключением филиалов. Филиалы отображаются с
+                  привязкой к соответствующим городам.
+                </p>
+
+                {detail.status !== "active" && (
+                  <div className="org-form-hint">
+                    Для подключения филиалов сначала активируйте организацию.
+                  </div>
+                )}
+
+                {branches.length === 0 ? (
+                  <p className="org-empty">
+                    В каталоге пока нет филиалов для этой организации.
+                  </p>
+                ) : (
+                  <div className="org-branch-list">
+                    {branches.map((branch) => {
+                      const assigned = branch.is_active;
+
+                      return (
+                        <div
+                          className="org-branch-item"
+                          key={branch.branch_id}
+                        >
+                          <div>
+                            <strong>{branch.branch_name}</strong>
+                            <span>Город: {branch.city_name}</span>
+                            <span>
+                              {assigned
+                                ? "Подключён к организации"
+                                : "Не подключён"}
+                            </span>
+                            {!branch.branch_is_active && (
+                              <span>
+                                Филиал неактивен в системе
+                              </span>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            className={`org-button ${
+                              assigned
+                                ? "org-button-danger"
+                                : "org-button-primary"
+                            }`}
+                            disabled={
+                              branchAction !== "" ||
+                              detail.status !== "active" ||
+                              (!assigned && !branch.branch_is_active)
+                            }
+                            onClick={() =>
+                              void changeBranchAssignment(branch, assigned)
+                            }
+                          >
+                            {branchAction === branch.branch_id
+                              ? "Сохранение..."
+                              : assigned
+                                ? "Отключить"
+                                : "Подключить"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -635,4 +769,3 @@ export default function Organizations({ token, onBack }: Props) {
     </section>
   );
 }
-
