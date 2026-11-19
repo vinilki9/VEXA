@@ -10,6 +10,13 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Foreground Service для фоновой передачи GPS -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- Разрешение на отображение уведомлений Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".VexaApplication"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
@@ -22,6 +29,12 @@
             android:name=".DriverFinanceActivity"
             android:exported="false"
             tools:ignore="MissingClass" />
+
+        <!-- Фоновый GPS-сервис водителя -->
+        <service
+            android:name=".DriverLocationService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <!-- Главный экран приложения -->
         <activity
