@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
+import java.io.IOException
 import java.text.NumberFormat
 import java.util.Locale
 import java.text.SimpleDateFormat
@@ -171,7 +172,7 @@ fun DriverScreen() {
  var offerSecondsLeft by remember { mutableStateOf(0) }
  var offerActionInProgress by remember { mutableStateOf(false) }
  var lastResolvedOfferId by remember { mutableStateOf("") }
- var networkUnavailable by remember { mutableStateOf(false) }
+ var offerPollStatusMessage by remember { mutableStateOf("") }
  var walletBalanceKopecks by remember { mutableStateOf<Long?>(null) }
  var walletAvailableKopecks by remember { mutableStateOf<Long?>(null) }
 
@@ -194,7 +195,7 @@ fun DriverScreen() {
    offerDeadlineMillis = 0L
    offerSecondsLeft = 0
    offerActionInProgress = false
-   networkUnavailable = false
+   offerPollStatusMessage = ""
   } else {
    while (true) {
     if (
@@ -215,7 +216,7 @@ fun DriverScreen() {
         offerPollInFlight.set(false)
 
         if (authorized && online && !offerActionInProgress) {
-         networkUnavailable = false
+         offerPollStatusMessage = ""
 
          if (firstOffer == null) {
           currentOffer = null
@@ -244,11 +245,25 @@ fun DriverScreen() {
          }
         }
        }
-      } catch (_: Exception) {
+      } catch (e: Exception) {
+       val statusMessage = when (e) {
+        is DriverApiHttpException -> when {
+         e.statusCode == 401 || e.statusCode == 403 ->
+          "Ошибка авторизации (HTTP ${e.statusCode}). Проверьте вход в аккаунт водителя."
+         e.statusCode in 500..599 ->
+          "Сервер временно недоступен (HTTP ${e.statusCode}). VEXA продолжит проверку автоматически."
+         else ->
+          "Сервер вернул ошибку HTTP ${e.statusCode}: ${e.message.orEmpty()}"
+        }
+        is IOException ->
+         "Нет связи с сервером. VEXA автоматически возобновит получение заказов после восстановления интернета."
+        else ->
+         "Не удалось получить предложения заказов: ${e.message ?: "неизвестная ошибка"}"
+       }
        mainHandler.post {
         offerPollInFlight.set(false)
         if (authorized && online) {
-         networkUnavailable = true
+         offerPollStatusMessage = statusMessage
         }
        }
       }
@@ -985,7 +1000,7 @@ fun DriverScreen() {
       }
      }
 
-     if (networkUnavailable && online) {
+     if (offerPollStatusMessage.isNotBlank() && online) {
       item {
        Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -993,7 +1008,7 @@ fun DriverScreen() {
         shape = RoundedCornerShape(14.dp)
        ) {
         Text(
-         text = "Нет связи с сервером. VEXA автоматически возобновит получение заказов после восстановления интернета.",
+         text = offerPollStatusMessage,
          modifier = Modifier.padding(12.dp),
          color = MaterialTheme.colorScheme.onErrorContainer,
          fontSize = 12.sp
