@@ -60,59 +60,61 @@ object AddressSearch {
                 .build()
 
             manager.suggest(request)
-                .onResult { suggestResult ->
+                .onComplete(
+                    { suggestResult ->
 
-                    val addresses = suggestResult.suggests
-                        .orEmpty()
-                        .mapNotNull { suggestion ->
+                        val addresses = suggestResult.suggests
+                            .orEmpty()
+                            .mapNotNull { suggestion ->
 
-                            var addressResult: AddressResult? = null
+                                var addressResult: AddressResult? = null
 
-                            suggestion.handler.match(
-                                objectHandler = { objectHandler ->
+                                suggestion.handler.match(
+                                    objectHandler = { objectHandler ->
 
-                                    val item = objectHandler.item
-                                    val point = item.markerPosition?.point
+                                        val item = objectHandler.item
+                                        val point = item.markerPosition
 
-                                    if (point != null) {
-                                        val name = suggestion.title
+                                        if (point != null) {
+                                            val name = suggestion.title.text
 
-                                        if (name.isNotBlank()) {
-                                            addressResult = AddressResult(
-                                                name = name,
-                                                latitude = point.latitude.value,
-                                                longitude = point.longitude.value
-                                            )
+                                            if (name.isNotBlank()) {
+                                                addressResult = AddressResult(
+                                                    name = name,
+                                                    latitude = point.latitude.value,
+                                                    longitude = point.longitude.value
+                                                )
+                                            }
                                         }
+                                    },
+                                    performSearchHandler = {
+                                        // Поисковый запрос без готовых координат.
+                                    },
+                                    incompleteTextHandler = {
+                                        // Незавершённый текст не является адресом.
                                     }
-                                },
-                                performSearchHandler = {
-                                    // Поисковый запрос без готовых координат.
-                                },
-                                incompleteTextHandler = {
-                                    // Незавершённый текст не является адресом.
-                                }
-                            )
+                                )
 
-                            addressResult
+                                addressResult
+                            }
+                            .distinctBy {
+                                "${it.latitude}:${it.longitude}"
+                            }
+
+                        mainHandler.post {
+                            onResult(addresses)
                         }
-                        .distinctBy {
-                            "${it.latitude}:${it.longitude}"
+                    },
+                    { error ->
+
+                        val message = error.message
+                            ?: "Не удалось выполнить поиск адреса."
+
+                        mainHandler.post {
+                            onError(message)
                         }
-
-                    mainHandler.post {
-                        onResult(addresses)
                     }
-                }
-                .onError { error ->
-
-                    val message = error.message
-                        ?: "Не удалось выполнить поиск адреса."
-
-                    mainHandler.post {
-                        onError(message)
-                    }
-                }
+                )
 
         } catch (error: Exception) {
 
