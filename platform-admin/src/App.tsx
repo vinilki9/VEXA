@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from "react";
+import Organizations from "./Organizations";
 
 type AdminUser = {
   username: string;
@@ -17,6 +18,9 @@ function App() {
     () => sessionStorage.getItem("vexa_platform_admin_token") || "",
   );
   const [admin, setAdmin] = useState<AdminUser | null>(null);
+  const [activeSection, setActiveSection] = useState<
+    "organizations" | null
+  >(null);
 
   useEffect(() => {
     if (!token) {
@@ -46,6 +50,7 @@ function App() {
         if (!cancelled) {
           setToken("");
           setAdmin(null);
+          setActiveSection(null);
           setError("Сессия завершена. Войдите снова.");
         }
       }
@@ -96,6 +101,7 @@ function App() {
       sessionStorage.setItem("vexa_platform_admin_token", data.access_token);
       setToken(data.access_token);
       setPassword("");
+      setActiveSection(null);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Ошибка соединения с сервером.",
@@ -111,6 +117,7 @@ function App() {
     setAdmin(null);
     setPassword("");
     setError("");
+    setActiveSection(null);
   }
 
   if (token && !admin) {
@@ -123,6 +130,15 @@ function App() {
           <div className="loader" />
         </div>
       </main>
+    );
+  }
+
+  if (admin && activeSection === "organizations") {
+    return (
+      <Organizations
+        token={token}
+        onBack={() => setActiveSection(null)}
+      />
     );
   }
 
@@ -160,12 +176,16 @@ function App() {
           </div>
 
           <div className="module-grid">
-            <article className="module-card">
+            <button
+              type="button"
+              className="module-card module-card-clickable"
+              onClick={() => setActiveSection("organizations")}
+            >
               <span className="module-icon">⌂</span>
               <h3>Организации</h3>
               <p>Таксопарки и партнёрские организации.</p>
-              <span className="module-status">Раздел готовится</span>
-            </article>
+              <span className="module-status">Открыть раздел →</span>
+            </button>
 
             <article className="module-card">
               <span className="module-icon">◎</span>
