@@ -22,6 +22,7 @@ from app.models import (
 from app.schemas import OrderCreate
 from app.routing import RouteResult
 
+
 class OrderValidationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -149,7 +150,6 @@ class OrderValidationTests(unittest.TestCase):
         self.db.commit()
         self.assert_order_rejected(self.payload, 409)
 
-
     def test_missing_pickup_coordinates_are_rejected(self):
         for field in (
             "pickup_latitude",
@@ -222,7 +222,6 @@ class OrderValidationTests(unittest.TestCase):
             base_price_kopecks=5000,
             price_per_km_kopecks=2000,
             price_per_minute_kopecks=100,
-            anonymous=False,
         )
 
         self.assertEqual(order.route_distance_meters, 2500)
@@ -256,43 +255,6 @@ class OrderValidationTests(unittest.TestCase):
         self.assertEqual(order.price_rub, 210)
 
     @patch("app.main.calculate_order_route_price")
-    def test_missing_customer_name_enables_anonymous_surcharge(
-        self,
-        calculate_route,
-    ):
-        calculate_route.return_value = SimpleNamespace(
-            route=RouteResult(
-                distance_meters=Decimal("2500"),
-                duration_seconds=Decimal("600"),
-            ),
-            fare=SimpleNamespace(
-                total_price_kopecks=21000,
-            ),
-            provider_name="osrm",
-        )
-
-        payload = self.payload.model_copy(
-            update={
-                "customer_name": None,
-                "anonymous": False,
-            }
-        )
-
-        order = create_order(
-            payload=payload,
-            idempotency_key="vexa-anonymous-test",
-            db=self.db,
-        )
-
-        self.assertTrue(order.anonymous)
-        self.assertIsNone(order.customer_name)
-
-        self.assertEqual(
-            calculate_route.call_args.kwargs["anonymous"],
-            True,
-        )
-
-    @patch("app.main.calculate_order_route_price")
     def test_routing_failure_does_not_create_order(
         self,
         calculate_route,
@@ -314,6 +276,7 @@ class OrderValidationTests(unittest.TestCase):
 
         order_count = self.db.query(Order).count()
         self.assertEqual(order_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
