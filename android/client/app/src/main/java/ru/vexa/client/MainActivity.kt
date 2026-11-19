@@ -238,9 +238,7 @@ fun ClientScreen(
  LaunchedEffect(
   selectedPickup,
   selectedDestination,
-  routeGeometry,
-  mapObjectManager,
-  panelFraction
+  mapObjectManager
  ) {
   val source = routeMapObjectSource ?: return@LaunchedEffect
 
