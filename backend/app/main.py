@@ -2,7 +2,7 @@
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from decimal import Decimal, ROUND_HALF_UP
-
+from app.platform_admin_router import router as platform_admin_router
 from app.passenger_auth import router as passenger_auth_router
 from app.driver_api import router as driver_router
 from app.driver_transfer_api import router as driver_transfer_router
@@ -61,7 +61,7 @@ app.include_router(driver_router)
 app.include_router(driver_transfer_router)
 app.include_router(dispatch_order_router)
 app.include_router(dynamic_pricing_router)
-
+app.include_router(platform_admin_router)
 ORDER_STATUSES = {
     "new": {"cancelled"},
     "accepted": {"cancelled"},
