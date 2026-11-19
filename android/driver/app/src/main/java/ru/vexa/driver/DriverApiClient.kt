@@ -40,12 +40,19 @@ object DriverApiClient {
     private const val GCM_TAG_LENGTH_BITS = 128
 
     private val tokenLock = Any()
+    private val offersCacheLock = Any()
 
     @Volatile
     private var accessToken: String? = null
 
     @Volatile
     private var applicationContext: Context? = null
+
+    @Volatile
+    private var cachedOrderOffers: JSONObject? = null
+
+    @Volatile
+    private var cachedOrderOffersError: Exception? = null
 
     /**
      * Инициализировать защищённое хранилище сессии.
@@ -314,6 +321,8 @@ object DriverApiClient {
             accessToken = null
             clearStoredToken(deleteKey = true)
         }
+
+        clearCachedOrderOffers()
     }
 
     private fun jsonString(value: String): String {
@@ -486,31 +495,79 @@ object DriverApiClient {
     }
 
     /**
-     * Получить предложения новых заказов.
+     * Получить предложения новых заказов из локального кэша.
+     *
+     * Этот метод не выполняет сетевых запросов.
+     * Его вызывает MainActivity для чтения данных,
+     * которые обновляет DriverLocationService.
+     *
+     * Если фоновый сервис ещё не получил ответ сервера,
+     * возвращается пустой список предложений.
+     *
+     * Если последний запрос завершился ошибкой,
+     * повторно выбрасывается сохранённая ошибка,
+     * чтобы MainActivity могла показать корректное сообщение.
+     */
+    fun getOrderOffers(): JSONObject {
+        synchronized(offersCacheLock) {
+            cachedOrderOffersError?.let {
+                throw it
+            }
+
+            val cached = cachedOrderOffers
+                ?: return JSONObject(
+                    """{"offers_count":0,"offers":[]}"""
+                )
+
+            return JSONObject(cached.toString())
+        }
+    }
+
+    /**
+     * Получить предложения новых заказов непосредственно с сервера.
      *
      * GET /api/v1/driver/orders/offers
      *
-     * Ответ сервера:
-     * offers_count — количество предложений;
-     * offers — массив предложений.
-     *
-     * Каждый элемент offers содержит:
-     * offer_id — идентификатор предложения;
-     * attempt_number — номер попытки;
-     * response_timeout_seconds — время на ответ;
-     * offered_at — время создания предложения;
-     * expires_at — время окончания предложения;
-     * distance_to_pickup_meters — расстояние до подачи;
-     * order — информация о заказе.
+     * Вызывать только из фонового DriverLocationService.
+     * Успешный ответ сохраняется в общем кэше приложения.
+     * Ошибка сохраняется и передаётся MainActivity через getOrderOffers().
      */
-    fun getOrderOffers(): JSONObject {
-        val response = request(
-            path = "/api/v1/driver/orders/offers",
-            connectTimeoutMs = 5000,
-            readTimeoutMs = 5000
-        )
+    fun refreshOrderOffers(): JSONObject {
+        try {
+            val response = request(
+                path = "/api/v1/driver/orders/offers",
+                connectTimeoutMs = 5000,
+                readTimeoutMs = 5000
+            )
 
-        return JSONObject(response)
+            val result = JSONObject(response)
+
+            synchronized(offersCacheLock) {
+                cachedOrderOffers = JSONObject(result.toString())
+                cachedOrderOffersError = null
+            }
+
+            return result
+        } catch (e: Exception) {
+            synchronized(offersCacheLock) {
+                cachedOrderOffersError = e
+            }
+
+            throw e
+        }
+    }
+
+    /**
+     * Очистить кэш предложений заказов и сохранённую ошибку.
+     *
+     * Вызывать при уходе водителя с линии,
+     * остановке фонового опроса или выходе из аккаунта.
+     */
+    fun clearCachedOrderOffers() {
+        synchronized(offersCacheLock) {
+            cachedOrderOffers = null
+            cachedOrderOffersError = null
+        }
     }
 
     /**
