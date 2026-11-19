@@ -1,6 +1,7 @@
 
 package ru.vexa.client
 
+import android.content.Context
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -26,6 +27,9 @@ object ApiClient {
     @Volatile
     private var passengerPhone: String? = null
 
+    @Volatile
+    private var applicationContext: Context? = null
+
     val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -33,10 +37,56 @@ object ApiClient {
         .build()
 
     /**
-     * Сохранить JWT-токен авторизованного пассажира.
+     * Инициализировать клиент и восстановить защищённую сессию.
+     *
+     * Вызывается один раз из VexaApplication.onCreate().
      */
-    fun setAccessToken(token: String) {
-        accessToken = token.trim().takeIf { it.isNotEmpty() }
+    @Synchronized
+    fun initializeSession(context: Context) {
+        val appContext = context.applicationContext
+        applicationContext = appContext
+
+        val session = PassengerSessionStore.loadSession(appContext)
+
+        accessToken = session?.accessToken
+        passengerPhone = session?.passengerPhone
+    }
+
+    /**
+     * Сохранить подтверждённую сессию пассажира.
+     *
+     * Токен и телефон сохраняются одной зашифрованной записью.
+     * Сначала выполняется сохранение на диск, затем обновляется память.
+     */
+    @Synchronized
+    fun setPassengerSession(
+        token: String,
+        phone: String
+    ) {
+        val normalizedToken = token.trim()
+        val normalizedPhone = phone.trim()
+
+        require(normalizedToken.isNotEmpty()) {
+            "Не получен токен авторизации"
+        }
+
+        require(normalizedPhone.isNotEmpty()) {
+            "Не указан номер телефона пассажира"
+        }
+
+        val context = applicationContext
+            ?: throw IllegalStateException(
+                "Защищённое хранилище VEXA не инициализировано"
+            )
+
+        PassengerSessionStore.saveSession(
+            context = context,
+            accessToken = normalizedToken,
+            passengerPhone = normalizedPhone
+        )
+
+        accessToken = normalizedToken
+        passengerPhone = normalizedPhone
     }
 
     /**
@@ -47,13 +97,6 @@ object ApiClient {
     }
 
     /**
-     * Сохранить подтверждённый номер телефона пассажира.
-     */
-    fun setPassengerPhone(phone: String) {
-        passengerPhone = phone.trim().takeIf { it.isNotEmpty() }
-    }
-
-    /**
      * Получить номер телефона авторизованного пассажира.
      */
     fun getPassengerPhone(): String? {
@@ -61,11 +104,16 @@ object ApiClient {
     }
 
     /**
-     * Завершить текущую авторизацию в памяти приложения.
+     * Завершить текущую авторизацию и удалить защищённую сессию.
      */
+    @Synchronized
     fun clearAccessToken() {
         accessToken = null
         passengerPhone = null
+
+        applicationContext?.let { context ->
+            PassengerSessionStore.clearSession(context)
+        }
     }
 
     /**
