@@ -29,6 +29,8 @@ type Branch = {
   city_name: string;
   is_active: boolean;
   branch_is_active: boolean;
+  organization_id?: string | null;
+  organization_link_is_active?: boolean | null;
 };
 
 type OrganizationDetail = {
@@ -199,21 +201,66 @@ export default function Organizations({ token, onBack }: Props) {
       setSuccess("");
 
       try {
-        const [organization, cityCatalog, branchCatalog] = await Promise.all([
+        const branchCatalogPath =
+          `/organizations/catalog/branches?organization_id=${encodeURIComponent(organizationId)}&active_only=true`;
+
+        const [
+          organization,
+          cityCatalog,
+          branchCatalog,
+          assignedBranches,
+        ] = await Promise.all([
           apiRequest<OrganizationDetail>(
             `/organizations/${organizationId}`,
           ),
           apiRequest<CitiesResponse>(
             "/organizations/catalog/cities?active_only=true",
           ),
+          apiRequest<BranchesResponse>(branchCatalogPath),
           apiRequest<BranchesResponse>(
             `/organizations/${organizationId}/branches`,
           ),
         ]);
 
+        const assignedById = new Map(
+          (assignedBranches.items || []).map((branch) => [
+            branch.branch_id,
+            branch,
+          ]),
+        );
+
+        const mergedBranches = new Map<string, Branch>();
+
+        for (const branch of branchCatalog.items || []) {
+          const assignment = assignedById.get(branch.branch_id);
+
+          mergedBranches.set(branch.branch_id, {
+            ...branch,
+            is_active: assignment?.is_active ?? false,
+            organization_id:
+              assignment ? organizationId : branch.organization_id,
+            organization_link_is_active:
+              assignment?.is_active ??
+              branch.organization_link_is_active ??
+              false,
+          });
+        }
+
+        // Сохраняем уже подключённые филиалы, даже если они неактивны
+        // и поэтому отсутствуют в каталоге active_only=true.
+        for (const branch of assignedBranches.items || []) {
+          if (!mergedBranches.has(branch.branch_id)) {
+            mergedBranches.set(branch.branch_id, {
+              ...branch,
+              organization_id: organizationId,
+              organization_link_is_active: branch.is_active,
+            });
+          }
+        }
+
         setDetail(organization);
         setCities(cityCatalog.items || []);
-        setBranches(branchCatalog.items || []);
+        setBranches(Array.from(mergedBranches.values()));
       } catch (err) {
         setDetail(null);
         setCities([]);
@@ -691,8 +738,8 @@ export default function Organizations({ token, onBack }: Props) {
               <div className="org-branch-section">
                 <h3>Филиалы организации</h3>
                 <p>
-                  Управляйте подключением филиалов. Филиалы отображаются с
-                  привязкой к соответствующим городам.
+                  Каталог показывает свободные филиалы и филиалы,
+                  уже подключённые к этой организации.
                 </p>
 
                 {detail.status !== "active" && (
@@ -703,7 +750,7 @@ export default function Organizations({ token, onBack }: Props) {
 
                 {branches.length === 0 ? (
                   <p className="org-empty">
-                    В каталоге пока нет филиалов для этой организации.
+                    В каталоге пока нет доступных филиалов.
                   </p>
                 ) : (
                   <div className="org-branch-list">
@@ -721,7 +768,7 @@ export default function Organizations({ token, onBack }: Props) {
                             <span>
                               {assigned
                                 ? "Подключён к организации"
-                                : "Не подключён"}
+                                : "Свободен для подключения"}
                             </span>
                             {!branch.branch_is_active && (
                               <span>
