@@ -182,3 +182,60 @@ class OrganizationCity(Base):
         default=True,
         nullable=False,
     )
+
+
+# ============================================================
+# ORGANIZATION BRANCHES
+# Связь таксопарков с существующими филиалами
+# ============================================================
+
+class OrganizationBranch(Base):
+    __tablename__ = "organization_branches"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "branch_id",
+            name="uq_organization_branches_branch",
+        ),
+        Index(
+            "ix_organization_branches_organization_active",
+            "organization_id",
+            "is_active",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "organizations.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+
+    branch_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey(
+            "branches.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
