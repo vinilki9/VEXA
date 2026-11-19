@@ -1,6 +1,5 @@
 
 from dataclasses import dataclass
-from decimal import Decimal
 
 from app.config import settings
 from app.pricing import FareResult, calculate_fare
@@ -24,7 +23,6 @@ def calculate_order_route_price(
     base_price_kopecks: int,
     price_per_km_kopecks: int,
     price_per_minute_kopecks: int,
-    anonymous: bool,
     minimum_fare_kopecks: int | None = None,
     maximum_fare_kopecks: int | None = None,
 ) -> OrderRoutePricing:
@@ -34,10 +32,6 @@ def calculate_order_route_price(
 
     Клиентские расстояние, время и стоимость
     не используются.
-
-    Минимальная и максимальная стоимость применяются
-    к поездке без анонимной доплаты.
-    Анонимная доплата добавляется после ограничений.
     """
 
     provider_name = settings.routing_provider.strip().lower()
@@ -72,7 +66,6 @@ def calculate_order_route_price(
         price_per_minute_kopecks=price_per_minute_kopecks,
         distance_km=route.distance_km,
         duration_minutes=route.duration_minutes,
-        anonymous=anonymous,
         minimum_fare_kopecks=minimum_fare_kopecks,
         maximum_fare_kopecks=maximum_fare_kopecks,
     )
