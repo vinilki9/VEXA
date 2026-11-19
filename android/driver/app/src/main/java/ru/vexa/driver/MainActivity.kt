@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,8 +19,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -146,6 +151,81 @@ private fun SectionTitle(
     fontSize = 12.sp
    )
   }
+ }
+}
+
+@Composable
+private fun DriverSatelliteGlyph(color: Color) {
+ Canvas(modifier = Modifier.size(24.dp)) {
+  val scale = size.width / 24f
+  rotate(degrees = 45f, pivot = center) {
+   drawRoundRect(
+    color = color,
+    topLeft = Offset(2f * scale, 9f * scale),
+    size = Size(6f * scale, 6f * scale),
+    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1f * scale)
+   )
+   drawRoundRect(
+    color = color,
+    topLeft = Offset(9f * scale, 9f * scale),
+    size = Size(6f * scale, 6f * scale),
+    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1f * scale)
+   )
+   drawRoundRect(
+    color = color,
+    topLeft = Offset(16f * scale, 9f * scale),
+    size = Size(6f * scale, 6f * scale),
+    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1f * scale)
+   )
+  }
+  drawLine(
+   color = color,
+   start = Offset(6f * scale, 6f * scale),
+   end = Offset(3f * scale, 3f * scale),
+   strokeWidth = 2f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
+  drawLine(
+   color = color,
+   start = Offset(18f * scale, 18f * scale),
+   end = Offset(21f * scale, 21f * scale),
+   strokeWidth = 2f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
+ }
+}
+
+@Composable
+private fun DriverKeyGlyph(color: Color) {
+ Canvas(modifier = Modifier.size(24.dp)) {
+  val scale = size.width / 24f
+  drawCircle(
+   color = color,
+   radius = 4.2f * scale,
+   center = Offset(7.5f * scale, 7.5f * scale),
+   style = Stroke(width = 2.5f * scale)
+  )
+  drawLine(
+   color = color,
+   start = Offset(10.5f * scale, 10.5f * scale),
+   end = Offset(20.5f * scale, 20.5f * scale),
+   strokeWidth = 2.5f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
+  drawLine(
+   color = color,
+   start = Offset(15.5f * scale, 15.5f * scale),
+   end = Offset(18f * scale, 13f * scale),
+   strokeWidth = 2.5f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
+  drawLine(
+   color = color,
+   start = Offset(18f * scale, 18f * scale),
+   end = Offset(20.5f * scale, 15.5f * scale),
+   strokeWidth = 2.5f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
  }
 }
 
@@ -823,9 +903,7 @@ fun DriverScreen() {
         },
         modifier = Modifier.size(40.dp)
        ) {
-        Text(
-         text = "🛰️",
-         fontSize = 21.sp,
+        DriverSatelliteGlyph(
          color = if (gpsHealthy) VexaTeal else VexaRed
         )
        }
@@ -861,9 +939,7 @@ fun DriverScreen() {
         },
         modifier = Modifier.size(40.dp)
        ) {
-        Text(
-         text = "🔑",
-         fontSize = 21.sp,
+        DriverKeyGlyph(
          color = if (authHealthy) VexaTeal else VexaRed
         )
        }
@@ -931,24 +1007,6 @@ fun DriverScreen() {
       }
      }
 
-if (authHealthy) {
-           "Авторизация водителя подтверждена сервером VEXA."
-          } else {
-           "Авторизация не подтверждена. Проверьте вход в профиль водителя."
-          }
-         )
-        },
-        modifier = Modifier.size(40.dp)
-       ) {
-        Text(
-         text = "🔑",
-         fontSize = 21.sp,
-         color = if (authHealthy) VexaTeal else VexaRed
-        )
-       }
-      }
-     }
-
      item {
       Row(
        modifier = Modifier
@@ -993,19 +1051,6 @@ if (authHealthy) {
          fontSize = 10.sp,
          fontWeight = FontWeight.Bold
         )
-       }
-
-       TextButton(
-        onClick = {
-         DriverApiClient.clearAccessToken()
-         authorized = false
-         online = false
-         orders = emptyList()
-         errorMessage = ""
-         infoMessage = "Вы вышли из профиля"
-        }
-       ) {
-        Text("Выйти")
        }
       }
      }
