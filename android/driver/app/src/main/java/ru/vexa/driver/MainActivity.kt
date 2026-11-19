@@ -156,6 +156,10 @@ fun DriverScreen() {
   mutableStateOf(DriverApiClient.getAccessToken() != null)
  }
 
+ var initialSessionRestorePending by remember {
+  mutableStateOf(DriverApiClient.getAccessToken() != null)
+ }
+
  var loading by remember { mutableStateOf(false) }
  var online by remember { mutableStateOf(false) }
 
@@ -376,6 +380,13 @@ fun DriverScreen() {
     infoMessage = "Данные водителя обновлены"
    }
   )
+ }
+
+ LaunchedEffect(initialSessionRestorePending) {
+  if (initialSessionRestorePending) {
+   initialSessionRestorePending = false
+   loadDriverData()
+  }
  }
 
  fun changeOnlineStatus(value: Boolean) {
