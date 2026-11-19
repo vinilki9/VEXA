@@ -39,6 +39,13 @@ class DriverLocationService : Service() {
         private const val OFFER_REFRESH_INTERVAL_MS = 2_000L
         private const val PROFILE_RETRY_INTERVAL_MS = 15_000L
 
+        const val STATUS_PREFS = "vexa_driver_health"
+        const val KEY_GPS_OK = "gps_ok"
+        const val KEY_SERVER_OK = "server_ok"
+        const val KEY_AUTH_OK = "auth_ok"
+        const val KEY_ALERT = "alert"
+        const val KEY_ALERT_ID = "alert_id"
+
         fun start(context: Context) {
             val intent = Intent(context, DriverLocationService::class.java)
                 .setAction(ACTION_START)
@@ -81,6 +88,8 @@ class DriverLocationService : Service() {
     private var hasActiveTrip = false
     private var serviceStarted = false
     private var driverOnlineConfirmed = false
+    private var lastGpsWarningState: Boolean? = null
+    private var lastServerWarningState: Boolean? = null
 
     private val profileCheckRunnable = object : Runnable {
         override fun run() {
@@ -110,12 +119,14 @@ class DriverLocationService : Service() {
                     offersExecutor.execute {
                         try {
                             DriverApiClient.refreshOrderOffers()
+                            setServerState(true)
 
                             Log.d(
                                 TAG,
                                 "Предложения заказов обновлены"
                             )
                         } catch (e: Exception) {
+                            setServerState(false)
                             Log.e(
                                 TAG,
                                 "Не удалось обновить предложения заказов",
@@ -127,6 +138,7 @@ class DriverLocationService : Service() {
                     }
                 } catch (e: Exception) {
                     offerRefreshInProgress.set(false)
+                    setServerState(false)
 
                     Log.e(
                         TAG,
@@ -141,6 +153,55 @@ class DriverLocationService : Service() {
                 OFFER_REFRESH_INTERVAL_MS
             )
         }
+    }
+
+    private fun updateHealth(
+        gpsOk: Boolean? = null,
+        serverOk: Boolean? = null,
+        authOk: Boolean? = null,
+        alert: String? = null
+    ) {
+        val prefs = getSharedPreferences(STATUS_PREFS, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+
+        if (gpsOk != null) editor.putBoolean(KEY_GPS_OK, gpsOk)
+        if (serverOk != null) editor.putBoolean(KEY_SERVER_OK, serverOk)
+        if (authOk != null) editor.putBoolean(KEY_AUTH_OK, authOk)
+
+        if (alert != null) {
+            editor.putString(KEY_ALERT, alert)
+            editor.putLong(KEY_ALERT_ID, System.currentTimeMillis())
+        }
+
+        editor.apply()
+    }
+
+    private fun setServerState(ok: Boolean) {
+        updateHealth(serverOk = ok)
+
+        if (lastServerWarningState == null || lastServerWarningState == ok) {
+            lastServerWarningState = ok
+            return
+        }
+
+        lastServerWarningState = ok
+        updateHealth(
+            alert = if (ok) "Связь с сервером восстановлена" else "Нет связи с сервером"
+        )
+    }
+
+    private fun setGpsState(ok: Boolean) {
+        updateHealth(gpsOk = ok)
+
+        if (lastGpsWarningState == null || lastGpsWarningState == ok) {
+            lastGpsWarningState = ok
+            return
+        }
+
+        lastGpsWarningState = ok
+        updateHealth(
+            alert = if (ok) "GPS восстановлен" else "GPS недоступен"
+        )
     }
 
     override fun onCreate() {
@@ -167,6 +228,7 @@ class DriverLocationService : Service() {
             ACTION_START, null -> {
                 if (!hasLocationPermission()) {
                     Log.w(TAG, "Нет разрешения на местоположение")
+                    updateHealth(gpsOk = false, authOk = false)
                     stopSelf()
                     return START_NOT_STICKY
                 }
@@ -175,6 +237,11 @@ class DriverLocationService : Service() {
                     startForegroundNotification()
                     serviceStarted = true
                     driverOnlineConfirmed = false
+                    updateHealth(
+                        gpsOk = false,
+                        serverOk = false,
+                        authOk = !DriverApiClient.getAccessToken().isNullOrBlank()
+                    )
 
                     Log.i(
                         TAG,
@@ -203,6 +270,11 @@ class DriverLocationService : Service() {
         if (!serviceStarted || driverOnlineConfirmed) return
 
         if (DriverApiClient.getAccessToken().isNullOrBlank()) {
+            updateHealth(
+                gpsOk = false,
+                authOk = false,
+                alert = "Требуется вход в профиль"
+            )
             Log.w(TAG, "Нет токена авторизации. GPS-сервис остановлен")
             stopGpsService()
             return
@@ -220,6 +292,8 @@ class DriverLocationService : Service() {
                         "is_online",
                         false
                     )
+                    setServerState(true)
+                    updateHealth(authOk = true)
 
                     handler.post {
                         profileCheckInProgress.set(false)
@@ -227,6 +301,7 @@ class DriverLocationService : Service() {
                         if (!serviceStarted) return@post
 
                         if (!isOnline) {
+                            updateHealth(gpsOk = false)
                             Log.i(
                                 TAG,
                                 "Профиль подтверждён, но водитель не на линии"
@@ -247,6 +322,12 @@ class DriverLocationService : Service() {
                             e is DriverApiHttpException &&
                             (e.statusCode == 401 || e.statusCode == 403)
                         ) {
+                            updateHealth(
+                                gpsOk = false,
+                                serverOk = true,
+                                authOk = false,
+                                alert = "Требуется повторный вход"
+                            )
                             Log.w(
                                 TAG,
                                 "Сервер отклонил авторизацию. GPS-сервис остановлен",
@@ -256,6 +337,7 @@ class DriverLocationService : Service() {
                             return@post
                         }
 
+                        setServerState(false)
                         Log.w(
                             TAG,
                             "Не удалось проверить профиль. " +
@@ -271,6 +353,7 @@ class DriverLocationService : Service() {
             }
         } catch (e: Exception) {
             profileCheckInProgress.set(false)
+            setServerState(false)
 
             Log.e(
                 TAG,
@@ -302,6 +385,7 @@ class DriverLocationService : Service() {
         if (!serviceStarted || driverOnlineConfirmed) return
 
         driverOnlineConfirmed = true
+        updateHealth(authOk = true)
 
         Log.i(
             TAG,
@@ -453,6 +537,7 @@ class DriverLocationService : Service() {
                     }
                 }
             } catch (e: Exception) {
+                setServerState(false)
                 Log.e(TAG, "Не удалось проверить активные заказы", e)
             }
         }
@@ -488,6 +573,7 @@ class DriverLocationService : Service() {
         val provider = selectProvider()
 
         if (provider == null) {
+            setGpsState(false)
             Log.w(TAG, "Нет доступного провайдера местоположения")
             return
         }
@@ -506,9 +592,18 @@ class DriverLocationService : Service() {
             }
 
             override fun onProviderEnabled(provider: String) {
+                handler.post {
+                    if (serviceStarted && driverOnlineConfirmed) {
+                        updateLocationInterval(
+                            if (hasActiveTrip) TRIP_INTERVAL_MS else IDLE_INTERVAL_MS
+                        )
+                    }
+                }
             }
 
             override fun onProviderDisabled(provider: String) {
+                currentIntervalMs = 0L
+                setGpsState(false)
             }
         }
 
@@ -533,9 +628,11 @@ class DriverLocationService : Service() {
                 "GPS-интервал установлен: ${intervalMs / 1000} секунд"
             )
         } catch (e: SecurityException) {
+            setGpsState(false)
             Log.e(TAG, "Нет разрешения на получение координат", e)
             stopGpsService()
         } catch (e: Exception) {
+            setGpsState(false)
             Log.e(TAG, "Ошибка запуска GPS", e)
         }
     }
@@ -596,12 +693,17 @@ class DriverLocationService : Service() {
                     }
                 )
 
+                setServerState(true)
+                setGpsState(true)
+
                 Log.d(
                     TAG,
                     "Координаты переданы: " +
                         "${location.latitude}, ${location.longitude}"
                 )
             } catch (e: Exception) {
+                setServerState(false)
+                setGpsState(false)
                 Log.e(TAG, "Ошибка передачи координат", e)
             }
         }
@@ -623,6 +725,7 @@ class DriverLocationService : Service() {
     private fun stopGpsService() {
         serviceStarted = false
         driverOnlineConfirmed = false
+        updateHealth(gpsOk = false)
 
         handler.removeCallbacks(profileCheckRunnable)
         handler.removeCallbacks(orderRefreshRunnable)
