@@ -11,6 +11,11 @@ import java.net.URL
  * Все методы выполняют синхронные HTTP-запросы.
  * Вызывать их необходимо в фоновом потоке, не в главном UI-потоке.
  */
+class DriverApiHttpException(
+    val statusCode: Int,
+    detail: String
+) : Exception("Ошибка сервера $statusCode: $detail")
+
 object DriverApiClient {
 
     private const val BASE_URL = "https://109.120.184.20"
@@ -38,15 +43,17 @@ object DriverApiClient {
         path: String,
         method: String = "GET",
         body: String? = null,
-        requiresAuth: Boolean = true
+        requiresAuth: Boolean = true,
+        connectTimeoutMs: Int = 20000,
+        readTimeoutMs: Int = 30000
     ): String {
         val connection = URL("$BASE_URL$path")
             .openConnection() as HttpURLConnection
 
         try {
             connection.requestMethod = method
-            connection.connectTimeout = 20000
-            connection.readTimeout = 30000
+            connection.connectTimeout = connectTimeoutMs
+            connection.readTimeout = readTimeoutMs
 
             connection.setRequestProperty(
                 "Accept",
@@ -102,8 +109,9 @@ object DriverApiClient {
                     responseBody
                 }
 
-                throw Exception(
-                    "Ошибка сервера $responseCode: $detail"
+                throw DriverApiHttpException(
+                    statusCode = responseCode,
+                    detail = detail
                 )
             }
 
@@ -216,7 +224,9 @@ object DriverApiClient {
      */
     fun getOrderOffers(): JSONObject {
         val response = request(
-            path = "/api/v1/driver/orders/offers"
+            path = "/api/v1/driver/orders/offers",
+            connectTimeoutMs = 5000,
+            readTimeoutMs = 5000
         )
 
         return JSONObject(response)
