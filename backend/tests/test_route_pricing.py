@@ -39,7 +39,6 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
             base_price_kopecks=5000,
             price_per_km_kopecks=2000,
             price_per_minute_kopecks=100,
-            anonymous=True,
         )
 
         self.assertEqual(result.provider_name, "osrm")
@@ -48,8 +47,7 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
         self.assertEqual(result.fare.base_price_kopecks, 5000)
         self.assertEqual(result.fare.distance_price_kopecks, 5000)
         self.assertEqual(result.fare.time_price_kopecks, 1000)
-        self.assertEqual(result.fare.anonymous_surcharge_kopecks, 10000)
-        self.assertEqual(result.fare.total_price_kopecks, 21000)
+        self.assertEqual(result.fare.total_price_kopecks, 11000)
         get_provider.assert_called_once_with(
             provider_name="osrm",
             osrm_base_url="http://localhost:5000",
@@ -91,7 +89,6 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
                 base_price_kopecks=5000,
                 price_per_km_kopecks=2000,
                 price_per_minute_kopecks=100,
-                anonymous=False,
             )
 
     @patch("app.route_pricing.get_routing_provider")
@@ -124,7 +121,6 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
                 base_price_kopecks=5000,
                 price_per_km_kopecks=2000,
                 price_per_minute_kopecks=100,
-                anonymous=False,
             )
 
     @patch("app.route_pricing.get_routing_provider")
@@ -138,7 +134,7 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
             yandex_api_key="",
         ),
     )
-    def test_calculates_fare_without_anonymous_surcharge(
+    def test_calculates_fare_without_extra_surcharge(
         self,
         get_provider,
     ):
@@ -157,16 +153,13 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
             base_price_kopecks=5000,
             price_per_km_kopecks=2000,
             price_per_minute_kopecks=100,
-            anonymous=False,
         )
 
-        self.assertEqual(
-            result.fare.anonymous_surcharge_kopecks,
-            0,
-        )
         self.assertEqual(
             result.fare.total_price_kopecks,
             11000,
         )
+
+
 if __name__ == "__main__":
     unittest.main()
