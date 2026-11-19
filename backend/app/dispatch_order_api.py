@@ -368,7 +368,6 @@ def get_dispatch_order(
         "vehicle_id": order.vehicle_id,
         "customer_name": order.customer_name,
         "customer_phone": order.customer_phone,
-        "anonymous": order.anonymous,
         "pickup_address": order.pickup_address,
         "destination_address": order.destination_address,
         "pickup_latitude": order.pickup_latitude,
@@ -408,9 +407,6 @@ def get_dispatch_order(
         ),
         "fare_limit_adjustment_kopecks": (
             order.fare_limit_adjustment_kopecks
-        ),
-        "anonymous_surcharge_kopecks": (
-            order.anonymous_surcharge_kopecks
         ),
         "child_seat": order.child_seat,
         "animal_transport": order.animal_transport,
