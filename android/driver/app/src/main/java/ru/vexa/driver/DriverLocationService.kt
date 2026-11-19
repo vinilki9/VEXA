@@ -37,6 +37,7 @@ class DriverLocationService : Service() {
         private const val TRIP_INTERVAL_MS = 5_000L
         private const val ORDER_REFRESH_INTERVAL_MS = 10_000L
         private const val OFFER_REFRESH_INTERVAL_MS = 2_000L
+        private const val PROFILE_RETRY_INTERVAL_MS = 15_000L
 
         fun start(context: Context) {
             val intent = Intent(context, DriverLocationService::class.java)
@@ -71,6 +72,7 @@ class DriverLocationService : Service() {
     private val offersExecutor = Executors.newSingleThreadExecutor()
 
     private val offerRefreshInProgress = AtomicBoolean(false)
+    private val profileCheckInProgress = AtomicBoolean(false)
 
     private lateinit var locationManager: LocationManager
 
@@ -78,10 +80,17 @@ class DriverLocationService : Service() {
     private var currentIntervalMs = 0L
     private var hasActiveTrip = false
     private var serviceStarted = false
+    private var driverOnlineConfirmed = false
+
+    private val profileCheckRunnable = object : Runnable {
+        override fun run() {
+            checkDriverSession()
+        }
+    }
 
     private val orderRefreshRunnable = object : Runnable {
         override fun run() {
-            if (!serviceStarted) return
+            if (!serviceStarted || !driverOnlineConfirmed) return
 
             refreshActiveOrders()
 
@@ -94,7 +103,7 @@ class DriverLocationService : Service() {
 
     private val offerRefreshRunnable = object : Runnable {
         override fun run() {
-            if (!serviceStarted) return
+            if (!serviceStarted || !driverOnlineConfirmed) return
 
             if (offerRefreshInProgress.compareAndSet(false, true)) {
                 try {
@@ -165,22 +174,157 @@ class DriverLocationService : Service() {
                 if (!serviceStarted) {
                     startForegroundNotification()
                     serviceStarted = true
+                    driverOnlineConfirmed = false
 
-                    // Сразу запускаем GPS в режиме свободного водителя.
-                    updateLocationInterval(IDLE_INTERVAL_MS)
+                    Log.i(
+                        TAG,
+                        "Сервис запущен. Ожидается проверка авторизации и режима «На линии»"
+                    )
 
-                    // Проверяем, нет ли уже активной поездки.
-                    refreshActiveOrders()
-                    handler.post(orderRefreshRunnable)
-
-                    // Запускаем сетевой опрос предложений заказов.
-                    // Он работает независимо от GPS и активных заказов.
-                    handler.post(offerRefreshRunnable)
+                    scheduleProfileCheck(0L)
+                } else if (!driverOnlineConfirmed) {
+                    // Повторный запуск не должен создавать
+                    // дополнительные циклы проверки и опроса.
+                    scheduleProfileCheck(0L)
                 }
             }
         }
 
         return START_STICKY
+    }
+
+    /**
+     * Проверить авторизацию и актуальный статус водителя.
+     *
+     * GPS и опрос заказов запускаются только после подтверждения
+     * действующей сессии и is_online=true.
+     */
+    private fun checkDriverSession() {
+        if (!serviceStarted || driverOnlineConfirmed) return
+
+        if (DriverApiClient.getAccessToken().isNullOrBlank()) {
+            Log.w(TAG, "Нет токена авторизации. GPS-сервис остановлен")
+            stopGpsService()
+            return
+        }
+
+        if (!profileCheckInProgress.compareAndSet(false, true)) {
+            return
+        }
+
+        try {
+            networkExecutor.execute {
+                try {
+                    val profile = DriverApiClient.getProfile()
+                    val isOnline = profile.optBoolean(
+                        "is_online",
+                        false
+                    )
+
+                    handler.post {
+                        profileCheckInProgress.set(false)
+
+                        if (!serviceStarted) return@post
+
+                        if (!isOnline) {
+                            Log.i(
+                                TAG,
+                                "Профиль подтверждён, но водитель не на линии"
+                            )
+                            stopGpsService()
+                            return@post
+                        }
+
+                        startOnlineLoops()
+                    }
+                } catch (e: Exception) {
+                    handler.post {
+                        profileCheckInProgress.set(false)
+
+                        if (!serviceStarted) return@post
+
+                        if (
+                            e is DriverApiHttpException &&
+                            (e.statusCode == 401 || e.statusCode == 403)
+                        ) {
+                            Log.w(
+                                TAG,
+                                "Сервер отклонил авторизацию. GPS-сервис остановлен",
+                                e
+                            )
+                            stopGpsService()
+                            return@post
+                        }
+
+                        Log.w(
+                            TAG,
+                            "Не удалось проверить профиль. " +
+                                "Повторная проверка через 15 секунд",
+                            e
+                        )
+
+                        scheduleProfileCheck(
+                            PROFILE_RETRY_INTERVAL_MS
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            profileCheckInProgress.set(false)
+
+            Log.e(
+                TAG,
+                "Не удалось запустить проверку профиля",
+                e
+            )
+
+            scheduleProfileCheck(
+                PROFILE_RETRY_INTERVAL_MS
+            )
+        }
+    }
+
+    private fun scheduleProfileCheck(delayMs: Long) {
+        if (!serviceStarted || driverOnlineConfirmed) return
+
+        handler.removeCallbacks(profileCheckRunnable)
+        handler.postDelayed(
+            profileCheckRunnable,
+            delayMs
+        )
+    }
+
+    /**
+     * Запустить фоновые циклы только после подтверждения,
+     * что водитель авторизован и находится на линии.
+     */
+    private fun startOnlineLoops() {
+        if (!serviceStarted || driverOnlineConfirmed) return
+
+        driverOnlineConfirmed = true
+
+        Log.i(
+            TAG,
+            "Авторизация подтверждена. Водитель на линии. Запускаются GPS и опрос заказов"
+        )
+
+        updateNotification(
+            "Вы на линии. GPS обновляется каждые 30 секунд"
+        )
+
+        // Начальный GPS-интервал для свободного водителя.
+        updateLocationInterval(IDLE_INTERVAL_MS)
+
+        // Проверяем наличие активной поездки.
+        refreshActiveOrders()
+
+        // Запускаем периодическую проверку активных заказов.
+        handler.removeCallbacks(orderRefreshRunnable)
+        handler.post(orderRefreshRunnable)
+
+        // Запускаем опрос предложений заказов.
+        handler.removeCallbacks(offerRefreshRunnable)
+        handler.post(offerRefreshRunnable)
     }
 
     private fun startForegroundNotification() {
@@ -198,7 +342,7 @@ class DriverLocationService : Service() {
         )
 
         val notification = buildNotification(
-            "Передача местоположения включена"
+            "Проверка режима водителя"
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -271,6 +415,8 @@ class DriverLocationService : Service() {
     }
 
     private fun refreshActiveOrders() {
+        if (!serviceStarted || !driverOnlineConfirmed) return
+
         networkExecutor.execute {
             try {
                 val response = DriverApiClient.getActiveOrders()
@@ -279,7 +425,9 @@ class DriverLocationService : Service() {
                 val active = orders != null && orders.length() > 0
 
                 handler.post {
-                    if (!serviceStarted) return@post
+                    if (!serviceStarted || !driverOnlineConfirmed) {
+                        return@post
+                    }
 
                     val tripStateChanged = hasActiveTrip != active
                     hasActiveTrip = active
@@ -290,9 +438,8 @@ class DriverLocationService : Service() {
                         IDLE_INTERVAL_MS
                     }
 
-                    // Проверяем интервал при каждом опросе.
-                    // Это позволяет повторно запустить GPS,
-                    // если провайдер ранее был недоступен.
+                    // Повторная проверка интервала позволяет
+                    // восстановить GPS, если провайдер был недоступен.
                     updateLocationInterval(interval)
 
                     if (tripStateChanged) {
@@ -323,7 +470,11 @@ class DriverLocationService : Service() {
     }
 
     private fun updateLocationInterval(intervalMs: Long) {
-        if (!serviceStarted || currentIntervalMs == intervalMs) {
+        if (
+            !serviceStarted ||
+            !driverOnlineConfirmed ||
+            currentIntervalMs == intervalMs
+        ) {
             return
         }
 
@@ -431,6 +582,8 @@ class DriverLocationService : Service() {
     }
 
     private fun sendLocationToServer(location: Location) {
+        if (!serviceStarted || !driverOnlineConfirmed) return
+
         networkExecutor.execute {
             try {
                 DriverApiClient.sendLocation(
@@ -469,13 +622,16 @@ class DriverLocationService : Service() {
 
     private fun stopGpsService() {
         serviceStarted = false
+        driverOnlineConfirmed = false
 
+        handler.removeCallbacks(profileCheckRunnable)
         handler.removeCallbacks(orderRefreshRunnable)
         handler.removeCallbacks(offerRefreshRunnable)
 
         removeLocationUpdates()
 
-        // Очищаем предложения при уходе водителя с линии.
+        // Очищаем предложения при уходе водителя с линии
+        // или при отсутствии действующей авторизации.
         DriverApiClient.clearCachedOrderOffers()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -490,6 +646,7 @@ class DriverLocationService : Service() {
 
     override fun onDestroy() {
         serviceStarted = false
+        driverOnlineConfirmed = false
 
         handler.removeCallbacksAndMessages(null)
         removeLocationUpdates()
