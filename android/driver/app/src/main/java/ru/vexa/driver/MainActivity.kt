@@ -24,9 +24,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
+import java.io.IOException
 import java.text.NumberFormat
 import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.TimeZone
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val VexaTeal = Color(0xFF20C6B7)
 private val VexaInk = Color(0xFF111827)
@@ -43,7 +47,30 @@ private fun formatWalletRubles(kopecks: Long): String {
 }
 
 private val apiExecutor = Executors.newSingleThreadExecutor()
+private val offerPollExecutor = Executors.newSingleThreadExecutor()
+private val offerPollInFlight = AtomicBoolean(false)
 private val mainHandler = Handler(Looper.getMainLooper())
+
+private fun parseServerTimestampMillis(value: String): Long? {
+ val match = Regex(
+  """^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$"""
+ ).matchEntire(value.trim()) ?: return null
+
+ val fraction = (match.groupValues[2] + "000").take(3)
+ val normalized = "${match.groupValues[1]}.$fraction${match.groupValues[3]}"
+
+ return try {
+  val formatter = SimpleDateFormat(
+   "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+   Locale.US
+  )
+  formatter.isLenient = false
+  formatter.timeZone = TimeZone.getTimeZone("UTC")
+  formatter.parse(normalized)?.time
+ } catch (_: Exception) {
+  null
+ }
+}
 
 class MainActivity : ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
@@ -129,6 +156,10 @@ fun DriverScreen() {
   mutableStateOf(DriverApiClient.getAccessToken() != null)
  }
 
+ var initialSessionRestorePending by remember {
+  mutableStateOf(DriverApiClient.getAccessToken() != null)
+ }
+
  var loading by remember { mutableStateOf(false) }
  var online by remember { mutableStateOf(false) }
 
@@ -140,6 +171,12 @@ fun DriverScreen() {
  var vehicleDescription by remember { mutableStateOf("") }
 
  var orders by remember { mutableStateOf(listOf<JSONObject>()) }
+ var currentOffer by remember { mutableStateOf<JSONObject?>(null) }
+ var offerDeadlineMillis by remember { mutableStateOf(0L) }
+ var offerSecondsLeft by remember { mutableStateOf(0) }
+ var offerActionInProgress by remember { mutableStateOf(false) }
+ var lastResolvedOfferId by remember { mutableStateOf("") }
+ var offerPollStatusMessage by remember { mutableStateOf("") }
  var walletBalanceKopecks by remember { mutableStateOf<Long?>(null) }
  var walletAvailableKopecks by remember { mutableStateOf<Long?>(null) }
 
@@ -155,6 +192,111 @@ fun DriverScreen() {
    infoMessage = message
   }
  )
+
+ LaunchedEffect(authorized, online) {
+  if (!authorized || !online) {
+   currentOffer = null
+   offerDeadlineMillis = 0L
+   offerSecondsLeft = 0
+   offerActionInProgress = false
+   offerPollStatusMessage = ""
+  } else {
+   while (true) {
+    if (
+     !offerActionInProgress &&
+     offerPollInFlight.compareAndSet(false, true)
+    ) {
+     offerPollExecutor.execute {
+      try {
+       val response = DriverApiClient.getOrderOffers()
+       val offers = response.optJSONArray("offers")
+       val firstOffer = if (offers != null && offers.length() > 0) {
+        offers.optJSONObject(0)
+       } else {
+        null
+       }
+
+       mainHandler.post {
+        offerPollInFlight.set(false)
+
+        if (authorized && online && !offerActionInProgress) {
+         offerPollStatusMessage = ""
+
+         if (firstOffer == null) {
+          currentOffer = null
+          offerDeadlineMillis = 0L
+          offerSecondsLeft = 0
+         } else {
+          val offerId = firstOffer.optString("offer_id")
+          if (offerId.isNotBlank() && offerId != lastResolvedOfferId) {
+           val currentId = currentOffer?.optString("offer_id").orEmpty()
+           if (currentId != offerId) {
+            currentOffer = firstOffer
+            val timeoutSeconds = firstOffer.optInt(
+             "response_timeout_seconds",
+             13
+            ).coerceAtLeast(1)
+            val serverDeadline = parseServerTimestampMillis(
+             firstOffer.optString("expires_at")
+            )
+            offerDeadlineMillis = serverDeadline
+             ?: (System.currentTimeMillis() +
+                 (timeoutSeconds - 2).coerceAtLeast(1) * 1000L)
+           } else {
+            currentOffer = firstOffer
+           }
+          }
+         }
+        }
+       }
+      } catch (e: Exception) {
+       val statusMessage = when (e) {
+        is DriverApiHttpException -> when {
+         e.statusCode == 401 || e.statusCode == 403 ->
+          "Ошибка авторизации (HTTP ${e.statusCode}). Проверьте вход в аккаунт водителя."
+         e.statusCode in 500..599 ->
+          "Сервер временно недоступен (HTTP ${e.statusCode}). VEXA продолжит проверку автоматически."
+         else ->
+          "Сервер вернул ошибку HTTP ${e.statusCode}: ${e.message.orEmpty()}"
+        }
+        is IOException ->
+         "Нет связи с сервером. VEXA автоматически возобновит получение заказов после восстановления интернета."
+        else ->
+         "Не удалось получить предложения заказов: ${e.message ?: "неизвестная ошибка"}"
+       }
+       mainHandler.post {
+        offerPollInFlight.set(false)
+        if (authorized && online) {
+         offerPollStatusMessage = statusMessage
+        }
+       }
+      }
+     }
+    }
+
+    kotlinx.coroutines.delay(2000)
+   }
+  }
+ }
+
+ LaunchedEffect(currentOffer?.optString("offer_id"), offerDeadlineMillis) {
+  while (currentOffer != null && offerDeadlineMillis > 0L) {
+   val remainingMillis = offerDeadlineMillis - System.currentTimeMillis()
+   if (remainingMillis <= 0L) {
+    currentOffer?.let {
+     lastResolvedOfferId = it.optString("offer_id")
+    }
+    currentOffer = null
+    offerSecondsLeft = 0
+    break
+   }
+
+   offerSecondsLeft = ((remainingMillis + 999L) / 1000L)
+    .toInt()
+    .coerceAtLeast(1)
+   kotlinx.coroutines.delay(250)
+  }
+ }
 
  val systemDark = isSystemInDarkTheme()
  val dark = theme == "Ночная" ||
@@ -240,6 +382,13 @@ fun DriverScreen() {
   )
  }
 
+ LaunchedEffect(initialSessionRestorePending) {
+  if (initialSessionRestorePending) {
+   initialSessionRestorePending = false
+   loadDriverData()
+  }
+ }
+
  fun changeOnlineStatus(value: Boolean) {
   if (loading) return
 
@@ -304,6 +453,66 @@ fun DriverScreen() {
 
     orders = updated
     infoMessage = "Список заказов обновлён"
+   }
+  )
+ }
+
+ fun respondToOffer(accept: Boolean) {
+  val offer = currentOffer ?: return
+  if (offerActionInProgress) return
+
+  val offerId = offer.optString("offer_id")
+  if (offerId.isBlank()) {
+   errorMessage = "Не удалось определить предложение заказа"
+   return
+  }
+
+  offerActionInProgress = true
+  errorMessage = ""
+
+  runApiCall(
+   action = {
+    if (accept) {
+     DriverApiClient.acceptOrderOffer(offerId)
+    } else {
+     DriverApiClient.rejectOrderOffer(offerId)
+    }
+   },
+   onResult = { result, error ->
+    offerActionInProgress = false
+
+    if (error != null) {
+     errorMessage = error
+     return@runApiCall
+    }
+
+    val response = result as JSONObject
+    val failed = !response.optBoolean("success", true) ||
+     response.optBoolean("expired", false) ||
+     response.optBoolean("cancelled", false)
+
+    if (failed) {
+     lastResolvedOfferId = offerId
+     currentOffer = null
+     offerDeadlineMillis = 0L
+     offerSecondsLeft = 0
+     infoMessage = response.optString(
+      "message",
+      "Предложение больше недоступно"
+     )
+    } else {
+     lastResolvedOfferId = offerId
+     currentOffer = null
+     offerDeadlineMillis = 0L
+     offerSecondsLeft = 0
+
+     if (accept) {
+      infoMessage = "Заказ принят. Загружаем карточку поездки"
+      refreshOrders()
+     } else {
+      infoMessage = "Вы отказались от заказа"
+     }
+    }
    }
   )
  }
@@ -798,6 +1007,190 @@ fun DriverScreen() {
           .fillMaxWidth()
           .height(300.dp)
         )
+       }
+      }
+     }
+
+     if (offerPollStatusMessage.isNotBlank() && online) {
+      item {
+       Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = RoundedCornerShape(14.dp)
+       ) {
+        Text(
+         text = offerPollStatusMessage,
+         modifier = Modifier.padding(12.dp),
+         color = MaterialTheme.colorScheme.onErrorContainer,
+         fontSize = 12.sp
+        )
+       }
+      }
+     }
+
+     if (currentOffer != null && online) {
+      item {
+       val offer = currentOffer!!
+       val order = offer.optJSONObject("order") ?: JSONObject()
+       val pickup = order.optJSONObject("pickup")
+        ?.optString("address", "Не указан")
+        ?: "Не указан"
+       val destination = order.optJSONObject("destination")
+        ?.optString("address", "Не указан")
+        ?: "Не указан"
+       val orderNumber = order.optString(
+        "public_number",
+        order.optString("id", "—")
+       )
+       val price = order.optString("price_rub", "")
+       val distanceMeters = offer.optInt("distance_to_pickup_meters", -1)
+       val distanceText = when {
+        distanceMeters < 0 -> ""
+        distanceMeters >= 1000 -> String.format(
+         Locale("ru", "RU"),
+         "%.1f км",
+         distanceMeters / 1000.0
+        )
+        else -> "$distanceMeters м"
+       }
+
+       VexaCard(dark = dark) {
+        Row(
+         modifier = Modifier.fillMaxWidth(),
+         verticalAlignment = Alignment.CenterVertically
+        ) {
+         Column(modifier = Modifier.weight(1f)) {
+          Text(
+           text = "НОВОЕ ПРЕДЛОЖЕНИЕ",
+           color = VexaTeal,
+           fontSize = 12.sp,
+           fontWeight = FontWeight.ExtraBold,
+           letterSpacing = 1.sp
+          )
+          Text(
+           text = "Заказ № $orderNumber",
+           color = foregroundColor,
+           fontSize = 18.sp,
+           fontWeight = FontWeight.Bold
+          )
+         }
+         Surface(
+          color = if (offerSecondsLeft <= 5) {
+           MaterialTheme.colorScheme.errorContainer
+          } else {
+           VexaTeal.copy(alpha = 0.16f)
+          },
+          shape = RoundedCornerShape(14.dp)
+         ) {
+          Text(
+           text = "$offerSecondsLeft сек.",
+           modifier = Modifier.padding(
+            horizontal = 12.dp,
+            vertical = 9.dp
+           ),
+           color = if (offerSecondsLeft <= 5) {
+            MaterialTheme.colorScheme.onErrorContainer
+           } else {
+            if (dark) VexaTeal else Color(0xFF087F75)
+           },
+           fontSize = 16.sp,
+           fontWeight = FontWeight.ExtraBold
+          )
+         }
+        }
+
+        HorizontalDivider(
+         color = if (dark) Color.White.copy(alpha = 0.08f)
+         else Color.Black.copy(alpha = 0.06f)
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+         Text(
+          text = "ОТКУДА",
+          color = VexaMuted,
+          fontSize = 9.sp,
+          fontWeight = FontWeight.Bold
+         )
+         Text(
+          text = pickup,
+          color = foregroundColor,
+          fontSize = 14.sp,
+          fontWeight = FontWeight.Medium
+         )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+         Text(
+          text = "КУДА",
+          color = VexaMuted,
+          fontSize = 9.sp,
+          fontWeight = FontWeight.Bold
+         )
+         Text(
+          text = destination,
+          color = foregroundColor,
+          fontSize = 14.sp,
+          fontWeight = FontWeight.Medium
+         )
+        }
+
+        Row(
+         modifier = Modifier.fillMaxWidth(),
+         verticalAlignment = Alignment.CenterVertically
+        ) {
+         if (price.isNotBlank() && price != "null") {
+          Text(
+           text = "Стоимость: $price ₽",
+           color = foregroundColor,
+           fontSize = 17.sp,
+           fontWeight = FontWeight.Bold
+          )
+         }
+         Spacer(Modifier.weight(1f))
+         if (distanceText.isNotBlank()) {
+          Text(
+           text = "До подачи: $distanceText",
+           color = secondaryText,
+           fontSize = 11.sp
+          )
+         }
+        }
+
+        Text(
+         text = "Ответьте до окончания таймера. Если не успеть, предложение автоматически перейдёт следующему водителю.",
+         color = secondaryText,
+         fontSize = 11.sp
+        )
+
+        Row(
+         modifier = Modifier.fillMaxWidth(),
+         horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+         OutlinedButton(
+          onClick = { respondToOffer(false) },
+          enabled = !offerActionInProgress && offerSecondsLeft > 0,
+          modifier = Modifier.weight(1f).height(50.dp),
+          shape = RoundedCornerShape(14.dp)
+         ) {
+          Text("ОТКЛОНИТЬ")
+         }
+
+         Button(
+          onClick = { respondToOffer(true) },
+          enabled = !offerActionInProgress && offerSecondsLeft > 0,
+          modifier = Modifier.weight(1f).height(50.dp),
+          shape = RoundedCornerShape(14.dp),
+          colors = ButtonDefaults.buttonColors(
+           containerColor = VexaTeal,
+           contentColor = VexaInk
+          )
+         ) {
+          Text(
+           text = if (offerActionInProgress) "ОТПРАВКА..." else "ПРИНЯТЬ",
+           fontWeight = FontWeight.Bold
+          )
+         }
+        }
        }
       }
      }

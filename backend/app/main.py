@@ -1,3 +1,4 @@
+
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from decimal import Decimal, ROUND_HALF_UP
@@ -62,8 +63,8 @@ app.include_router(dispatch_order_router)
 app.include_router(dynamic_pricing_router)
 
 ORDER_STATUSES = {
-    "new": {"accepted", "cancelled"},
-    "accepted": {"assigned", "cancelled"},
+    "new": {"cancelled"},
+    "accepted": {"cancelled"},
     "assigned": {"arrived", "cancelled"},
     "arrived": {"in_progress", "cancelled"},
     "in_progress": {"completed", "cancelled"},
@@ -1057,7 +1058,6 @@ def create_price_quote_token(
 
     return token, expires_at
 
-
 # ============================================================
 # CREATE ORDER
 # ============================================================
@@ -1354,6 +1354,8 @@ def preview_order_price(
     result["price_quote_expires_at"] = price_quote_expires_at
 
     return result
+
+
 @app.post(
     "/api/v1/orders",
     response_model=OrderResponse,
@@ -1849,7 +1851,9 @@ def create_order(
         order,
         city,
     )
-    # ============================================================
+
+
+# ============================================================
 # DISPATCHER AUTHENTICATION
 # ============================================================
 

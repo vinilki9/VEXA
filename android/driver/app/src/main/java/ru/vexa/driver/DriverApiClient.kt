@@ -1,9 +1,19 @@
 
 package ru.vexa.driver
 
+import android.content.Context
+import android.content.SharedPreferences
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 /**
  * Сетевой клиент приложения VEXA Driver.
@@ -11,23 +21,308 @@ import java.net.URL
  * Все методы выполняют синхронные HTTP-запросы.
  * Вызывать их необходимо в фоновом потоке, не в главном UI-потоке.
  */
+class DriverApiHttpException(
+    val statusCode: Int,
+    detail: String
+) : Exception("Ошибка сервера $statusCode: $detail")
+
 object DriverApiClient {
 
     private const val BASE_URL = "https://109.120.184.20"
 
+    private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
+    private const val KEY_ALIAS = "vexa_driver_access_token_key_v1"
+
+    private const val TOKEN_PREFS = "vexa_secure_session"
+    private const val TOKEN_CIPHER_TEXT_KEY = "access_token_ciphertext"
+    private const val TOKEN_IV_KEY = "access_token_iv"
+
+    private const val GCM_TAG_LENGTH_BITS = 128
+
+    private val tokenLock = Any()
+    private val offersCacheLock = Any()
+
     @Volatile
     private var accessToken: String? = null
 
-    fun setAccessToken(token: String) {
-        accessToken = token.trim().takeIf { it.isNotEmpty() }
+    @Volatile
+    private var applicationContext: Context? = null
+
+    @Volatile
+    private var cachedOrderOffers: JSONObject? = null
+
+    @Volatile
+    private var cachedOrderOffersError: Exception? = null
+
+    /**
+     * Инициализировать защищённое хранилище сессии.
+     *
+     * Вызывать из Application.onCreate() до запуска Activity
+     * и фоновых сервисов.
+     *
+     * Токен восстанавливается из зашифрованного хранилища.
+     * В случае ошибки повреждённая сессия удаляется.
+     */
+    fun initialize(context: Context) {
+        synchronized(tokenLock) {
+            applicationContext = context.applicationContext
+
+            try {
+                val prefs = getTokenPreferences()
+                val encryptedToken = prefs.getString(
+                    TOKEN_CIPHER_TEXT_KEY,
+                    null
+                )
+                val encodedIv = prefs.getString(
+                    TOKEN_IV_KEY,
+                    null
+                )
+
+                if (encryptedToken.isNullOrBlank() || encodedIv.isNullOrBlank()) {
+                    accessToken = null
+                    return
+                }
+
+                val ciphertext = Base64.decode(
+                    encryptedToken,
+                    Base64.NO_WRAP
+                )
+
+                val iv = Base64.decode(
+                    encodedIv,
+                    Base64.NO_WRAP
+                )
+
+                accessToken = decryptToken(ciphertext, iv)
+                    .trim()
+                    .takeIf { it.isNotEmpty() }
+            } catch (_: Exception) {
+                accessToken = null
+                clearStoredToken(deleteKey = true)
+            }
+        }
     }
 
+    /**
+     * Получить настройки защищённого хранилища.
+     */
+    private fun getTokenPreferences(): SharedPreferences {
+        val context = applicationContext
+            ?: throw IllegalStateException(
+                "Защищённое хранилище не инициализировано"
+            )
+
+        return context.getSharedPreferences(
+            TOKEN_PREFS,
+            Context.MODE_PRIVATE
+        )
+    }
+
+    /**
+     * Получить ключ AES из Android Keystore.
+     * Если ключ ещё не создан, создать новый AES-256 ключ.
+     */
+    private fun getOrCreateSecretKey(): SecretKey {
+        val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER)
+        keyStore.load(null)
+
+        val existingKey = keyStore.getKey(
+            KEY_ALIAS,
+            null
+        ) as? SecretKey
+
+        if (existingKey != null) {
+            return existingKey
+        }
+
+        val keyGenerator = KeyGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_AES,
+            KEYSTORE_PROVIDER
+        )
+
+        val keySpec = KeyGenParameterSpec.Builder(
+            KEY_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT or
+                KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(
+                KeyProperties.ENCRYPTION_PADDING_NONE
+            )
+            .setRandomizedEncryptionRequired(true)
+            .setKeySize(256)
+            .build()
+
+        keyGenerator.init(keySpec)
+
+        return keyGenerator.generateKey()
+    }
+
+    /**
+     * Зашифровать токен с использованием AES/GCM.
+     */
+    private fun encryptToken(token: String): Pair<ByteArray, ByteArray> {
+        val secretKey = getOrCreateSecretKey()
+
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+
+        cipher.init(
+            Cipher.ENCRYPT_MODE,
+            secretKey
+        )
+
+        val ciphertext = cipher.doFinal(
+            token.toByteArray(Charsets.UTF_8)
+        )
+
+        val iv = cipher.iv
+
+        return Pair(ciphertext, iv)
+    }
+
+    /**
+     * Расшифровать токен с использованием AES/GCM.
+     */
+    private fun decryptToken(
+        ciphertext: ByteArray,
+        iv: ByteArray
+    ): String {
+        val secretKey = getOrCreateSecretKey()
+
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+
+        val parameters = GCMParameterSpec(
+            GCM_TAG_LENGTH_BITS,
+            iv
+        )
+
+        cipher.init(
+            Cipher.DECRYPT_MODE,
+            secretKey,
+            parameters
+        )
+
+        val plaintext = cipher.doFinal(ciphertext)
+
+        return String(
+            plaintext,
+            Charsets.UTF_8
+        )
+    }
+
+    /**
+     * Сохранить зашифрованный токен в приватном хранилище.
+     *
+     * Открытый токен в SharedPreferences не сохраняется.
+     */
+    private fun saveEncryptedToken(token: String) {
+        val (ciphertext, iv) = encryptToken(token)
+
+        val encryptedToken = Base64.encodeToString(
+            ciphertext,
+            Base64.NO_WRAP
+        )
+
+        val encodedIv = Base64.encodeToString(
+            iv,
+            Base64.NO_WRAP
+        )
+
+        val saved = getTokenPreferences()
+            .edit()
+            .putString(
+                TOKEN_CIPHER_TEXT_KEY,
+                encryptedToken
+            )
+            .putString(
+                TOKEN_IV_KEY,
+                encodedIv
+            )
+            .commit()
+
+        if (!saved) {
+            throw IllegalStateException(
+                "Не удалось сохранить защищённую сессию"
+            )
+        }
+    }
+
+    /**
+     * Удалить сохранённый токен.
+     *
+     * При необходимости также удалить ключ Android Keystore.
+     */
+    private fun clearStoredToken(deleteKey: Boolean) {
+        try {
+            getTokenPreferences()
+                .edit()
+                .remove(TOKEN_CIPHER_TEXT_KEY)
+                .remove(TOKEN_IV_KEY)
+                .commit()
+        } catch (_: Exception) {
+            // Продолжаем очистку ключа даже при ошибке Preferences.
+        }
+
+        if (deleteKey) {
+            try {
+                val keyStore = KeyStore.getInstance(
+                    KEYSTORE_PROVIDER
+                )
+
+                keyStore.load(null)
+
+                if (keyStore.containsAlias(KEY_ALIAS)) {
+                    keyStore.deleteEntry(KEY_ALIAS)
+                }
+            } catch (_: Exception) {
+                // Ошибка удаления ключа не должна прерывать выход.
+            }
+        }
+    }
+
+    /**
+     * Установить токен авторизации.
+     *
+     * Сначала токен сохраняется в зашифрованном виде,
+     * затем устанавливается в памяти приложения.
+     */
+    fun setAccessToken(token: String) {
+        synchronized(tokenLock) {
+            val normalizedToken = token.trim()
+                .takeIf { it.isNotEmpty() }
+
+            if (normalizedToken == null) {
+                accessToken = null
+                clearStoredToken(deleteKey = true)
+                return
+            }
+
+            saveEncryptedToken(normalizedToken)
+
+            accessToken = normalizedToken
+        }
+    }
+
+    /**
+     * Получить текущий токен авторизации из памяти.
+     */
     fun getAccessToken(): String? {
         return accessToken
     }
 
+    /**
+     * Полностью очистить сессию авторизации.
+     *
+     * Удаляется токен из памяти, зашифрованное значение
+     * из SharedPreferences и ключ из Android Keystore.
+     */
     fun clearAccessToken() {
-        accessToken = null
+        synchronized(tokenLock) {
+            accessToken = null
+            clearStoredToken(deleteKey = true)
+        }
+
+        clearCachedOrderOffers()
     }
 
     private fun jsonString(value: String): String {
@@ -38,15 +333,17 @@ object DriverApiClient {
         path: String,
         method: String = "GET",
         body: String? = null,
-        requiresAuth: Boolean = true
+        requiresAuth: Boolean = true,
+        connectTimeoutMs: Int = 20000,
+        readTimeoutMs: Int = 30000
     ): String {
         val connection = URL("$BASE_URL$path")
             .openConnection() as HttpURLConnection
 
         try {
             connection.requestMethod = method
-            connection.connectTimeout = 20000
-            connection.readTimeout = 30000
+            connection.connectTimeout = connectTimeoutMs
+            connection.readTimeout = readTimeoutMs
 
             connection.setRequestProperty(
                 "Accept",
@@ -102,8 +399,9 @@ object DriverApiClient {
                     responseBody
                 }
 
-                throw Exception(
-                    "Ошибка сервера $responseCode: $detail"
+                throw DriverApiHttpException(
+                    statusCode = responseCode,
+                    detail = detail
                 )
             }
 
@@ -191,6 +489,118 @@ object DriverApiClient {
     fun getActiveOrders(): JSONObject {
         val response = request(
             path = "/api/v1/driver/orders/active"
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
+     * Получить предложения новых заказов из локального кэша.
+     *
+     * Этот метод не выполняет сетевых запросов.
+     * Его вызывает MainActivity для чтения данных,
+     * которые обновляет DriverLocationService.
+     *
+     * Если фоновый сервис ещё не получил ответ сервера,
+     * возвращается пустой список предложений.
+     *
+     * Если последний запрос завершился ошибкой,
+     * повторно выбрасывается сохранённая ошибка,
+     * чтобы MainActivity могла показать корректное сообщение.
+     */
+    fun getOrderOffers(): JSONObject {
+        synchronized(offersCacheLock) {
+            cachedOrderOffersError?.let {
+                throw it
+            }
+
+            val cached = cachedOrderOffers
+                ?: return JSONObject(
+                    """{"offers_count":0,"offers":[]}"""
+                )
+
+            return JSONObject(cached.toString())
+        }
+    }
+
+    /**
+     * Получить предложения новых заказов непосредственно с сервера.
+     *
+     * GET /api/v1/driver/orders/offers
+     *
+     * Вызывать только из фонового DriverLocationService.
+     * Успешный ответ сохраняется в общем кэше приложения.
+     * Ошибка сохраняется и передаётся MainActivity через getOrderOffers().
+     */
+    fun refreshOrderOffers(): JSONObject {
+        try {
+            val response = request(
+                path = "/api/v1/driver/orders/offers",
+                connectTimeoutMs = 5000,
+                readTimeoutMs = 5000
+            )
+
+            val result = JSONObject(response)
+
+            synchronized(offersCacheLock) {
+                cachedOrderOffers = JSONObject(result.toString())
+                cachedOrderOffersError = null
+            }
+
+            return result
+        } catch (e: Exception) {
+            synchronized(offersCacheLock) {
+                cachedOrderOffersError = e
+            }
+
+            throw e
+        }
+    }
+
+    /**
+     * Очистить кэш предложений заказов и сохранённую ошибку.
+     *
+     * Вызывать при уходе водителя с линии,
+     * остановке фонового опроса или выходе из аккаунта.
+     */
+    fun clearCachedOrderOffers() {
+        synchronized(offersCacheLock) {
+            cachedOrderOffers = null
+            cachedOrderOffersError = null
+        }
+    }
+
+    /**
+     * Принять предложение заказа.
+     *
+     * POST /api/v1/driver/orders/offers/{offer_id}/accept
+     */
+    fun acceptOrderOffer(offerId: String): JSONObject {
+        require(offerId.isNotBlank()) {
+            "Не указан идентификатор предложения"
+        }
+
+        val response = request(
+            path = "/api/v1/driver/orders/offers/$offerId/accept",
+            method = "POST"
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
+     * Отклонить предложение заказа.
+     *
+     * POST /api/v1/driver/orders/offers/{offer_id}/reject
+     */
+    fun rejectOrderOffer(offerId: String): JSONObject {
+        require(offerId.isNotBlank()) {
+            "Не указан идентификатор предложения"
+        }
+
+        val response = request(
+            path = "/api/v1/driver/orders/offers/$offerId/reject",
+            method = "POST"
         )
 
         return JSONObject(response)

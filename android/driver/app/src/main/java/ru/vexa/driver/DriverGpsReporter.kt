@@ -2,23 +2,22 @@
 package ru.vexa.driver
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
-import android.os.Bundle
-import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import java.util.concurrent.Executors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
-private val gpsExecutor = Executors.newSingleThreadExecutor()
+private const val PROFILE_REFRESH_INTERVAL_MS = 15_000L
 
 @Composable
 fun DriverGpsReporter(
@@ -26,164 +25,117 @@ fun DriverGpsReporter(
     onMessage: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val appContext = context.applicationContext
     val latestMessage = rememberUpdatedState(onMessage)
+
+    fun hasLocationPermission(): Boolean {
+        val fineGranted = appContext.checkSelfPermission(
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val coarseGranted = appContext.checkSelfPermission(
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        return fineGranted || coarseGranted
+    }
+
+    var locationPermissionGranted by remember {
+        mutableStateOf(hasLocationPermission())
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+        val granted =
+            permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
-        if (granted) {
-            requestOneDriverLocation(context) {
-                latestMessage.value(it)
-            }
-        } else {
+        locationPermissionGranted = granted
+
+        if (!granted) {
+            DriverLocationService.stop(appContext)
             latestMessage.value(
                 "Разрешение на определение местоположения не предоставлено"
             )
         }
     }
 
-    LaunchedEffect(enabled) {
-        if (!enabled) return@LaunchedEffect
+    LaunchedEffect(enabled, locationPermissionGranted) {
+        if (!enabled) {
+            DriverLocationService.stop(appContext)
+            return@LaunchedEffect
+        }
 
-        val fineGranted = context.checkSelfPermission(
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        val coarseGranted = context.checkSelfPermission(
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (fineGranted || coarseGranted) {
-            requestOneDriverLocation(context) {
-                latestMessage.value(it)
-            }
-        } else {
+        if (!locationPermissionGranted) {
             permissionLauncher.launch(
                 arrayOf(
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
-        }
-    }
-}
-
-private fun requestOneDriverLocation(
-    context: Context,
-    onMessage: (String) -> Unit
-) {
-    val locationManager = context.getSystemService(
-        Context.LOCATION_SERVICE
-    ) as LocationManager
-
-    val fineGranted = context.checkSelfPermission(
-        Manifest.permission.ACCESS_FINE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED
-
-    val coarseGranted = context.checkSelfPermission(
-        Manifest.permission.ACCESS_COARSE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED
-
-    if (!fineGranted && !coarseGranted) {
-        onMessage("Нет разрешения на получение GPS")
-        return
-    }
-
-    val provider = when {
-        fineGranted && locationManager.isProviderEnabled(
-            LocationManager.GPS_PROVIDER
-        ) -> LocationManager.GPS_PROVIDER
-
-        locationManager.isProviderEnabled(
-            LocationManager.NETWORK_PROVIDER
-        ) -> LocationManager.NETWORK_PROVIDER
-
-        else -> null
-    }
-
-    if (provider == null) {
-        onMessage("Включите GPS или определение местоположения на телефоне")
-        return
-    }
-
-    try {
-        val lastLocation: Location? = locationManager.getLastKnownLocation(
-            provider
-        )
-
-        if (lastLocation != null) {
-            sendDriverLocation(lastLocation, onMessage)
-            return
+            return@LaunchedEffect
         }
 
-        val listener = object : LocationListener {
-            override fun onLocationChanged(location: Location) {
-                try {
-                    locationManager.removeUpdates(this)
-                } catch (_: SecurityException) {
+        var lastOnlineState: Boolean? = null
+        var lastReportedMessage = ""
+
+        fun reportMessage(message: String) {
+            if (message != lastReportedMessage) {
+                lastReportedMessage = message
+                latestMessage.value(message)
+            }
+        }
+
+        while (true) {
+            try {
+                val profile = withContext(Dispatchers.IO) {
+                    DriverApiClient.getProfile()
                 }
 
-                sendDriverLocation(location, onMessage)
-            }
+                val isOnline = profile.optBoolean(
+                    "is_online",
+                    false
+                )
 
-            @Deprecated("Deprecated by Android")
-            override fun onStatusChanged(
-                provider: String?,
-                status: Int,
-                extras: Bundle?
-            ) {
-            }
+                if (lastOnlineState != isOnline) {
+                    if (isOnline) {
+                        DriverLocationService.start(appContext)
+                        reportMessage(
+                            "Вы на линии. Фоновая передача GPS включена"
+                        )
+                    } else {
+                        DriverLocationService.stop(appContext)
+                        reportMessage(
+                            "Вы не на линии. Передача GPS остановлена"
+                        )
+                    }
 
-            override fun onProviderEnabled(provider: String) {
-            }
+                    lastOnlineState = isOnline
+                }
 
-            override fun onProviderDisabled(provider: String) {
-            }
-        }
+            } catch (e: DriverApiHttpException) {
+                if (e.statusCode == 401 || e.statusCode == 403) {
+                    DriverLocationService.stop(appContext)
+                    lastOnlineState = false
 
-        locationManager.requestLocationUpdates(
-            provider,
-            0L,
-            0f,
-            listener,
-            Looper.getMainLooper()
-        )
-
-        onMessage("Определяем местоположение водителя...")
-
-    } catch (e: SecurityException) {
-        onMessage("Нет разрешения на доступ к местоположению")
-    } catch (e: Exception) {
-        onMessage(
-            e.message ?: "Не удалось определить местоположение"
-        )
-    }
-}
-
-private fun sendDriverLocation(
-    location: Location,
-    onMessage: (String) -> Unit
-) {
-    gpsExecutor.execute {
-        try {
-            DriverApiClient.sendLocation(
-                latitude = location.latitude,
-                longitude = location.longitude,
-                accuracyMeters = if (location.hasAccuracy()) {
-                    location.accuracy.toDouble()
+                    reportMessage(
+                        "Ошибка авторизации. Войдите в профиль водителя повторно"
+                    )
                 } else {
-                    null
+                    reportMessage(
+                        "Не удалось проверить статус водителя. " +
+                            "Повторная проверка будет выполнена автоматически"
+                    )
                 }
-            )
+            } catch (e: Exception) {
+                reportMessage(
+                    "Нет связи с сервером. Проверка режима водителя " +
+                        "будет повторена автоматически"
+                )
+            }
 
-            onMessage("Местоположение передано диспетчеру")
-        } catch (e: Exception) {
-            onMessage(
-                e.message ?: "Не удалось передать координаты на сервер"
-            )
+            delay(PROFILE_REFRESH_INTERVAL_MS)
         }
     }
 }

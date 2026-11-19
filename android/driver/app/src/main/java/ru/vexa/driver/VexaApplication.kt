@@ -12,6 +12,10 @@ class VexaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // Восстанавливаем защищённую сессию водителя.
+        DriverApiClient.initialize(this)
+
         sdkContext = DGis.initialize(this)
     }
 }

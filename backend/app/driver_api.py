@@ -40,7 +40,6 @@ from app.dispatch_order_api import (
     NO_AVAILABLE_DRIVERS_MESSAGE,
     create_next_driver_offer,
     process_expired_driver_offers,
-    router as dispatch_order_router,
 )
 
 
@@ -813,9 +812,6 @@ def update_driver_location(
 
 # Подключаем диспетчерские маршруты GPS водителей.
 router.include_router(dispatch_driver_router)
-
-# Подключаем ручное и автоматическое назначение водителей.
-router.include_router(dispatch_order_router)
 
 
 # ============================================================
