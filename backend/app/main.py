@@ -103,7 +103,6 @@ def order_to_response(order: Order, city: City) -> dict:
         "vehicle_id": order.vehicle_id,
         "customer_name": order.customer_name,
         "customer_phone": order.customer_phone,
-        "anonymous": order.anonymous,
         "pickup_address": order.pickup_address,
         "destination_address": order.destination_address,
         "pickup_latitude": order.pickup_latitude,
@@ -145,9 +144,6 @@ def order_to_response(order: Order, city: City) -> dict:
         ),
         "fare_limit_adjustment_kopecks": (
             order.fare_limit_adjustment_kopecks
-        ),
-        "anonymous_surcharge_kopecks": (
-            order.anonymous_surcharge_kopecks
         ),
 
         # Выбранные дополнительные услуги.
@@ -211,10 +207,6 @@ def idempotency_request_matches(
     содержит те же параметры, что и сохранённый заказ.
     """
 
-    is_anonymous = (
-        payload.anonymous
-        or not (payload.customer_name or "").strip()
-    )
 
     cargo_order = (
         existing.cargo_vehicle is not None
@@ -223,11 +215,7 @@ def idempotency_request_matches(
         or payload.cargo_loaders > 0
     )
 
-    expected_customer_name = (
-        None
-        if is_anonymous
-        else payload.customer_name.strip()
-    )
+    expected_customer_name = payload.customer_name.strip()
 
     expected_cargo_vehicle = (
         payload.cargo_vehicle
@@ -251,7 +239,6 @@ def idempotency_request_matches(
         existing.tariff_id == payload.tariff_id,
         existing.customer_name == expected_customer_name,
         existing.customer_phone == passenger.phone,
-        existing.anonymous == is_anonymous,
         existing.pickup_address == payload.pickup_address,
         existing.destination_address == payload.destination_address,
         existing.pickup_latitude == payload.pickup_latitude,
@@ -935,7 +922,6 @@ PRICE_QUOTE_TTL_MINUTES = 2
 
 def build_price_quote_fingerprint(
     payload: OrderCreate,
-    is_anonymous: bool,
 ) -> dict:
     """
     Параметры заказа, от которых зависит рассчитанная стоимость.
@@ -944,7 +930,6 @@ def build_price_quote_fingerprint(
     return {
         "city_code": payload.city_code,
         "tariff_id": str(payload.tariff_id),
-        "anonymous": bool(is_anonymous),
         "pickup_address": payload.pickup_address.strip(),
         "destination_address": payload.destination_address.strip(),
         "pickup_latitude": payload.pickup_latitude,
@@ -966,7 +951,6 @@ def create_price_quote_token(
     city: City,
     branch: Branch,
     payload: OrderCreate,
-    is_anonymous: bool,
     quote: dict,
 ) -> tuple[str, datetime]:
     expires_at = datetime.now(timezone.utc) + timedelta(
@@ -980,7 +964,6 @@ def create_price_quote_token(
         "branch_id": str(branch.id),
         "request": build_price_quote_fingerprint(
             payload,
-            is_anonymous,
         ),
         "quote": jsonable_encoder(quote),
         "exp": expires_at,
@@ -999,7 +982,6 @@ PRICE_QUOTE_TTL_MINUTES = 2
 
 def build_price_quote_fingerprint(
     payload: OrderCreate,
-    is_anonymous: bool,
 ) -> dict:
     """
     Параметры заказа, от которых зависит рассчитанная стоимость.
@@ -1008,7 +990,6 @@ def build_price_quote_fingerprint(
     return {
         "city_code": payload.city_code,
         "tariff_id": str(payload.tariff_id),
-        "anonymous": bool(is_anonymous),
         "pickup_address": payload.pickup_address.strip(),
         "destination_address": payload.destination_address.strip(),
         "pickup_latitude": payload.pickup_latitude,
@@ -1030,7 +1011,6 @@ def create_price_quote_token(
     city: City,
     branch: Branch,
     payload: OrderCreate,
-    is_anonymous: bool,
     quote: dict,
 ) -> tuple[str, datetime]:
     expires_at = datetime.now(timezone.utc) + timedelta(
@@ -1044,7 +1024,6 @@ def create_price_quote_token(
         "branch_id": str(branch.id),
         "request": build_price_quote_fingerprint(
             payload,
-            is_anonymous,
         ),
         "quote": jsonable_encoder(quote),
         "exp": expires_at,
@@ -1141,11 +1120,6 @@ def preview_order_price(
 
     branch = branches[0]
 
-    is_anonymous = (
-        payload.anonymous
-        or not (payload.customer_name or "").strip()
-    )
-
     cargo_order = is_cargo_tariff(tariff)
 
     if cargo_order:
@@ -1203,7 +1177,6 @@ def preview_order_price(
             base_price_kopecks=tariff.base_price_kopecks,
             price_per_km_kopecks=tariff.price_per_km_kopecks,
             price_per_minute_kopecks=tariff.price_per_minute_kopecks,
-            anonymous=is_anonymous,
             minimum_fare_kopecks=tariff.minimum_fare_kopecks,
             maximum_fare_kopecks=tariff.maximum_fare_kopecks,
         )
@@ -1308,9 +1281,6 @@ def preview_order_price(
         "fare_limit_adjustment_kopecks": (
             fare.fare_limit_adjustment_kopecks
         ),
-        "anonymous_surcharge_kopecks": (
-            fare.anonymous_surcharge_kopecks
-        ),
 
         "dynamic_pricing_settings_id": (
             dynamic_pricing["settings_id"]
@@ -1345,7 +1315,6 @@ def preview_order_price(
             city=city,
             branch=branch,
             payload=payload,
-            is_anonymous=is_anonymous,
             quote=result,
         )
     )
@@ -1398,6 +1367,7 @@ def create_order(
     if city is None:
         raise HTTPException(
             400,
+
             "City is not enabled",
         )
 
@@ -1474,12 +1444,6 @@ def create_order(
         )
 
     selected_branch = branches[0]
-
-    # Если имя не указано, заказ считается анонимным.
-    is_anonymous = (
-        payload.anonymous
-        or not (payload.customer_name or "").strip()
-    )
 
     cargo_order = is_cargo_tariff(
         selected_tariff
@@ -1565,7 +1529,6 @@ def create_order(
 
     expected_fingerprint = build_price_quote_fingerprint(
         payload,
-        is_anonymous,
     )
 
     if quote_claims.get("request") != expected_fingerprint:
@@ -1610,15 +1573,11 @@ def create_order(
             fare_limit_adjustment_kopecks=(
                 quote["fare_limit_adjustment_kopecks"]
             ),
-            anonymous_surcharge_kopecks=(
-                quote["anonymous_surcharge_kopecks"]
-            ),
             total_price_kopecks=(
                 quote["fare_base_price_kopecks"]
                 + quote["fare_distance_price_kopecks"]
                 + quote["fare_time_price_kopecks"]
                 + quote["fare_limit_adjustment_kopecks"]
-                + quote["anonymous_surcharge_kopecks"]
             ),
         )
 
@@ -1700,13 +1659,8 @@ def create_order(
         branch_id=selected_branch.id,
         passenger_user_id=passenger.id,
 
-        customer_name=(
-            None
-            if is_anonymous
-            else payload.customer_name.strip()
-        ),
+        customer_name=payload.customer_name.strip(),
         customer_phone=passenger.phone,
-        anonymous=is_anonymous,
 
         pickup_address=payload.pickup_address,
         destination_address=payload.destination_address,
@@ -1755,9 +1709,6 @@ def create_order(
         ),
         fare_limit_adjustment_kopecks=(
             fare.fare_limit_adjustment_kopecks
-        ),
-        anonymous_surcharge_kopecks=(
-            fare.anonymous_surcharge_kopecks
         ),
 
         # Выбранные дополнительные услуги.
