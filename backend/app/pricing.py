@@ -3,16 +3,12 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 
 
-ANONYMOUS_SURCHARGE_KOPECKS = 10_000
-
-
 @dataclass(frozen=True)
 class FareResult:
     base_price_kopecks: int
     distance_price_kopecks: int
     time_price_kopecks: int
     fare_limit_adjustment_kopecks: int
-    anonymous_surcharge_kopecks: int
     total_price_kopecks: int
 
 
@@ -23,7 +19,6 @@ def calculate_fare(
     price_per_minute_kopecks: int,
     distance_km: Decimal,
     duration_minutes: Decimal,
-    anonymous: bool = False,
     minimum_fare_kopecks: int | None = None,
     maximum_fare_kopecks: int | None = None,
 ) -> FareResult:
@@ -119,24 +114,10 @@ def calculate_fare(
         limited_trip_price - raw_trip_price
     )
 
-    # Анонимная доплата добавляется отдельно,
-    # после применения ограничений тарифа.
-    anonymous_surcharge = (
-        ANONYMOUS_SURCHARGE_KOPECKS
-        if anonymous
-        else 0
-    )
-
-    total = (
-        limited_trip_price
-        + anonymous_surcharge
-    )
-
     return FareResult(
         base_price_kopecks=base_price_kopecks,
         distance_price_kopecks=distance_price,
         time_price_kopecks=time_price,
         fare_limit_adjustment_kopecks=fare_limit_adjustment,
-        anonymous_surcharge_kopecks=anonymous_surcharge,
-        total_price_kopecks=total,
+        total_price_kopecks=limited_trip_price,
     )
