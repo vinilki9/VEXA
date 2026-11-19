@@ -21,6 +21,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class DriverLocationService : Service() {
 
@@ -35,6 +36,7 @@ class DriverLocationService : Service() {
         private const val IDLE_INTERVAL_MS = 30_000L
         private const val TRIP_INTERVAL_MS = 5_000L
         private const val ORDER_REFRESH_INTERVAL_MS = 10_000L
+        private const val OFFER_REFRESH_INTERVAL_MS = 2_000L
 
         fun start(context: Context) {
             val intent = Intent(context, DriverLocationService::class.java)
@@ -64,7 +66,11 @@ class DriverLocationService : Service() {
     }
 
     private val handler = Handler(Looper.getMainLooper())
+
     private val networkExecutor = Executors.newSingleThreadExecutor()
+    private val offersExecutor = Executors.newSingleThreadExecutor()
+
+    private val offerRefreshInProgress = AtomicBoolean(false)
 
     private lateinit var locationManager: LocationManager
 
@@ -78,9 +84,52 @@ class DriverLocationService : Service() {
             if (!serviceStarted) return
 
             refreshActiveOrders()
+
             handler.postDelayed(
                 this,
                 ORDER_REFRESH_INTERVAL_MS
+            )
+        }
+    }
+
+    private val offerRefreshRunnable = object : Runnable {
+        override fun run() {
+            if (!serviceStarted) return
+
+            if (offerRefreshInProgress.compareAndSet(false, true)) {
+                try {
+                    offersExecutor.execute {
+                        try {
+                            DriverApiClient.refreshOrderOffers()
+
+                            Log.d(
+                                TAG,
+                                "Предложения заказов обновлены"
+                            )
+                        } catch (e: Exception) {
+                            Log.e(
+                                TAG,
+                                "Не удалось обновить предложения заказов",
+                                e
+                            )
+                        } finally {
+                            offerRefreshInProgress.set(false)
+                        }
+                    }
+                } catch (e: Exception) {
+                    offerRefreshInProgress.set(false)
+
+                    Log.e(
+                        TAG,
+                        "Не удалось запустить обновление предложений",
+                        e
+                    )
+                }
+            }
+
+            handler.postDelayed(
+                this,
+                OFFER_REFRESH_INTERVAL_MS
             )
         }
     }
@@ -120,9 +169,13 @@ class DriverLocationService : Service() {
                     // Сразу запускаем GPS в режиме свободного водителя.
                     updateLocationInterval(IDLE_INTERVAL_MS)
 
-                    // Затем проверяем, нет ли уже активной поездки.
+                    // Проверяем, нет ли уже активной поездки.
                     refreshActiveOrders()
                     handler.post(orderRefreshRunnable)
+
+                    // Запускаем сетевой опрос предложений заказов.
+                    // Он работает независимо от GPS и активных заказов.
+                    handler.post(offerRefreshRunnable)
                 }
             }
         }
@@ -418,7 +471,12 @@ class DriverLocationService : Service() {
         serviceStarted = false
 
         handler.removeCallbacks(orderRefreshRunnable)
+        handler.removeCallbacks(offerRefreshRunnable)
+
         removeLocationUpdates()
+
+        // Очищаем предложения при уходе водителя с линии.
+        DriverApiClient.clearCachedOrderOffers()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -437,6 +495,10 @@ class DriverLocationService : Service() {
         removeLocationUpdates()
 
         networkExecutor.shutdownNow()
+        offersExecutor.shutdownNow()
+
+        // Не оставляем старые предложения после остановки сервиса.
+        DriverApiClient.clearCachedOrderOffers()
 
         super.onDestroy()
     }
