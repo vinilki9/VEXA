@@ -1,192 +1,391 @@
 
-"""Add dispatcher and partner application tables.
+import uuid
+from datetime import datetime, timezone
 
-Revision ID: 0003_applications
-Revises: 0002_organizations
-"""
-
-from alembic import op
-import sqlalchemy as sa
-
-
-revision = "0003_applications"
-down_revision = "0002_organizations"
-branch_labels = None
-depends_on = None
-
-
-APPLICATION_STATUS_CHECK = (
-    "status IN ('new', 'reviewing', 'needs_info', 'approved', 'rejected')"
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    JSON,
+    String,
+    UniqueConstraint,
 )
+from sqlalchemy import Uuid
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.database import Base
 
 
-def upgrade() -> None:
-    op.create_table(
-        "dispatcher_applications",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("applicant_user_id", sa.Uuid(), nullable=True),
-        sa.Column("full_name", sa.String(length=160), nullable=False),
-        sa.Column("phone", sa.String(length=40), nullable=False),
-        sa.Column("email", sa.String(length=254), nullable=True),
-        sa.Column("requested_cities", sa.JSON(), nullable=False),
-        sa.Column("experience", sa.Text(), nullable=True),
-        sa.Column("applicant_message", sa.Text(), nullable=True),
-        sa.Column("status", sa.String(length=20), nullable=False),
-        sa.Column("admin_note", sa.Text(), nullable=True),
-        sa.Column("approved_user_id", sa.Uuid(), nullable=True),
-        sa.Column("reviewed_by_user_id", sa.Uuid(), nullable=True),
-        sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint(
-            APPLICATION_STATUS_CHECK,
-            name="dispatcher_applications_status_valid",
+def new_uuid() -> uuid.UUID:
+    return uuid.uuid4()
+
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+# ============================================================
+# MEMBERSHIPS
+# Связь пользователей с организациями VEXA
+# ============================================================
+
+class Membership(Base):
+    __tablename__ = "memberships"
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'active', 'suspended', 'revoked')",
+            name="memberships_status_valid",
         ),
-        sa.ForeignKeyConstraint(
-            ["applicant_user_id"],
-            ["users.id"],
-            ondelete="SET NULL",
+        Index(
+            "ix_memberships_organization_status",
+            "organization_id",
+            "status",
         ),
-        sa.ForeignKeyConstraint(
-            ["approved_user_id"],
-            ["users.id"],
-            ondelete="SET NULL",
+        Index(
+            "ix_memberships_user_status",
+            "user_id",
+            "status",
         ),
-        sa.ForeignKeyConstraint(
-            ["reviewed_by_user_id"],
-            ["users.id"],
-            ondelete="SET NULL",
-        ),
-        sa.PrimaryKeyConstraint("id"),
     )
 
-    op.create_index(
-        "ix_dispatcher_applications_applicant_user_id",
-        "dispatcher_applications",
-        ["applicant_user_id"],
-    )
-    op.create_index(
-        "ix_dispatcher_applications_status",
-        "dispatcher_applications",
-        ["status"],
-    )
-    op.create_index(
-        "ix_dispatcher_applications_status_created",
-        "dispatcher_applications",
-        ["status", "created_at"],
-    )
-    op.create_index(
-        "ix_dispatcher_applications_phone_status",
-        "dispatcher_applications",
-        ["phone", "status"],
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
     )
 
-    op.create_table(
-        "partner_applications",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("applicant_user_id", sa.Uuid(), nullable=True),
-        sa.Column("contact_full_name", sa.String(length=160), nullable=False),
-        sa.Column("phone", sa.String(length=40), nullable=False),
-        sa.Column("email", sa.String(length=254), nullable=True),
-        sa.Column("organization_name", sa.String(length=200), nullable=False),
-        sa.Column("legal_name", sa.String(length=250), nullable=True),
-        sa.Column("tax_identifier", sa.String(length=20), nullable=True),
-        sa.Column("requested_cities", sa.JSON(), nullable=False),
-        sa.Column("fleet_size", sa.Integer(), nullable=True),
-        sa.Column("applicant_message", sa.Text(), nullable=True),
-        sa.Column("status", sa.String(length=20), nullable=False),
-        sa.Column("admin_note", sa.Text(), nullable=True),
-        sa.Column("organization_id", sa.Uuid(), nullable=True),
-        sa.Column("reviewed_by_user_id", sa.Uuid(), nullable=True),
-        sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint(
-            APPLICATION_STATUS_CHECK,
-            name="partner_applications_status_valid",
-        ),
-        sa.ForeignKeyConstraint(
-            ["applicant_user_id"],
-            ["users.id"],
-            ondelete="SET NULL",
-        ),
-        sa.ForeignKeyConstraint(
-            ["organization_id"],
-            ["organizations.id"],
-            ondelete="SET NULL",
-        ),
-        sa.ForeignKeyConstraint(
-            ["reviewed_by_user_id"],
-            ["users.id"],
-            ondelete="SET NULL",
-        ),
-        sa.PrimaryKeyConstraint("id"),
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
     )
 
-    op.create_index(
-        "ix_partner_applications_applicant_user_id",
-        "partner_applications",
-        ["applicant_user_id"],
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    op.create_index(
-        "ix_partner_applications_status",
-        "partner_applications",
-        ["status"],
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="pending",
     )
-    op.create_index(
-        "ix_partner_applications_organization_id",
-        "partner_applications",
-        ["organization_id"],
+
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
-    op.create_index(
-        "ix_partner_applications_status_created",
-        "partner_applications",
-        ["status", "created_at"],
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
     )
-    op.create_index(
-        "ix_partner_applications_phone_status",
-        "partner_applications",
-        ["phone", "status"],
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        onupdate=now_utc,
+        nullable=False,
     )
 
 
-def downgrade() -> None:
-    op.drop_index(
-        "ix_partner_applications_phone_status",
-        table_name="partner_applications",
-    )
-    op.drop_index(
-        "ix_partner_applications_status_created",
-        table_name="partner_applications",
-    )
-    op.drop_index(
-        "ix_partner_applications_organization_id",
-        table_name="partner_applications",
-    )
-    op.drop_index(
-        "ix_partner_applications_status",
-        table_name="partner_applications",
-    )
-    op.drop_index(
-        "ix_partner_applications_applicant_user_id",
-        table_name="partner_applications",
-    )
-    op.drop_table("partner_applications")
+# ============================================================
+# ROLES
+# Роли пользователей в организациях
+# ============================================================
 
-    op.drop_index(
-        "ix_dispatcher_applications_phone_status",
-        table_name="dispatcher_applications",
+class Role(Base):
+    __tablename__ = "roles"
+
+    __table_args__ = (
+        CheckConstraint(
+            "scope IN ('platform', 'organization')",
+            name="roles_scope_valid",
+        ),
+        UniqueConstraint(
+            "code",
+            "scope",
+            name="uq_roles_code_scope",
+        ),
     )
-    op.drop_index(
-        "ix_dispatcher_applications_status_created",
-        table_name="dispatcher_applications",
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
     )
-    op.drop_index(
-        "ix_dispatcher_applications_status",
-        table_name="dispatcher_applications",
+
+    code: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
     )
-    op.drop_index(
-        "ix_dispatcher_applications_applicant_user_id",
-        table_name="dispatcher_applications",
+
+    name: Mapped[str] = mapped_column(
+        String(120),
+        nullable=False,
     )
-    op.drop_table("dispatcher_applications")
+
+    scope: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="organization",
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    is_system: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# PERMISSIONS
+# Отдельные разрешения платформы
+# ============================================================
+
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    code: Mapped[str] = mapped_column(
+        String(120),
+        primary_key=True,
+    )
+
+    name: Mapped[str] = mapped_column(
+        String(160),
+        nullable=False,
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# ROLE PERMISSIONS
+# Связь ролей с разрешениями
+# ============================================================
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "role_id",
+            "permission_code",
+            name="uq_role_permissions_role_permission",
+        ),
+        Index(
+            "ix_role_permissions_permission_code",
+            "permission_code",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("roles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    permission_code: Mapped[str] = mapped_column(
+        String(120),
+        ForeignKey("permissions.code", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+
+# ============================================================
+# MEMBERSHIP ROLES
+# Назначение ролей участникам организаций
+# ============================================================
+
+class MembershipRole(Base):
+    __tablename__ = "membership_roles"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "membership_id",
+            "role_id",
+            name="uq_membership_roles_membership_role",
+        ),
+        Index(
+            "ix_membership_roles_role_id",
+            "role_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    membership_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("memberships.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("roles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    assigned_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# PLATFORM ADMINS
+# Главные администраторы платформы VEXA
+# ============================================================
+
+class PlatformAdmin(Base):
+    __tablename__ = "platform_admins"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
+
+
+# ============================================================
+# AUDIT LOGS
+# История действий пользователей и администраторов
+# ============================================================
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    __table_args__ = (
+        Index(
+            "ix_audit_logs_actor_created",
+            "actor_user_id",
+            "created_at",
+        ),
+        Index(
+            "ix_audit_logs_organization_created",
+            "organization_id",
+            "created_at",
+        ),
+        Index(
+            "ix_audit_logs_entity",
+            "entity_type",
+            "entity_id",
+        ),
+        Index(
+            "ix_audit_logs_action_created",
+            "action",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=new_uuid,
+    )
+
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    action: Mapped[str] = mapped_column(
+        String(120),
+        nullable=False,
+    )
+
+    entity_type: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+    )
+
+    entity_id: Mapped[str | None] = mapped_column(
+        String(80),
+        nullable=True,
+    )
+
+    before_data: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    after_data: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    ip_address: Mapped[str | None] = mapped_column(
+        String(45),
+        nullable=True,
+    )
+
+    user_agent: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=now_utc,
+        nullable=False,
+    )
