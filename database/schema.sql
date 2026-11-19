@@ -254,9 +254,8 @@ CREATE TABLE orders (
 
     vehicle_id UUID REFERENCES vehicles(id),
 
-    customer_name VARCHAR(120),
+    customer_name VARCHAR(120) NOT NULL,
     customer_phone VARCHAR(40) NOT NULL,
-    anonymous BOOLEAN NOT NULL,
 
     pickup_address VARCHAR(500) NOT NULL,
     destination_address VARCHAR(500) NOT NULL,
@@ -286,7 +285,6 @@ CREATE TABLE orders (
     fare_distance_price_kopecks INTEGER,
     fare_time_price_kopecks INTEGER,
     fare_limit_adjustment_kopecks INTEGER,
-    anonymous_surcharge_kopecks INTEGER,
 
     child_seat BOOLEAN NOT NULL DEFAULT FALSE,
     animal_transport BOOLEAN NOT NULL DEFAULT FALSE,
@@ -327,7 +325,6 @@ CREATE TABLE orders (
                 AND fare_distance_price_kopecks IS NULL
                 AND fare_time_price_kopecks IS NULL
                 AND fare_limit_adjustment_kopecks IS NULL
-                AND anonymous_surcharge_kopecks IS NULL
                 AND child_seat_surcharge_kopecks IS NULL
                 AND animal_transport_surcharge_kopecks IS NULL
                 AND cargo_vehicle_surcharge_kopecks IS NULL
@@ -341,7 +338,6 @@ CREATE TABLE orders (
                 AND fare_distance_price_kopecks IS NOT NULL
                 AND fare_time_price_kopecks IS NOT NULL
                 AND fare_limit_adjustment_kopecks IS NOT NULL
-                AND anonymous_surcharge_kopecks IS NOT NULL
                 AND child_seat_surcharge_kopecks IS NOT NULL
                 AND animal_transport_surcharge_kopecks IS NOT NULL
                 AND cargo_vehicle_surcharge_kopecks IS NOT NULL
@@ -352,7 +348,6 @@ CREATE TABLE orders (
                 AND fare_base_price_kopecks >= 0
                 AND fare_distance_price_kopecks >= 0
                 AND fare_time_price_kopecks >= 0
-                AND anonymous_surcharge_kopecks >= 0
                 AND child_seat_surcharge_kopecks >= 0
                 AND animal_transport_surcharge_kopecks >= 0
                 AND cargo_vehicle_surcharge_kopecks >= 0
@@ -364,7 +359,6 @@ CREATE TABLE orders (
                     + fare_distance_price_kopecks
                     + fare_time_price_kopecks
                     + fare_limit_adjustment_kopecks
-                    + anonymous_surcharge_kopecks
                     + child_seat_surcharge_kopecks
                     + animal_transport_surcharge_kopecks
                     + cargo_vehicle_surcharge_kopecks
