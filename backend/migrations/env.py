@@ -12,6 +12,7 @@ from app import auth_models  # noqa: F401 — register authentication models in 
 from app import driver_order_offer_models  # noqa: F401 — register driver order offer models in Base.metadata
 from app import organization_models  # noqa: F401 — register organization models in Base.metadata
 from app import application_models  # noqa: F401 — register application models in Base.metadata
+from app import organization_access_models  # noqa: F401 — register organization access models in Base.metadata
 
 
 config = context.config
