@@ -27,7 +27,6 @@ object PassengerOrderRepository {
     suspend fun previewOrderPrice(
         tariffLabel: String,
         customerName: String,
-        anonymous: Boolean,
         pickupAddress: String,
         destinationAddress: String,
         pickupLatitude: Double,
@@ -44,7 +43,6 @@ object PassengerOrderRepository {
         val payload = buildOrderPayload(
             tariffLabel = tariffLabel,
             customerName = customerName,
-            anonymous = anonymous,
             pickupAddress = pickupAddress,
             destinationAddress = destinationAddress,
             pickupLatitude = pickupLatitude,
@@ -77,7 +75,6 @@ object PassengerOrderRepository {
     suspend fun createOrder(
         tariffLabel: String,
         customerName: String,
-        anonymous: Boolean,
         pickupAddress: String,
         destinationAddress: String,
         pickupLatitude: Double,
@@ -101,7 +98,6 @@ object PassengerOrderRepository {
         val payload = buildOrderPayload(
             tariffLabel = tariffLabel,
             customerName = customerName,
-            anonymous = anonymous,
             pickupAddress = pickupAddress,
             destinationAddress = destinationAddress,
             pickupLatitude = pickupLatitude,
@@ -135,7 +131,6 @@ object PassengerOrderRepository {
     private suspend fun buildOrderPayload(
         tariffLabel: String,
         customerName: String,
-        anonymous: Boolean,
         pickupAddress: String,
         destinationAddress: String,
         pickupLatitude: Double,
@@ -159,6 +154,12 @@ object PassengerOrderRepository {
             throw IllegalStateException(
                 "Необходимо войти в профиль VEXA."
             )
+        }
+
+        val normalizedName = customerName.trim()
+
+        require(normalizedName.isNotBlank()) {
+            "Укажите ваше имя."
         }
 
         require(pickupAddress.isNotBlank()) {
@@ -193,9 +194,6 @@ object PassengerOrderRepository {
             )
         }
 
-        val normalizedName = customerName.trim()
-        val isAnonymous = anonymous || normalizedName.isBlank()
-
         val paymentMethod = when (paymentLabel.trim()) {
             "Наличные" -> "cash"
             "Перевод водителю" -> "driver_transfer"
@@ -212,13 +210,8 @@ object PassengerOrderRepository {
             put("city_code", CITY_CODE)
             put("tariff_id", tariffId)
 
-            put(
-                "customer_name",
-                if (isAnonymous) JSONObject.NULL else normalizedName
-            )
-
+            put("customer_name", normalizedName)
             put("customer_phone", phone)
-            put("anonymous", isAnonymous)
 
             put("pickup_address", pickupAddress.trim())
             put("destination_address", destinationAddress.trim())
