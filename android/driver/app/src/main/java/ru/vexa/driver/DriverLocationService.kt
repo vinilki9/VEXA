@@ -117,6 +117,10 @@ class DriverLocationService : Service() {
                     startForegroundNotification()
                     serviceStarted = true
 
+                    // Сразу запускаем GPS в режиме свободного водителя.
+                    updateLocationInterval(IDLE_INTERVAL_MS)
+
+                    // Затем проверяем, нет ли уже активной поездки.
                     refreshActiveOrders()
                     handler.post(orderRefreshRunnable)
                 }
@@ -224,17 +228,21 @@ class DriverLocationService : Service() {
                 handler.post {
                     if (!serviceStarted) return@post
 
-                    if (hasActiveTrip != active) {
-                        hasActiveTrip = active
+                    val tripStateChanged = hasActiveTrip != active
+                    hasActiveTrip = active
 
-                        val interval = if (active) {
-                            TRIP_INTERVAL_MS
-                        } else {
-                            IDLE_INTERVAL_MS
-                        }
+                    val interval = if (active) {
+                        TRIP_INTERVAL_MS
+                    } else {
+                        IDLE_INTERVAL_MS
+                    }
 
-                        updateLocationInterval(interval)
+                    // Проверяем интервал при каждом опросе.
+                    // Это позволяет повторно запустить GPS,
+                    // если провайдер ранее был недоступен.
+                    updateLocationInterval(interval)
 
+                    if (tripStateChanged) {
                         val message = if (active) {
                             "Заказ выполняется. GPS обновляется каждые 5 секунд"
                         } else {
