@@ -1,3 +1,4 @@
+
 {
   "currency": "RUB",
   "version": "draft-0.2.0",
@@ -147,7 +148,6 @@
     "Краснодар"
   ],
   "additional_services": {
-    "anonymous_order_rub": 100,
     "child_seat_rub": 100,
     "animal_rub": 100
   }
