@@ -126,7 +126,28 @@ class RemoveAnonymousOrderMigrationTests(unittest.TestCase):
             },
         )
 
-        operations.alter_column.assert_called_once()
+        self.assertEqual(
+            operations.alter_column.call_count,
+            2,
+        )
+
+        alter_calls = operations.alter_column.call_args_list
+
+        self.assertEqual(
+            alter_calls[0].args[1],
+            "anonymous",
+        )
+        self.assertIsNone(
+            alter_calls[0].kwargs["server_default"],
+        )
+
+        self.assertEqual(
+            alter_calls[1].args[1],
+            "customer_name",
+        )
+        self.assertTrue(
+            alter_calls[1].kwargs["nullable"],
+        )
 
         self.assertEqual(
             operations.create_check_constraint.call_count,
