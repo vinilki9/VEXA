@@ -1,9 +1,19 @@
 
 package ru.vexa.driver
 
+import android.content.Context
+import android.content.SharedPreferences
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 /**
  * Сетевой клиент приложения VEXA Driver.
@@ -20,19 +30,290 @@ object DriverApiClient {
 
     private const val BASE_URL = "https://109.120.184.20"
 
+    private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
+    private const val KEY_ALIAS = "vexa_driver_access_token_key_v1"
+
+    private const val TOKEN_PREFS = "vexa_secure_session"
+    private const val TOKEN_CIPHER_TEXT_KEY = "access_token_ciphertext"
+    private const val TOKEN_IV_KEY = "access_token_iv"
+
+    private const val GCM_TAG_LENGTH_BITS = 128
+
+    private val tokenLock = Any()
+
     @Volatile
     private var accessToken: String? = null
 
-    fun setAccessToken(token: String) {
-        accessToken = token.trim().takeIf { it.isNotEmpty() }
+    @Volatile
+    private var applicationContext: Context? = null
+
+    /**
+     * Инициализировать защищённое хранилище сессии.
+     *
+     * Вызывать из Application.onCreate() до запуска Activity
+     * и фоновых сервисов.
+     *
+     * Токен восстанавливается из зашифрованного хранилища.
+     * В случае ошибки повреждённая сессия удаляется.
+     */
+    fun initialize(context: Context) {
+        synchronized(tokenLock) {
+            applicationContext = context.applicationContext
+
+            try {
+                val prefs = getTokenPreferences()
+                val encryptedToken = prefs.getString(
+                    TOKEN_CIPHER_TEXT_KEY,
+                    null
+                )
+                val encodedIv = prefs.getString(
+                    TOKEN_IV_KEY,
+                    null
+                )
+
+                if (encryptedToken.isNullOrBlank() || encodedIv.isNullOrBlank()) {
+                    accessToken = null
+                    return
+                }
+
+                val ciphertext = Base64.decode(
+                    encryptedToken,
+                    Base64.NO_WRAP
+                )
+
+                val iv = Base64.decode(
+                    encodedIv,
+                    Base64.NO_WRAP
+                )
+
+                accessToken = decryptToken(ciphertext, iv)
+                    .trim()
+                    .takeIf { it.isNotEmpty() }
+            } catch (_: Exception) {
+                accessToken = null
+                clearStoredToken(deleteKey = true)
+            }
+        }
     }
 
+    /**
+     * Получить настройки защищённого хранилища.
+     */
+    private fun getTokenPreferences(): SharedPreferences {
+        val context = applicationContext
+            ?: throw IllegalStateException(
+                "Защищённое хранилище не инициализировано"
+            )
+
+        return context.getSharedPreferences(
+            TOKEN_PREFS,
+            Context.MODE_PRIVATE
+        )
+    }
+
+    /**
+     * Получить ключ AES из Android Keystore.
+     * Если ключ ещё не создан, создать новый AES-256 ключ.
+     */
+    private fun getOrCreateSecretKey(): SecretKey {
+        val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER)
+        keyStore.load(null)
+
+        val existingKey = keyStore.getKey(
+            KEY_ALIAS,
+            null
+        ) as? SecretKey
+
+        if (existingKey != null) {
+            return existingKey
+        }
+
+        val keyGenerator = KeyGenerator.getInstance(
+            KeyProperties.KEY_ALGORITHM_AES,
+            KEYSTORE_PROVIDER
+        )
+
+        val keySpec = KeyGenParameterSpec.Builder(
+            KEY_ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT or
+                KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(
+                KeyProperties.ENCRYPTION_PADDING_NONE
+            )
+            .setRandomizedEncryptionRequired(true)
+            .setKeySize(256)
+            .build()
+
+        keyGenerator.init(keySpec)
+
+        return keyGenerator.generateKey()
+    }
+
+    /**
+     * Зашифровать токен с использованием AES/GCM.
+     */
+    private fun encryptToken(token: String): Pair<ByteArray, ByteArray> {
+        val secretKey = getOrCreateSecretKey()
+
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+
+        cipher.init(
+            Cipher.ENCRYPT_MODE,
+            secretKey
+        )
+
+        val ciphertext = cipher.doFinal(
+            token.toByteArray(Charsets.UTF_8)
+        )
+
+        val iv = cipher.iv
+
+        return Pair(ciphertext, iv)
+    }
+
+    /**
+     * Расшифровать токен с использованием AES/GCM.
+     */
+    private fun decryptToken(
+        ciphertext: ByteArray,
+        iv: ByteArray
+    ): String {
+        val secretKey = getOrCreateSecretKey()
+
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+
+        val parameters = GCMParameterSpec(
+            GCM_TAG_LENGTH_BITS,
+            iv
+        )
+
+        cipher.init(
+            Cipher.DECRYPT_MODE,
+            secretKey,
+            parameters
+        )
+
+        val plaintext = cipher.doFinal(ciphertext)
+
+        return String(
+            plaintext,
+            Charsets.UTF_8
+        )
+    }
+
+    /**
+     * Сохранить зашифрованный токен в приватном хранилище.
+     *
+     * Открытый токен в SharedPreferences не сохраняется.
+     */
+    private fun saveEncryptedToken(token: String) {
+        val (ciphertext, iv) = encryptToken(token)
+
+        val encryptedToken = Base64.encodeToString(
+            ciphertext,
+            Base64.NO_WRAP
+        )
+
+        val encodedIv = Base64.encodeToString(
+            iv,
+            Base64.NO_WRAP
+        )
+
+        val saved = getTokenPreferences()
+            .edit()
+            .putString(
+                TOKEN_CIPHER_TEXT_KEY,
+                encryptedToken
+            )
+            .putString(
+                TOKEN_IV_KEY,
+                encodedIv
+            )
+            .commit()
+
+        if (!saved) {
+            throw IllegalStateException(
+                "Не удалось сохранить защищённую сессию"
+            )
+        }
+    }
+
+    /**
+     * Удалить сохранённый токен.
+     *
+     * При необходимости также удалить ключ Android Keystore.
+     */
+    private fun clearStoredToken(deleteKey: Boolean) {
+        try {
+            getTokenPreferences()
+                .edit()
+                .remove(TOKEN_CIPHER_TEXT_KEY)
+                .remove(TOKEN_IV_KEY)
+                .commit()
+        } catch (_: Exception) {
+            // Продолжаем очистку ключа даже при ошибке Preferences.
+        }
+
+        if (deleteKey) {
+            try {
+                val keyStore = KeyStore.getInstance(
+                    KEYSTORE_PROVIDER
+                )
+
+                keyStore.load(null)
+
+                if (keyStore.containsAlias(KEY_ALIAS)) {
+                    keyStore.deleteEntry(KEY_ALIAS)
+                }
+            } catch (_: Exception) {
+                // Ошибка удаления ключа не должна прерывать выход.
+            }
+        }
+    }
+
+    /**
+     * Установить токен авторизации.
+     *
+     * Сначала токен сохраняется в зашифрованном виде,
+     * затем устанавливается в памяти приложения.
+     */
+    fun setAccessToken(token: String) {
+        synchronized(tokenLock) {
+            val normalizedToken = token.trim()
+                .takeIf { it.isNotEmpty() }
+
+            if (normalizedToken == null) {
+                accessToken = null
+                clearStoredToken(deleteKey = true)
+                return
+            }
+
+            saveEncryptedToken(normalizedToken)
+
+            accessToken = normalizedToken
+        }
+    }
+
+    /**
+     * Получить текущий токен авторизации из памяти.
+     */
     fun getAccessToken(): String? {
         return accessToken
     }
 
+    /**
+     * Полностью очистить сессию авторизации.
+     *
+     * Удаляется токен из памяти, зашифрованное значение
+     * из SharedPreferences и ключ из Android Keystore.
+     */
     fun clearAccessToken() {
-        accessToken = null
+        synchronized(tokenLock) {
+            accessToken = null
+            clearStoredToken(deleteKey = true)
+        }
     }
 
     private fun jsonString(value: String): String {
