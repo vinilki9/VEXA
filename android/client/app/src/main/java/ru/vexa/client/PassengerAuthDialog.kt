@@ -47,8 +47,7 @@ fun PassengerAuthDialog(
             val token = json.optString("access_token", "")
 
             if (token.isNotBlank()) {
-                ApiClient.setAccessToken(token)
-                ApiClient.setPassengerPhone(phone.trim())
+                ApiClient.setPassengerSession(token, phone.trim())
                 onAuthenticated()
             } else {
                 authStatus = "failed"

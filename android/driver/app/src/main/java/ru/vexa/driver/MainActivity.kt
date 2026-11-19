@@ -1,12 +1,15 @@
 
 package ru.vexa.driver
 
+import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,8 +19,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -37,6 +44,7 @@ private val VexaInk = Color(0xFF111827)
 private val VexaNavy = Color(0xFF1E293B)
 private val VexaBackground = Color(0xFFF5F7FA)
 private val VexaMuted = Color(0xFF64748B)
+private val VexaRed = Color(0xFFE53935)
 
 private fun formatWalletRubles(kopecks: Long): String {
  val formatter = NumberFormat.getNumberInstance(Locale("ru", "RU"))
@@ -147,6 +155,104 @@ private fun SectionTitle(
 }
 
 @Composable
+private fun DriverSatelliteGlyph(color: Color) {
+ Canvas(modifier = Modifier.size(24.dp)) {
+  val scale = size.width / 24f
+  rotate(degrees = 45f, pivot = center) {
+   drawRoundRect(
+    color = color,
+    topLeft = Offset(2f * scale, 9f * scale),
+    size = Size(6f * scale, 6f * scale),
+    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1f * scale)
+   )
+   drawRoundRect(
+    color = color,
+    topLeft = Offset(9f * scale, 9f * scale),
+    size = Size(6f * scale, 6f * scale),
+    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1f * scale)
+   )
+   drawRoundRect(
+    color = color,
+    topLeft = Offset(16f * scale, 9f * scale),
+    size = Size(6f * scale, 6f * scale),
+    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1f * scale)
+   )
+  }
+  drawLine(
+   color = color,
+   start = Offset(6f * scale, 6f * scale),
+   end = Offset(3f * scale, 3f * scale),
+   strokeWidth = 2f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
+  drawLine(
+   color = color,
+   start = Offset(18f * scale, 18f * scale),
+   end = Offset(21f * scale, 21f * scale),
+   strokeWidth = 2f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
+ }
+}
+
+@Composable
+private fun DriverKeyGlyph(color: Color) {
+ Canvas(modifier = Modifier.size(24.dp)) {
+  val scale = size.width / 24f
+  drawCircle(
+   color = color,
+   radius = 4.2f * scale,
+   center = Offset(7.5f * scale, 7.5f * scale),
+   style = Stroke(width = 2.5f * scale)
+  )
+  drawLine(
+   color = color,
+   start = Offset(10.5f * scale, 10.5f * scale),
+   end = Offset(20.5f * scale, 20.5f * scale),
+   strokeWidth = 2.5f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
+  drawLine(
+   color = color,
+   start = Offset(15.5f * scale, 15.5f * scale),
+   end = Offset(18f * scale, 13f * scale),
+   strokeWidth = 2.5f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
+  drawLine(
+   color = color,
+   start = Offset(18f * scale, 18f * scale),
+   end = Offset(20.5f * scale, 15.5f * scale),
+   strokeWidth = 2.5f * scale,
+   cap = androidx.compose.ui.graphics.StrokeCap.Round
+  )
+ }
+}
+
+@Composable
+private fun DriverSignalGlyph(color: Color) {
+ Column(
+  horizontalAlignment = Alignment.CenterHorizontally,
+  verticalArrangement = Arrangement.spacedBy(2.dp),
+  modifier = Modifier.width(26.dp)
+ ) {
+  listOf(24.dp, 18.dp, 12.dp, 6.dp).forEach { barWidth ->
+   Box(
+    modifier = Modifier
+     .width(barWidth)
+     .height(3.dp)
+     .background(color, RoundedCornerShape(50))
+   )
+  }
+  Box(
+   modifier = Modifier
+    .size(4.dp)
+    .background(color, RoundedCornerShape(50))
+  )
+ }
+}
+
+@Composable
 fun DriverScreen() {
  val context = androidx.compose.ui.platform.LocalContext.current
  var login by remember { mutableStateOf("") }
@@ -180,6 +286,13 @@ fun DriverScreen() {
  var walletBalanceKopecks by remember { mutableStateOf<Long?>(null) }
  var walletAvailableKopecks by remember { mutableStateOf<Long?>(null) }
 
+ var gpsHealthy by remember { mutableStateOf(false) }
+ var serverHealthy by remember { mutableStateOf(false) }
+ var authHealthy by remember { mutableStateOf(false) }
+ var selectedStatusDetails by remember {
+  mutableStateOf<Pair<String, String>?>(null)
+ }
+
  var errorMessage by remember { mutableStateOf("") }
  var infoMessage by remember { mutableStateOf("") }
 
@@ -192,6 +305,49 @@ fun DriverScreen() {
    infoMessage = message
   }
  )
+
+ LaunchedEffect(context, authorized) {
+  val healthPrefs = context.getSharedPreferences(
+   DriverLocationService.STATUS_PREFS,
+   Context.MODE_PRIVATE
+  )
+  var lastAlertId = healthPrefs.getLong(
+   DriverLocationService.KEY_ALERT_ID,
+   0L
+  )
+
+  while (true) {
+   gpsHealthy = authorized && healthPrefs.getBoolean(
+    DriverLocationService.KEY_GPS_OK,
+    false
+   )
+   serverHealthy = authorized && healthPrefs.getBoolean(
+    DriverLocationService.KEY_SERVER_OK,
+    false
+   )
+   authHealthy = authorized && healthPrefs.getBoolean(
+    DriverLocationService.KEY_AUTH_OK,
+    false
+   )
+
+   val currentAlertId = healthPrefs.getLong(
+    DriverLocationService.KEY_ALERT_ID,
+    0L
+   )
+   if (currentAlertId != lastAlertId) {
+    lastAlertId = currentAlertId
+    val alert = healthPrefs.getString(
+     DriverLocationService.KEY_ALERT,
+     ""
+    ).orEmpty()
+    if (alert.isNotBlank()) {
+     Toast.makeText(context, alert, Toast.LENGTH_SHORT).show()
+    }
+   }
+
+   kotlinx.coroutines.delay(1000)
+  }
+ }
 
  LaunchedEffect(authorized, online) {
   if (!authorized || !online) {
@@ -730,6 +886,68 @@ fun DriverScreen() {
     ) {
      item {
       Row(
+       modifier = Modifier.fillMaxWidth(),
+       horizontalArrangement = Arrangement.spacedBy(4.dp),
+       verticalAlignment = Alignment.CenterVertically
+      ) {
+       IconButton(
+        onClick = {
+         selectedStatusDetails = Pair(
+          "GPS",
+          when {
+           gpsHealthy -> "GPS работает. Последние координаты успешно передаются серверу VEXA."
+           !online -> "Водитель не на линии. Передача координат остановлена."
+           else -> "GPS недоступен или передача координат не подтверждена. Проверьте разрешение на местоположение и настройки геолокации."
+          }
+         )
+        },
+        modifier = Modifier.size(40.dp)
+       ) {
+        DriverSatelliteGlyph(
+         color = if (gpsHealthy) VexaTeal else VexaRed
+        )
+       }
+
+       IconButton(
+        onClick = {
+         selectedStatusDetails = Pair(
+          "Связь с сервером",
+          if (serverHealthy) {
+           "Соединение с сервером VEXA подтверждено."
+          } else {
+           "Нет подтверждённого соединения с сервером VEXA. Приложение продолжит проверять связь автоматически."
+          }
+         )
+        },
+        modifier = Modifier.size(40.dp)
+       ) {
+        DriverSignalGlyph(
+         color = if (serverHealthy) VexaTeal else VexaRed
+        )
+       }
+
+       IconButton(
+        onClick = {
+         selectedStatusDetails = Pair(
+          "Авторизация",
+          if (authHealthy) {
+           "Авторизация водителя подтверждена сервером VEXA."
+          } else {
+           "Авторизация не подтверждена. Проверьте вход в профиль водителя."
+          }
+         )
+        },
+        modifier = Modifier.size(40.dp)
+       ) {
+        DriverKeyGlyph(
+         color = if (authHealthy) VexaTeal else VexaRed
+        )
+       }
+      }
+     }
+
+     item {
+      Row(
        modifier = Modifier
         .fillMaxWidth()
         .padding(vertical = 4.dp),
@@ -785,6 +1003,54 @@ fun DriverScreen() {
         }
        ) {
         Text("Выйти")
+       }
+      }
+     }
+
+     item {
+      Row(
+       modifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 4.dp),
+       verticalAlignment = Alignment.CenterVertically
+      ) {
+       Column {
+        Text(
+         text = "VEXA",
+         color = VexaTeal,
+         fontSize = 27.sp,
+         fontWeight = FontWeight.ExtraBold,
+         letterSpacing = 2.sp
+        )
+        Text(
+         text = "ВОДИТЕЛЬ",
+         color = secondaryText,
+         fontSize = 10.sp,
+         fontWeight = FontWeight.Bold,
+         letterSpacing = 3.sp
+        )
+       }
+
+       Spacer(Modifier.weight(1f))
+
+       Surface(
+        color = if (online) {
+         VexaTeal.copy(alpha = 0.16f)
+        } else {
+         Color.Gray.copy(alpha = 0.14f)
+        },
+        shape = RoundedCornerShape(50)
+       ) {
+        Text(
+         text = if (online) "● НА ЛИНИИ" else "● НЕ НА ЛИНИИ",
+         modifier = Modifier.padding(
+          horizontal = 12.dp,
+          vertical = 8.dp
+         ),
+         color = if (online) VexaTeal else secondaryText,
+         fontSize = 10.sp,
+         fontWeight = FontWeight.Bold
+        )
        }
       }
      }
@@ -1562,6 +1828,28 @@ fun DriverScreen() {
       )
      }
     }
+   }
+   if (selectedStatusDetails != null) {
+    val details = selectedStatusDetails!!
+    AlertDialog(
+     onDismissRequest = { selectedStatusDetails = null },
+     title = {
+      Text(
+       text = details.first,
+       fontWeight = FontWeight.Bold
+      )
+     },
+     text = {
+      Text(details.second)
+     },
+     confirmButton = {
+      TextButton(
+       onClick = { selectedStatusDetails = null }
+      ) {
+       Text("Понятно")
+      }
+     }
+    )
    }
   }
  }
