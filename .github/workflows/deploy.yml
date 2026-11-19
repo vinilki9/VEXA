@@ -1,8 +1,9 @@
+
 name: Deploy VEXA
 
 on:
   push:
-    branches: [main]
+    branches: [deploy]
   workflow_dispatch:
 
 permissions:
