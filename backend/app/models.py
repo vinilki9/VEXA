@@ -586,7 +586,6 @@ class CityOrderCounter(Base):
 
 class Order(Base):
     __tablename__ = "orders"
-
     __table_args__ = (
         UniqueConstraint(
             "city_id",
@@ -616,7 +615,6 @@ class Order(Base):
                 AND fare_distance_price_kopecks IS NULL
                 AND fare_time_price_kopecks IS NULL
                 AND fare_limit_adjustment_kopecks IS NULL
-                AND anonymous_surcharge_kopecks IS NULL
                 AND child_seat_surcharge_kopecks IS NULL
                 AND animal_transport_surcharge_kopecks IS NULL
                 AND cargo_vehicle_surcharge_kopecks IS NULL
@@ -630,7 +628,6 @@ class Order(Base):
                 AND fare_distance_price_kopecks IS NOT NULL
                 AND fare_time_price_kopecks IS NOT NULL
                 AND fare_limit_adjustment_kopecks IS NOT NULL
-                AND anonymous_surcharge_kopecks IS NOT NULL
                 AND child_seat_surcharge_kopecks IS NOT NULL
                 AND animal_transport_surcharge_kopecks IS NOT NULL
                 AND cargo_vehicle_surcharge_kopecks IS NOT NULL
@@ -640,7 +637,6 @@ class Order(Base):
                 AND fare_base_price_kopecks >= 0
                 AND fare_distance_price_kopecks >= 0
                 AND fare_time_price_kopecks >= 0
-                AND anonymous_surcharge_kopecks >= 0
                 AND child_seat_surcharge_kopecks >= 0
                 AND animal_transport_surcharge_kopecks >= 0
                 AND cargo_vehicle_surcharge_kopecks >= 0
@@ -651,7 +647,6 @@ class Order(Base):
                     + fare_distance_price_kopecks
                     + fare_time_price_kopecks
                     + fare_limit_adjustment_kopecks
-                    + anonymous_surcharge_kopecks
                     + child_seat_surcharge_kopecks
                     + animal_transport_surcharge_kopecks
                     + cargo_vehicle_surcharge_kopecks
@@ -723,12 +718,6 @@ class Order(Base):
 
     customer_phone: Mapped[str] = mapped_column(
         String(40),
-        nullable=False,
-    )
-
-    anonymous: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
         nullable=False,
     )
 
@@ -829,11 +818,6 @@ class Order(Base):
     )
 
     fare_limit_adjustment_kopecks: Mapped[int | None] = mapped_column(
-        Integer,
-        nullable=True,
-    )
-
-    anonymous_surcharge_kopecks: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
     )
@@ -1059,6 +1043,22 @@ class DynamicPricingSettings(Base):
         CheckConstraint(
             "driver_distance_step_multiplier >= 0",
             name="dynamic_pricing_driver_step_multiplier_nonnegative",
+        ),
+        CheckConstraint(
+            "weather_addition >= 0",
+            name="dynamic_pricing_weather_addition_nonnegative",
+        ),
+        CheckConstraint(
+            "traffic_addition >= 0",
+            name="dynamic_pricing_traffic_addition_nonnegative",
+        ),
+        CheckConstraint(
+            "demand_addition >= 0",
+            name="dynamic_pricing_demand_addition_nonnegative",
+        ),
+        CheckConstraint(
+            "other_addition >= 0",
+            name="dynamic_pricing_other_addition_nonnegative",
         ),
         UniqueConstraint(
             "city_id",
