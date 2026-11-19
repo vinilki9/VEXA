@@ -1,1868 +1,1511 @@
 
-package ru.vexa.driver
+package ru.vexa.client
 
-import android.content.Context
-import android.content.Intent
-import android.widget.Toast
+
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.io.IOException
-import java.text.NumberFormat
-import java.util.Locale
-import java.text.SimpleDateFormat
-import java.util.TimeZone
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
+import ru.dgis.sdk.Duration
+import ru.dgis.sdk.compose.map.MapComposable
+import ru.dgis.sdk.coordinates.GeoPoint
+import ru.dgis.sdk.coordinates.Latitude
+import ru.dgis.sdk.coordinates.Longitude
+import ru.dgis.sdk.geometry.ComplexGeometry
+import ru.dgis.sdk.geometry.Elevation
+import ru.dgis.sdk.geometry.GeoPointWithElevation
+import ru.dgis.sdk.geometry.PointGeometry
+import ru.dgis.sdk.map.CameraAnimationType
+import ru.dgis.sdk.map.CameraPosition
+import ru.dgis.sdk.map.DefaultMapControllerViewModel
+import ru.dgis.sdk.map.LogicalPixel
+import ru.dgis.sdk.map.MapControllerOptions
+import ru.dgis.sdk.map.MapCopyrightOptions
+import ru.dgis.sdk.map.MapObjectManager
+import ru.dgis.sdk.map.MapRenderOptions
+import ru.dgis.sdk.map.Marker
+import ru.dgis.sdk.map.MarkerOptions
+import ru.dgis.sdk.map.Padding
+import ru.dgis.sdk.map.RouteMapObject
+import ru.dgis.sdk.map.RouteMapObjectSource
+import ru.dgis.sdk.map.RouteVisualizationType
+import ru.dgis.sdk.map.Zoom
+import ru.dgis.sdk.map.awaitMap
+import ru.dgis.sdk.map.calcPosition
+import ru.dgis.sdk.map.imageFromResource
+import ru.dgis.sdk.routing.BriefRouteInfoSearchPoints
+import ru.dgis.sdk.routing.CarRouteSearchOptions
+import ru.dgis.sdk.routing.RouteIndex
+import ru.dgis.sdk.routing.RouteSearchOptions
+import ru.dgis.sdk.routing.RouteSearchPoint
+import ru.dgis.sdk.routing.RouteSearchType
+import ru.dgis.sdk.routing.TaxiRouteSearchOptions
+import ru.dgis.sdk.routing.TrafficRouter
 
-private val VexaTeal = Color(0xFF20C6B7)
-private val VexaInk = Color(0xFF111827)
-private val VexaNavy = Color(0xFF1E293B)
-private val VexaBackground = Color(0xFFF5F7FA)
-private val VexaMuted = Color(0xFF64748B)
-private val VexaRed = Color(0xFFE53935)
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.util.UUID
+import kotlin.math.abs
 
-private fun formatWalletRubles(kopecks: Long): String {
- val formatter = NumberFormat.getNumberInstance(Locale("ru", "RU"))
- formatter.minimumFractionDigits = 2
- formatter.maximumFractionDigits = 2
- val sign = if (kopecks < 0) "−" else ""
- return sign + formatter.format(kotlin.math.abs(kopecks) / 100.0)
-}
+private val Teal = Color(0xFF1ED9C6)
+private val Ink = Color(0xFF111827)
+private val PanelWhite = Color.White
+private val CancelRed = Color(0xFFE53935)
 
-private val apiExecutor = Executors.newSingleThreadExecutor()
-private val offerPollExecutor = Executors.newSingleThreadExecutor()
-private val offerPollInFlight = AtomicBoolean(false)
-private val mainHandler = Handler(Looper.getMainLooper())
-
-private fun parseServerTimestampMillis(value: String): Long? {
- val match = Regex(
-  """^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$"""
- ).matchEntire(value.trim()) ?: return null
-
- val fraction = (match.groupValues[2] + "000").take(3)
- val normalized = "${match.groupValues[1]}.$fraction${match.groupValues[3]}"
-
- return try {
-  val formatter = SimpleDateFormat(
-   "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
-   Locale.US
-  )
-  formatter.isLenient = false
-  formatter.timeZone = TimeZone.getTimeZone("UTC")
-  formatter.parse(normalized)?.time
- } catch (_: Exception) {
-  null
- }
+private fun parsePriceQuoteExpiry(value: String): Instant? {
+ return runCatching {
+  Instant.parse(value)
+ }.getOrNull() ?: runCatching {
+  OffsetDateTime.parse(value).toInstant()
+ }.getOrNull()
 }
 
 class MainActivity : ComponentActivity() {
+ private lateinit var mapViewModel: DefaultMapControllerViewModel
+ private lateinit var trafficRouter: TrafficRouter
+ private var mapObjectManager: MapObjectManager? = null
+ private var routeMapObjectSource: RouteMapObjectSource? = null
+ private val dgisMapState = mutableStateOf<ru.dgis.sdk.map.Map?>(null)
+
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+
+  val sdkContext = (application as VexaApplication).sdkContext
+
+  mapViewModel = DefaultMapControllerViewModel(
+   sdkContext,
+   MapControllerOptions(
+    position = CameraPosition(
+     point = GeoPoint(55.751244, 37.618423),
+     zoom = Zoom(12.0f)
+    )
+   )
+  )
+
+  trafficRouter = TrafficRouter(sdkContext)
+
+  lifecycleScope.launch {
+   val map = mapViewModel.awaitMap()
+
+   mapObjectManager = MapObjectManager(map)
+   routeMapObjectSource = RouteMapObjectSource(
+    sdkContext,
+    RouteVisualizationType.NORMAL
+   ).also(map::addSource)
+
+   dgisMapState.value = map
+  }
+
   setContent {
-   DriverScreen()
+   ClientScreen(
+    mapViewModel = mapViewModel,
+    dgisMap = dgisMapState.value,
+    mapObjectManager = mapObjectManager,
+    routeMapObjectSource = routeMapObjectSource,
+    trafficRouter = trafficRouter
+   )
   }
  }
-}
 
-private fun runApiCall(
- action: () -> Any?,
- onResult: (Any?, String?) -> Unit
-) {
- apiExecutor.execute {
-  try {
-   val result = action()
-   mainHandler.post {
-    onResult(result, null)
-   }
-  } catch (e: Exception) {
-   mainHandler.post {
-    onResult(null, e.message ?: "Ошибка соединения с сервером")
-   }
+ override fun onDestroy() {
+  routeMapObjectSource?.let { source ->
+   dgisMapState.value?.removeSource(source)
   }
+
+  routeMapObjectSource = null
+
+  if (::trafficRouter.isInitialized) {
+   trafficRouter.close()
+  }
+
+  if (::mapViewModel.isInitialized) {
+   mapViewModel.close()
+  }
+
+  super.onDestroy()
  }
 }
 
 @Composable
-private fun VexaCard(
- dark: Boolean,
- modifier: Modifier = Modifier,
- content: @Composable ColumnScope.() -> Unit
+fun ClientScreen(
+ mapViewModel: DefaultMapControllerViewModel,
+ dgisMap: ru.dgis.sdk.map.Map?,
+ mapObjectManager: MapObjectManager?,
+ routeMapObjectSource: RouteMapObjectSource?,
+ trafficRouter: TrafficRouter
 ) {
- Card(
-  modifier = modifier.fillMaxWidth(),
-  shape = RoundedCornerShape(22.dp),
-  colors = CardDefaults.cardColors(
-   containerColor = if (dark) VexaNavy else Color.White
-  ),
-  elevation = CardDefaults.cardElevation(
-   defaultElevation = if (dark) 0.dp else 2.dp
-  )
+ var panelFraction by remember {
+  mutableFloatStateOf(0.45f)
+ }
+
+ var pickup by remember {
+  mutableStateOf("")
+ }
+
+ var destination by remember {
+  mutableStateOf("")
+ }
+
+ var selectedPickup by remember {
+  mutableStateOf<AddressResult?>(null)
+ }
+
+ var selectedDestination by remember {
+  mutableStateOf<AddressResult?>(null)
+ }
+
+ val sdkContext =
+  (LocalContext.current.applicationContext as VexaApplication).sdkContext
+
+ val pickupIcon = remember {
+  imageFromResource(sdkContext, R.drawable.vexa_pickup_waving)
+ }
+
+ val destinationIcon = remember {
+  imageFromResource(sdkContext, R.drawable.vexa_destination_flag)
+ }
+
+ var routeSummary by remember {
+  mutableStateOf<String?>(null)
+ }
+
+ var routeError by remember {
+  mutableStateOf<String?>(null)
+ }
+
+ var routeRequestVersion by remember {
+  mutableStateOf(0)
+ }
+
+ var routeGeometry by remember {
+  mutableStateOf<ComplexGeometry?>(null)
+ }
+
+ LaunchedEffect(
+  selectedPickup,
+  selectedDestination,
+  mapObjectManager
  ) {
-  Column(
-   modifier = Modifier.padding(16.dp),
-   verticalArrangement = Arrangement.spacedBy(10.dp),
-   content = content
-  )
- }
-}
+  val source = routeMapObjectSource ?: return@LaunchedEffect
 
-@Composable
-private fun SectionTitle(
- title: String,
- subtitle: String? = null,
- color: Color
-) {
- Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-  Text(
-   text = title,
-   color = color,
-   fontSize = 19.sp,
-   fontWeight = FontWeight.Bold
-  )
-  if (!subtitle.isNullOrBlank()) {
-   Text(
-    text = subtitle,
-    color = VexaMuted,
-    fontSize = 12.sp
-   )
+  val pickupAddress = selectedPickup
+  val destinationAddress = selectedDestination
+
+  routeRequestVersion += 1
+  val requestVersion = routeRequestVersion
+
+  source.clear()
+  routeGeometry = null
+  routeSummary = "Строим маршрут..."
+  routeError = null
+
+  if (pickupAddress == null || destinationAddress == null) {
+   routeSummary = null
+   return@LaunchedEffect
   }
- }
-}
 
-@Composable
-private fun DriverSatelliteGlyph(color: Color) {
- Canvas(modifier = Modifier.size(24.dp)) {
-  val scale = size.width / 24f
-  rotate(degrees = 45f, pivot = center) {
-   drawRoundRect(
-    color = color,
-    topLeft = Offset(2f * scale, 9f * scale),
-    size = Size(6f * scale, 6f * scale),
-    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1f * scale)
+  val startPoint = RouteSearchPoint(
+   GeoPoint(
+    pickupAddress.latitude,
+    pickupAddress.longitude
    )
-   drawRoundRect(
-    color = color,
-    topLeft = Offset(9f * scale, 9f * scale),
-    size = Size(6f * scale, 6f * scale),
-    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1f * scale)
+  )
+
+  val finishPoint = RouteSearchPoint(
+   GeoPoint(
+    destinationAddress.latitude,
+    destinationAddress.longitude
    )
-   drawRoundRect(
-    color = color,
-    topLeft = Offset(16f * scale, 9f * scale),
-    size = Size(6f * scale, 6f * scale),
-    cornerRadius = androidx.compose.ui.geometry.CornerRadius(1f * scale)
+  )
+
+  val routeSearchOptions = RouteSearchOptions(
+   TaxiRouteSearchOptions(
+    CarRouteSearchOptions(
+     routeSearchType = RouteSearchType.JAM
+    )
    )
-  }
-  drawLine(
-   color = color,
-   start = Offset(6f * scale, 6f * scale),
-   end = Offset(3f * scale, 3f * scale),
-   strokeWidth = 2f * scale,
-   cap = androidx.compose.ui.graphics.StrokeCap.Round
-  )
-  drawLine(
-   color = color,
-   start = Offset(18f * scale, 18f * scale),
-   end = Offset(21f * scale, 21f * scale),
-   strokeWidth = 2f * scale,
-   cap = androidx.compose.ui.graphics.StrokeCap.Round
-  )
- }
-}
-
-@Composable
-private fun DriverKeyGlyph(color: Color) {
- Canvas(modifier = Modifier.size(24.dp)) {
-  val scale = size.width / 24f
-  drawCircle(
-   color = color,
-   radius = 4.2f * scale,
-   center = Offset(7.5f * scale, 7.5f * scale),
-   style = Stroke(width = 2.5f * scale)
-  )
-  drawLine(
-   color = color,
-   start = Offset(10.5f * scale, 10.5f * scale),
-   end = Offset(20.5f * scale, 20.5f * scale),
-   strokeWidth = 2.5f * scale,
-   cap = androidx.compose.ui.graphics.StrokeCap.Round
-  )
-  drawLine(
-   color = color,
-   start = Offset(15.5f * scale, 15.5f * scale),
-   end = Offset(18f * scale, 13f * scale),
-   strokeWidth = 2.5f * scale,
-   cap = androidx.compose.ui.graphics.StrokeCap.Round
-  )
-  drawLine(
-   color = color,
-   start = Offset(18f * scale, 18f * scale),
-   end = Offset(20.5f * scale, 15.5f * scale),
-   strokeWidth = 2.5f * scale,
-   cap = androidx.compose.ui.graphics.StrokeCap.Round
-  )
- }
-}
-
-@Composable
-private fun DriverSignalGlyph(color: Color) {
- Column(
-  horizontalAlignment = Alignment.CenterHorizontally,
-  verticalArrangement = Arrangement.spacedBy(2.dp),
-  modifier = Modifier.width(26.dp)
- ) {
-  listOf(24.dp, 18.dp, 12.dp, 6.dp).forEach { barWidth ->
-   Box(
-    modifier = Modifier
-     .width(barWidth)
-     .height(3.dp)
-     .background(color, RoundedCornerShape(50))
-   )
-  }
-  Box(
-   modifier = Modifier
-    .size(4.dp)
-    .background(color, RoundedCornerShape(50))
-  )
- }
-}
-
-@Composable
-fun DriverScreen() {
- val context = androidx.compose.ui.platform.LocalContext.current
- var login by remember { mutableStateOf("") }
- var password by remember { mutableStateOf("") }
-
- var authorized by remember {
-  mutableStateOf(DriverApiClient.getAccessToken() != null)
- }
-
- var initialSessionRestorePending by remember {
-  mutableStateOf(DriverApiClient.getAccessToken() != null)
- }
-
- var loading by remember { mutableStateOf(false) }
- var online by remember { mutableStateOf(false) }
-
- var driverName by remember { mutableStateOf("Водитель") }
- var phone by remember { mutableStateOf("") }
- var cityName by remember { mutableStateOf("Оболенск") }
- var branchName by remember { mutableStateOf("") }
- var rating by remember { mutableStateOf("") }
- var vehicleDescription by remember { mutableStateOf("") }
-
- var orders by remember { mutableStateOf(listOf<JSONObject>()) }
- var currentOffer by remember { mutableStateOf<JSONObject?>(null) }
- var offerDeadlineMillis by remember { mutableStateOf(0L) }
- var offerSecondsLeft by remember { mutableStateOf(0) }
- var offerActionInProgress by remember { mutableStateOf(false) }
- var lastResolvedOfferId by remember { mutableStateOf("") }
- var offerPollStatusMessage by remember { mutableStateOf("") }
- var walletBalanceKopecks by remember { mutableStateOf<Long?>(null) }
- var walletAvailableKopecks by remember { mutableStateOf<Long?>(null) }
-
- var gpsHealthy by remember { mutableStateOf(false) }
- var serverHealthy by remember { mutableStateOf(false) }
- var authHealthy by remember { mutableStateOf(false) }
- var selectedStatusDetails by remember {
-  mutableStateOf<Pair<String, String>?>(null)
- }
-
- var errorMessage by remember { mutableStateOf("") }
- var infoMessage by remember { mutableStateOf("") }
-
- var theme by remember { mutableStateOf("Системная") }
- var sound by remember { mutableStateOf("classic") }
-
- DriverGpsReporter(
-  enabled = authorized,
-  onMessage = { message ->
-   infoMessage = message
-  }
- )
-
- LaunchedEffect(context, authorized) {
-  val healthPrefs = context.getSharedPreferences(
-   DriverLocationService.STATUS_PREFS,
-   Context.MODE_PRIVATE
-  )
-  var lastAlertId = healthPrefs.getLong(
-   DriverLocationService.KEY_ALERT_ID,
-   0L
   )
 
-  while (true) {
-   gpsHealthy = authorized && healthPrefs.getBoolean(
-    DriverLocationService.KEY_GPS_OK,
-    false
-   )
-   serverHealthy = authorized && healthPrefs.getBoolean(
-    DriverLocationService.KEY_SERVER_OK,
-    false
-   )
-   authHealthy = authorized && healthPrefs.getBoolean(
-    DriverLocationService.KEY_AUTH_OK,
-    false
-   )
+  android.util.Log.d(
+   "VEXA_ROUTING",
+   "Запрос маршрута отправлен"
+  )
 
-   val currentAlertId = healthPrefs.getLong(
-    DriverLocationService.KEY_ALERT_ID,
-    0L
-   )
-   if (currentAlertId != lastAlertId) {
-    lastAlertId = currentAlertId
-    val alert = healthPrefs.getString(
-     DriverLocationService.KEY_ALERT,
-     ""
-    ).orEmpty()
-    if (alert.isNotBlank()) {
-     Toast.makeText(context, alert, Toast.LENGTH_SHORT).show()
-    }
-   }
+  trafficRouter.findRoute(
+   startPoint = startPoint,
+   finishPoint = finishPoint,
+   routeSearchOptions = routeSearchOptions
+  ).onComplete(
+   resultCallback = { routes ->
+    if (requestVersion == routeRequestVersion) {
+     if (routes.isEmpty()) {
+      routeSummary = null
+      routeError = "Маршрут для выбранных адресов не найден."
+      routeGeometry = null
 
-   kotlinx.coroutines.delay(1000)
-  }
- }
-
- LaunchedEffect(authorized, online) {
-  if (!authorized || !online) {
-   currentOffer = null
-   offerDeadlineMillis = 0L
-   offerSecondsLeft = 0
-   offerActionInProgress = false
-   offerPollStatusMessage = ""
-  } else {
-   while (true) {
-    if (
-     !offerActionInProgress &&
-     offerPollInFlight.compareAndSet(false, true)
-    ) {
-     offerPollExecutor.execute {
-      try {
-       val response = DriverApiClient.getOrderOffers()
-       val offers = response.optJSONArray("offers")
-       val firstOffer = if (offers != null && offers.length() > 0) {
-        offers.optJSONObject(0)
-       } else {
-        null
+      android.util.Log.w(
+       "VEXA_ROUTING",
+       "SDK не вернул маршруты"
+      )
+     } else {
+      routeGeometry = ComplexGeometry(
+       routes[0].route.geometry.entries.map { entry ->
+        PointGeometry(entry.value)
        }
+      )
 
-       mainHandler.post {
-        offerPollInFlight.set(false)
+      source.replaceAllObjects(
+       routes.mapIndexed { index, route ->
+        RouteMapObject(
+         trafficRoute = route,
+         isActive = index == 0,
+         index = RouteIndex(index.toLong())
+        )
+       }
+      )
 
-        if (authorized && online && !offerActionInProgress) {
-         offerPollStatusMessage = ""
-
-         if (firstOffer == null) {
-          currentOffer = null
-          offerDeadlineMillis = 0L
-          offerSecondsLeft = 0
-         } else {
-          val offerId = firstOffer.optString("offer_id")
-          if (offerId.isNotBlank() && offerId != lastResolvedOfferId) {
-           val currentId = currentOffer?.optString("offer_id").orEmpty()
-           if (currentId != offerId) {
-            currentOffer = firstOffer
-            val timeoutSeconds = firstOffer.optInt(
-             "response_timeout_seconds",
-             13
-            ).coerceAtLeast(1)
-            val serverDeadline = parseServerTimestampMillis(
-             firstOffer.optString("expires_at")
-            )
-            offerDeadlineMillis = serverDeadline
-             ?: (System.currentTimeMillis() +
-                 (timeoutSeconds - 2).coerceAtLeast(1) * 1000L)
-           } else {
-            currentOffer = firstOffer
-           }
-          }
-         }
-        }
-       }
-      } catch (e: Exception) {
-       val statusMessage = when (e) {
-        is DriverApiHttpException -> when {
-         e.statusCode == 401 || e.statusCode == 403 ->
-          "Ошибка авторизации (HTTP ${e.statusCode}). Проверьте вход в аккаунт водителя."
-         e.statusCode in 500..599 ->
-          "Сервер временно недоступен (HTTP ${e.statusCode}). VEXA продолжит проверку автоматически."
-         else ->
-          "Сервер вернул ошибку HTTP ${e.statusCode}: ${e.message.orEmpty()}"
-        }
-        is IOException ->
-         "Нет связи с сервером. VEXA автоматически возобновит получение заказов после восстановления интернета."
-        else ->
-         "Не удалось получить предложения заказов: ${e.message ?: "неизвестная ошибка"}"
-       }
-       mainHandler.post {
-        offerPollInFlight.set(false)
-        if (authorized && online) {
-         offerPollStatusMessage = statusMessage
-        }
-       }
-      }
+      android.util.Log.d(
+       "VEXA_ROUTING",
+       "Получено маршрутов: ${routes.size}"
+      )
      }
     }
+   },
+   errorCallback = { error ->
+    if (requestVersion == routeRequestVersion) {
+     routeError =
+      "Не удалось построить маршрут: ${error.message ?: "неизвестная ошибка"}"
 
-    kotlinx.coroutines.delay(2000)
+     routeGeometry = null
+
+     android.util.Log.e(
+      "VEXA_ROUTING",
+      "Ошибка построения маршрута",
+      error
+     )
+    }
    }
+  )
+
+  trafficRouter.findBriefRouteInfos(
+   searchPoints = listOf(
+    BriefRouteInfoSearchPoints(startPoint, finishPoint)
+   ),
+   routeSearchOptions = routeSearchOptions
+  ).onComplete(
+   resultCallback = { routeInfos ->
+    val routeInfo = routeInfos.firstOrNull()
+    val carInfo = routeInfo?.extraInfo?.asCar
+
+    if (requestVersion == routeRequestVersion && carInfo != null) {
+     val kilometers =
+      carInfo.length.millimeters / 1_000_000.0
+
+     routeSummary = "Маршрут: %.1f км, %d мин".format(
+      kilometers,
+      routeInfo.duration.inMinutes
+     )
+    }
+   },
+   errorCallback = { error ->
+    if (requestVersion == routeRequestVersion) {
+     routeSummary = null
+
+     android.util.Log.w(
+      "VEXA_ROUTING",
+      "Не удалось получить сводку маршрута",
+      error
+     )
+    }
+   }
+  )
+ }
+
+ LaunchedEffect(
+  selectedPickup,
+  selectedDestination,
+  mapObjectManager,
+  panelFraction,
+  routeGeometry
+ ) {
+  val manager = mapObjectManager ?: return@LaunchedEffect
+
+  manager.removeAll()
+
+  selectedPickup?.let { address ->
+   manager.addObject(
+    Marker(
+     MarkerOptions(
+      position = GeoPointWithElevation(
+       latitude = Latitude(value = address.latitude),
+       longitude = Longitude(value = address.longitude),
+       elevation = Elevation(value = 0.0f)
+      ),
+      icon = pickupIcon,
+      iconWidth = LogicalPixel(value = 32.0f),
+      text = "Подача"
+     )
+    )
+   )
+  }
+
+  selectedDestination?.let { address ->
+   manager.addObject(
+    Marker(
+     MarkerOptions(
+      position = GeoPointWithElevation(
+       latitude = Latitude(value = address.latitude),
+       longitude = Longitude(value = address.longitude),
+       elevation = Elevation(value = 0.0f)
+      ),
+      icon = destinationIcon,
+      iconWidth = LogicalPixel(value = 32.0f),
+      text = "Назначение"
+     )
+    )
+   )
+  }
+
+  val pickupAddress = selectedPickup
+  val destinationAddress = selectedDestination
+  val map = dgisMap
+
+  if (
+   pickupAddress != null &&
+   destinationAddress != null &&
+   map != null
+  ) {
+   val geometry = routeGeometry ?: return@LaunchedEffect
+
+   val position = calcPosition(
+    camera = map.camera,
+    geometry = geometry,
+    screenArea = Padding(
+     left = 40,
+     top = 100,
+     right = 40,
+     bottom = when {
+      panelFraction >= 0.70f -> 1400
+      panelFraction >= 0.30f -> 1000
+      else -> 400
+     }
+    )
+   )
+
+   android.util.Log.d(
+    "VEXA_CAMERA",
+    "Расчет камеры выполнен"
+   )
+
+   map.camera.move(
+    position,
+    Duration.ofMilliseconds(900),
+    CameraAnimationType.DEFAULT
+   )
   }
  }
 
- LaunchedEffect(currentOffer?.optString("offer_id"), offerDeadlineMillis) {
-  while (currentOffer != null && offerDeadlineMillis > 0L) {
-   val remainingMillis = offerDeadlineMillis - System.currentTimeMillis()
-   if (remainingMillis <= 0L) {
-    currentOffer?.let {
-     lastResolvedOfferId = it.optString("offer_id")
+ var pickupSuggestions by remember {
+  mutableStateOf<List<AddressResult>>(emptyList())
+ }
+
+ var pickupSearching by remember {
+  mutableStateOf(false)
+ }
+
+ var pickupError by remember {
+  mutableStateOf<String?>(null)
+ }
+
+ var destinationSuggestions by remember {
+  mutableStateOf<List<AddressResult>>(emptyList())
+ }
+
+ var destinationSearching by remember {
+  mutableStateOf(false)
+ }
+
+ var destinationError by remember {
+  mutableStateOf<String?>(null)
+ }
+
+ LaunchedEffect(pickup) {
+  val query = pickup.trim()
+
+  if (
+   query.length < 1 ||
+   query == "Моя геопозиция" ||
+   selectedPickup?.name == pickup
+  ) {
+   pickupSuggestions = emptyList()
+   pickupSearching = false
+   pickupError = null
+   return@LaunchedEffect
+  }
+
+  delay(450)
+
+  pickupSearching = true
+  pickupError = null
+
+  AddressSearch.search(
+   query = query,
+   onResult = { results ->
+    if (pickup.trim() == query) {
+     pickupSuggestions = results
+     pickupSearching = false
     }
-    currentOffer = null
-    offerSecondsLeft = 0
+   },
+   onError = { error ->
+    if (pickup.trim() == query) {
+     pickupError = error
+     pickupSearching = false
+     pickupSuggestions = emptyList()
+    }
+   }
+  )
+ }
+
+ LaunchedEffect(destination) {
+  val query = destination.trim()
+
+  if (
+   query.length < 3 ||
+   selectedDestination?.name == destination
+  ) {
+   destinationSuggestions = emptyList()
+   destinationSearching = false
+   destinationError = null
+   return@LaunchedEffect
+  }
+
+  delay(450)
+
+  destinationSearching = true
+  destinationError = null
+
+  AddressSearch.search(
+   query = query,
+   onResult = { results ->
+    if (destination.trim() == query) {
+     destinationSuggestions = results
+     destinationSearching = false
+    }
+   },
+   onError = { error ->
+    if (destination.trim() == query) {
+     destinationError = error
+     destinationSearching = false
+     destinationSuggestions = emptyList()
+    }
+   }
+  )
+ }
+
+ var tariff by remember {
+  mutableStateOf("Economy")
+ }
+
+ var customerName by remember {
+  mutableStateOf("")
+ }
+
+ var cargoVehicle by remember {
+  mutableStateOf("Универсал")
+ }
+
+ var cargoDescription by remember {
+  mutableStateOf("")
+ }
+
+ var cargoLoaders by remember {
+  mutableIntStateOf(0)
+ }
+
+ var child by remember {
+  mutableStateOf(false)
+ }
+
+ var animal by remember {
+  mutableStateOf(false)
+ }
+
+ var anonymous by remember {
+  mutableStateOf(false)
+ }
+
+ var payment by remember {
+  mutableStateOf("Наличные")
+ }
+
+ var optionsMenu by remember {
+  mutableStateOf(false)
+ }
+
+ var paymentMenu by remember {
+  mutableStateOf(false)
+ }
+
+ var orderCreated by remember {
+  mutableStateOf(false)
+ }
+
+ var orderSubmitting by remember {
+  mutableStateOf(false)
+ }
+
+ var orderPublicNumber by remember {
+  mutableStateOf<String?>(null)
+ }
+
+ var orderError by remember {
+  mutableStateOf<String?>(null)
+ }
+
+ var pricePreview by remember {
+  mutableStateOf<JSONObject?>(null)
+ }
+
+ var pricePreviewSignature by remember {
+  mutableStateOf<String?>(null)
+ }
+
+ var priceQuoteSecondsRemaining by remember {
+  mutableIntStateOf(0)
+ }
+
+ var priceQuoteExpired by remember {
+  mutableStateOf(false)
+ }
+
+ LaunchedEffect(pricePreview) {
+  val preview = pricePreview
+
+  if (preview == null) {
+   priceQuoteSecondsRemaining = 0
+   priceQuoteExpired = false
+   return@LaunchedEffect
+  }
+
+  val expiresAtValue = preview.optString(
+   "price_quote_expires_at",
+   ""
+  )
+
+  val expiresAt = parsePriceQuoteExpiry(expiresAtValue)
+
+  if (expiresAt == null) {
+   priceQuoteSecondsRemaining = 0
+   priceQuoteExpired = true
+   return@LaunchedEffect
+  }
+
+  while (true) {
+   val remainingMillis =
+    java.time.Duration.between(
+     Instant.now(),
+     expiresAt
+    ).toMillis()
+
+   if (remainingMillis <= 0L) {
+    priceQuoteSecondsRemaining = 0
+    priceQuoteExpired = true
     break
    }
 
-   offerSecondsLeft = ((remainingMillis + 999L) / 1000L)
-    .toInt()
-    .coerceAtLeast(1)
-   kotlinx.coroutines.delay(250)
+   priceQuoteSecondsRemaining =
+    ((remainingMillis + 999L) / 1000L)
+     .coerceAtMost(Int.MAX_VALUE.toLong())
+     .toInt()
+
+   priceQuoteExpired = false
+
+   delay(1000)
   }
  }
 
- val systemDark = isSystemInDarkTheme()
- val dark = theme == "Ночная" ||
-         (theme == "Системная" && systemDark)
-
- val backgroundColor = if (dark) VexaInk else VexaBackground
- val foregroundColor = if (dark) Color.White else VexaInk
- val secondaryText = if (dark) Color(0xFFCBD5E1) else VexaMuted
- val cardColor = if (dark) VexaNavy else Color.White
-
- fun loadDriverData() {
-  loading = true
-  errorMessage = ""
-
-  runApiCall(
-   action = {
-    val profile = DriverApiClient.getProfile()
-    val activeOrders = DriverApiClient.getActiveOrders()
-    val wallet = DriverApiClient.getWallet()
-    Triple(profile, activeOrders, wallet)
-   },
-   onResult = { result, error ->
-    loading = false
-
-    if (error != null) {
-     errorMessage = error
-     return@runApiCall
-    }
-
-    val data = result as Triple<*, *, *>
-    val profile = data.first as JSONObject
-    val activeOrders = data.second as JSONObject
-    val wallet = data.third as JSONObject
-
-    walletBalanceKopecks = wallet.optLong("balance_kopecks", 0L)
-    walletAvailableKopecks = wallet.optLong("available_kopecks", 0L)
-
-    driverName = profile.optString("username", "Водитель")
-    phone = profile.optString("phone", "")
-    online = profile.optBoolean("is_online", false)
-    rating = profile.optString("rating", "")
-
-    cityName = profile
-     .optJSONObject("city")
-     ?.optString("name", "Оболенск")
-     ?: "Оболенск"
-
-    branchName = profile
-     .optJSONObject("branch")
-     ?.optString("name", "")
-     ?: ""
-
-    val vehicles = profile.optJSONArray("vehicles")
-    vehicleDescription = if (
-     vehicles != null && vehicles.length() > 0
-    ) {
-     val vehicle = vehicles.getJSONObject(0)
-     listOf(
-      vehicle.optString("make"),
-      vehicle.optString("model"),
-      vehicle.optString("color"),
-      vehicle.optString("license_plate")
-     )
-      .filter { it.isNotBlank() && it != "null" }
-      .joinToString(" · ")
-    } else {
-     "Автомобиль не указан"
-    }
-
-    val orderArray = activeOrders.optJSONArray("orders")
-    val loadedOrders = mutableListOf<JSONObject>()
-
-    if (orderArray != null) {
-     for (i in 0 until orderArray.length()) {
-      loadedOrders.add(orderArray.getJSONObject(i))
-     }
-    }
-
-    orders = loadedOrders
-    authorized = true
-    infoMessage = "Данные водителя обновлены"
-   }
-  )
+ var showPassengerAuthDialog by remember {
+  mutableStateOf(false)
  }
 
- LaunchedEffect(initialSessionRestorePending) {
-  if (initialSessionRestorePending) {
-   initialSessionRestorePending = false
-   loadDriverData()
-  }
+ val isAnonymousOrder = anonymous || customerName.isBlank()
+ val currentPricePreviewSignature = listOf(
+  tariff,
+  customerName.trim(),
+  anonymous.toString(),
+  selectedPickup?.name.orEmpty(),
+  selectedPickup?.latitude?.toString().orEmpty(),
+  selectedPickup?.longitude?.toString().orEmpty(),
+  selectedDestination?.name.orEmpty(),
+  selectedDestination?.latitude?.toString().orEmpty(),
+  selectedDestination?.longitude?.toString().orEmpty(),
+  payment,
+  child.toString(),
+  animal.toString(),
+  cargoVehicle,
+  cargoDescription.trim(),
+  cargoLoaders.toString()
+ ).joinToString("|")
+ val coroutineScope = rememberCoroutineScope()
+
+ val hasCurrentPricePreview =
+  pricePreview != null &&
+   pricePreviewSignature == currentPricePreviewSignature &&
+   !priceQuoteExpired
+
+ val animatedFraction by animateFloatAsState(
+  targetValue = panelFraction,
+  label = "PanelHeight"
+ )
+
+ val configuration = LocalConfiguration.current
+ val density = LocalDensity.current
+
+ val screenHeightPx = with(density) {
+  configuration.screenHeightDp.dp.toPx()
  }
 
- fun changeOnlineStatus(value: Boolean) {
-  if (loading) return
-
-  loading = true
-  errorMessage = ""
-
-  runApiCall(
-   action = {
-    DriverApiClient.setOnline(value)
-   },
-   onResult = { result, error ->
-    loading = false
-
-    if (error != null) {
-     errorMessage = error
-     return@runApiCall
-    }
-
-    val response = result as JSONObject
-    online = response.optBoolean("is_online", value)
-
-    infoMessage = if (online) {
-     "Вы вышли на линию"
-    } else {
-     "Вы сняты с линии"
-    }
-
-    if (online) {
-     loadDriverData()
-    }
-   }
-  )
- }
-
- fun refreshOrders() {
-  if (loading) return
-
-  loading = true
-  errorMessage = ""
-
-  runApiCall(
-   action = {
-    DriverApiClient.getActiveOrders()
-   },
-   onResult = { result, error ->
-    loading = false
-
-    if (error != null) {
-     errorMessage = error
-     return@runApiCall
-    }
-
-    val response = result as JSONObject
-    val array = response.optJSONArray("orders")
-    val updated = mutableListOf<JSONObject>()
-
-    if (array != null) {
-     for (i in 0 until array.length()) {
-      updated.add(array.getJSONObject(i))
-     }
-    }
-
-    orders = updated
-    infoMessage = "Список заказов обновлён"
-   }
-  )
- }
-
- fun respondToOffer(accept: Boolean) {
-  val offer = currentOffer ?: return
-  if (offerActionInProgress) return
-
-  val offerId = offer.optString("offer_id")
-  if (offerId.isBlank()) {
-   errorMessage = "Не удалось определить предложение заказа"
-   return
-  }
-
-  offerActionInProgress = true
-  errorMessage = ""
-
-  runApiCall(
-   action = {
-    if (accept) {
-     DriverApiClient.acceptOrderOffer(offerId)
-    } else {
-     DriverApiClient.rejectOrderOffer(offerId)
-    }
-   },
-   onResult = { result, error ->
-    offerActionInProgress = false
-
-    if (error != null) {
-     errorMessage = error
-     return@runApiCall
-    }
-
-    val response = result as JSONObject
-    val failed = !response.optBoolean("success", true) ||
-     response.optBoolean("expired", false) ||
-     response.optBoolean("cancelled", false)
-
-    if (failed) {
-     lastResolvedOfferId = offerId
-     currentOffer = null
-     offerDeadlineMillis = 0L
-     offerSecondsLeft = 0
-     infoMessage = response.optString(
-      "message",
-      "Предложение больше недоступно"
-     )
-    } else {
-     lastResolvedOfferId = offerId
-     currentOffer = null
-     offerDeadlineMillis = 0L
-     offerSecondsLeft = 0
-
-     if (accept) {
-      infoMessage = "Заказ принят. Загружаем карточку поездки"
-      refreshOrders()
-     } else {
-      infoMessage = "Вы отказались от заказа"
-     }
-    }
-   }
-  )
- }
-
- fun advanceOrder(order: JSONObject) {
-  if (loading) return
-
-  val orderId = order.optString("id")
-  val currentStatus = order.optString("status")
-
-  val nextStatus = when (currentStatus) {
-   "assigned" -> "arrived"
-   "arrived" -> "in_progress"
-   "in_progress" -> "completed"
-   else -> return
-  }
-
-  loading = true
-  errorMessage = ""
-
-  runApiCall(
-   action = {
-    val response = DriverApiClient.updateOrderStatus(
-     orderId = orderId,
-     status = nextStatus
-    )
-    val wallet = if (nextStatus == "completed") {
-     DriverApiClient.getWallet()
-    } else {
-     null
-    }
-    Pair(response, wallet)
-   },
-   onResult = { result, error ->
-    loading = false
-
-    if (error != null) {
-     errorMessage = error
-    } else {
-     val data = result as Pair<*, *>
-     val wallet = data.second as? JSONObject
-     if (wallet != null) {
-      walletBalanceKopecks = wallet.optLong("balance_kopecks", 0L)
-      walletAvailableKopecks = wallet.optLong("available_kopecks", 0L)
-     }
-     infoMessage = if (nextStatus == "completed") {
-      "Поездка завершена. Баланс обновлён"
-     } else {
-      "Статус заказа обновлён"
-     }
-     refreshOrders()
-    }
-   }
-  )
- }
-
- MaterialTheme(
-  colorScheme = if (dark) {
-   darkColorScheme(
-    primary = VexaTeal,
-    secondary = VexaTeal,
-    background = VexaInk,
-    surface = VexaNavy,
-    onPrimary = VexaInk,
-    onBackground = Color.White,
-    onSurface = Color.White
-   )
-  } else {
-   lightColorScheme(
-    primary = VexaTeal,
-    secondary = VexaTeal,
-    background = VexaBackground,
-    surface = Color.White,
-    onPrimary = VexaInk,
-    onBackground = VexaInk,
-    onSurface = VexaInk
-   )
-  }
+ Box(
+  modifier = Modifier.fillMaxSize()
  ) {
-  Surface(
+  MapComposable(
    modifier = Modifier.fillMaxSize(),
-   color = backgroundColor
+   viewModel = mapViewModel,
+   renderOptions = MapRenderOptions(),
+   copyrightOptions = MapCopyrightOptions()
+  )
+
+  Surface(
+   modifier = Modifier
+    .align(Alignment.BottomCenter)
+    .fillMaxWidth()
+    .height(
+     configuration.screenHeightDp.dp * animatedFraction
+    ),
+   color = PanelWhite,
+   shape = RoundedCornerShape(
+    topStart = 24.dp,
+    topEnd = 24.dp
+   ),
+   shadowElevation = 12.dp
   ) {
-   if (!authorized) {
+   Column(
+    modifier = Modifier.fillMaxSize()
+   ) {
+    Box(
+     modifier = Modifier
+      .fillMaxWidth()
+      .height(34.dp)
+      .pointerInput(screenHeightPx) {
+       detectVerticalDragGestures(
+        onVerticalDrag = { change, dragAmount ->
+         change.consume()
+
+         panelFraction = (
+                 panelFraction -
+                         dragAmount / screenHeightPx
+                 ).coerceIn(0.20f, 0.80f)
+        },
+        onDragEnd = {
+         val positions = listOf(
+          0.15f,
+          0.45f,
+          0.80f
+         )
+
+         panelFraction = positions.minBy {
+          abs(it - panelFraction)
+         }
+        }
+       )
+      },
+     contentAlignment = Alignment.Center
+    ) {
+     Box(
+      modifier = Modifier
+       .width(42.dp)
+       .height(5.dp)
+       .clip(RoundedCornerShape(50))
+       .background(Color.LightGray)
+     )
+    }
+
     Column(
      modifier = Modifier
       .fillMaxSize()
-      .background(backgroundColor)
-      .padding(24.dp),
-     horizontalAlignment = Alignment.CenterHorizontally,
-     verticalArrangement = Arrangement.Center
+      .verticalScroll(rememberScrollState())
+      .padding(
+       start = 18.dp,
+       end = 18.dp,
+       bottom = 20.dp
+      ),
+     verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-     Text(
-      text = "VEXA",
-      color = VexaTeal,
-      fontSize = 42.sp,
-      fontWeight = FontWeight.ExtraBold,
-      letterSpacing = 3.sp
-     )
-
-     Text(
-      text = "ВОДИТЕЛЬ",
-      color = foregroundColor,
-      fontSize = 13.sp,
-      fontWeight = FontWeight.Bold,
-      letterSpacing = 4.sp
-     )
-
-     Spacer(Modifier.height(30.dp))
-
-     VexaCard(dark = dark) {
-      SectionTitle(
-       title = "Вход в аккаунт",
-       subtitle = "Введите данные учётной записи водителя",
-       color = foregroundColor
+     Row(
+      verticalAlignment = Alignment.CenterVertically
+     ) {
+      Text(
+       "VEXA",
+       color = Teal,
+       fontSize = 24.sp,
+       style = MaterialTheme.typography.headlineMedium
       )
 
-      OutlinedTextField(
-       value = login,
-       onValueChange = { login = it },
-       modifier = Modifier.fillMaxWidth(),
-       label = { Text("Логин или телефон") },
-       singleLine = true,
-       enabled = !loading,
-       shape = RoundedCornerShape(14.dp)
-      )
-
-      OutlinedTextField(
-       value = password,
-       onValueChange = { password = it },
-       modifier = Modifier.fillMaxWidth(),
-       label = { Text("Пароль") },
-       singleLine = true,
-       enabled = !loading,
-       visualTransformation = PasswordVisualTransformation(),
-       keyboardOptions = KeyboardOptions(
-        keyboardType = KeyboardType.Password
-       ),
-       shape = RoundedCornerShape(14.dp)
-      )
-
-      if (errorMessage.isNotBlank()) {
-       Text(
-        text = errorMessage,
-        color = MaterialTheme.colorScheme.error,
-        fontSize = 12.sp
-       )
-      }
-
-      Button(
-       onClick = {
-        if (login.isBlank() || password.isBlank()) {
-         errorMessage = "Введите логин и пароль"
-         return@Button
-        }
-
-        loading = true
-        errorMessage = ""
-
-        runApiCall(
-         action = {
-          DriverApiClient.login(
-           login.trim(),
-           password
-          )
-          DriverApiClient.getProfile()
-          DriverApiClient.getActiveOrders()
-         },
-         onResult = { _, error ->
-          loading = false
-
-          if (error != null) {
-           DriverApiClient.clearAccessToken()
-           errorMessage = error
-          } else {
-           password = ""
-           loadDriverData()
-          }
-         }
-        )
-       },
-       modifier = Modifier
-        .fillMaxWidth()
-        .height(52.dp),
-       enabled = !loading,
-       shape = RoundedCornerShape(15.dp),
-       colors = ButtonDefaults.buttonColors(
-        containerColor = VexaTeal,
-        contentColor = VexaInk
-       )
-      ) {
-       Text(
-        text = if (loading) "Подключение..." else "ВОЙТИ",
-        fontWeight = FontWeight.Bold
-       )
-      }
+      Spacer(Modifier.width(10.dp))
 
       Text(
-       text = "Сервер VEXA · 109.120.184.20",
-       color = VexaMuted,
+       "ПАССАЖИР",
+       color = Ink,
        fontSize = 11.sp
       )
      }
-    }
-   } else {
-    LazyColumn(
-     modifier = Modifier
-      .fillMaxSize()
-      .padding(horizontal = 16.dp),
-     verticalArrangement = Arrangement.spacedBy(14.dp),
-     contentPadding = PaddingValues(
-      top = 16.dp,
-      bottom = 30.dp
+
+     Text(
+      "Куда едем?",
+      color = Ink,
+      style = MaterialTheme.typography.titleLarge
      )
-    ) {
-     item {
-      Row(
-       modifier = Modifier.fillMaxWidth(),
-       horizontalArrangement = Arrangement.spacedBy(4.dp),
-       verticalAlignment = Alignment.CenterVertically
-      ) {
-       IconButton(
-        onClick = {
-         selectedStatusDetails = Pair(
-          "GPS",
-          when {
-           gpsHealthy -> "GPS работает. Последние координаты успешно передаются серверу VEXA."
-           !online -> "Водитель не на линии. Передача координат остановлена."
-           else -> "GPS недоступен или передача координат не подтверждена. Проверьте разрешение на местоположение и настройки геолокации."
-          }
-         )
+
+     Box {
+      Column {
+       OutlinedTextField(
+        value = pickup,
+        onValueChange = {
+         pickup = it
+         selectedPickup = null
+         pickupError = null
+         orderError = null
         },
-        modifier = Modifier.size(40.dp)
-       ) {
-        DriverSatelliteGlyph(
-         color = if (gpsHealthy) VexaTeal else VexaRed
-        )
-       }
-
-       IconButton(
-        onClick = {
-         selectedStatusDetails = Pair(
-          "Связь с сервером",
-          if (serverHealthy) {
-           "Соединение с сервером VEXA подтверждено."
-          } else {
-           "Нет подтверждённого соединения с сервером VEXA. Приложение продолжит проверять связь автоматически."
-          }
-         )
+        label = {
+         Text("Откуда")
         },
-        modifier = Modifier.size(40.dp)
-       ) {
-        DriverSignalGlyph(
-         color = if (serverHealthy) VexaTeal else VexaRed
-        )
-       }
-
-       IconButton(
-        onClick = {
-         selectedStatusDetails = Pair(
-          "Авторизация",
-          if (authHealthy) {
-           "Авторизация водителя подтверждена сервером VEXA."
-          } else {
-           "Авторизация не подтверждена. Проверьте вход в профиль водителя."
-          }
-         )
-        },
-        modifier = Modifier.size(40.dp)
-       ) {
-        DriverKeyGlyph(
-         color = if (authHealthy) VexaTeal else VexaRed
-        )
-       }
-      }
-     }
-
-     item {
-      Row(
-       modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 4.dp),
-       verticalAlignment = Alignment.CenterVertically
-      ) {
-       Column {
-        Text(
-         text = "VEXA",
-         color = VexaTeal,
-         fontSize = 27.sp,
-         fontWeight = FontWeight.ExtraBold,
-         letterSpacing = 2.sp
-        )
-        Text(
-         text = "ВОДИТЕЛЬ",
-         color = secondaryText,
-         fontSize = 10.sp,
-         fontWeight = FontWeight.Bold,
-         letterSpacing = 3.sp
-        )
-       }
-
-       Spacer(Modifier.weight(1f))
-
-       Surface(
-        color = if (online) {
-         VexaTeal.copy(alpha = 0.16f)
-        } else {
-         Color.Gray.copy(alpha = 0.14f)
-        },
-        shape = RoundedCornerShape(50)
-       ) {
-        Text(
-         text = if (online) "● НА ЛИНИИ" else "● НЕ НА ЛИНИИ",
-         modifier = Modifier.padding(
-          horizontal = 12.dp,
-          vertical = 8.dp
-         ),
-         color = if (online) VexaTeal else secondaryText,
-         fontSize = 10.sp,
-         fontWeight = FontWeight.Bold
-        )
-       }
-
-       TextButton(
-        onClick = {
-         DriverApiClient.clearAccessToken()
-         authorized = false
-         online = false
-         orders = emptyList()
-         errorMessage = ""
-         infoMessage = "Вы вышли из профиля"
-        }
-       ) {
-        Text("Выйти")
-       }
-      }
-     }
-
-     item {
-      Row(
-       modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 4.dp),
-       verticalAlignment = Alignment.CenterVertically
-      ) {
-       Column {
-        Text(
-         text = "VEXA",
-         color = VexaTeal,
-         fontSize = 27.sp,
-         fontWeight = FontWeight.ExtraBold,
-         letterSpacing = 2.sp
-        )
-        Text(
-         text = "ВОДИТЕЛЬ",
-         color = secondaryText,
-         fontSize = 10.sp,
-         fontWeight = FontWeight.Bold,
-         letterSpacing = 3.sp
-        )
-       }
-
-       Spacer(Modifier.weight(1f))
-
-       Surface(
-        color = if (online) {
-         VexaTeal.copy(alpha = 0.16f)
-        } else {
-         Color.Gray.copy(alpha = 0.14f)
-        },
-        shape = RoundedCornerShape(50)
-       ) {
-        Text(
-         text = if (online) "● НА ЛИНИИ" else "● НЕ НА ЛИНИИ",
-         modifier = Modifier.padding(
-          horizontal = 12.dp,
-          vertical = 8.dp
-         ),
-         color = if (online) VexaTeal else secondaryText,
-         fontSize = 10.sp,
-         fontWeight = FontWeight.Bold
-        )
-       }
-      }
-     }
-
-     item {
-      VexaCard(dark = dark) {
-       Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-       ) {
-        Column(
-         modifier = Modifier.weight(1f),
-         verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-         Text(
-          text = driverName,
-          color = foregroundColor,
-          fontSize = 21.sp,
-          fontWeight = FontWeight.Bold
-         )
-
-         if (phone.isNotBlank()) {
-          Text(
-           text = phone,
-           color = secondaryText,
-           fontSize = 13.sp
-          )
-         }
-
-         Text(
-          text = "Город: $cityName",
-          color = secondaryText,
-          fontSize = 12.sp
-         )
-
-         if (branchName.isNotBlank()) {
-          Text(
-           text = "Филиал: $branchName",
-           color = secondaryText,
-           fontSize = 12.sp
-          )
-         }
-        }
-
-        if (rating.isNotBlank()) {
-         Surface(
-          color = VexaTeal.copy(alpha = 0.14f),
-          shape = RoundedCornerShape(16.dp)
-         ) {
-          Column(
-           modifier = Modifier.padding(
-            horizontal = 14.dp,
-            vertical = 10.dp
-           ),
-           horizontalAlignment = Alignment.CenterHorizontally
-          ) {
-           Text(
-            text = "★",
-            color = VexaTeal,
-            fontSize = 19.sp
-           )
-           Text(
-            text = rating,
-            color = foregroundColor,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp
-           )
-           Text(
-            text = "РЕЙТИНГ",
-            color = secondaryText,
-            fontSize = 8.sp
-           )
-          }
-         }
-        }
-       }
-
-       HorizontalDivider(
-        color = if (dark) Color.White.copy(alpha = 0.08f)
-        else Color.Black.copy(alpha = 0.06f)
+        singleLine = true
        )
 
-       Text(
-        text = vehicleDescription,
-        color = foregroundColor,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Medium
-       )
-      }
-     }
+       if (pickupSearching) {
+        Text(
+         "Ищем адрес...",
+         color = Color.Gray,
+         fontSize = 11.sp
+        )
+       }
 
-     item {
-      VexaCard(dark = dark) {
-       Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-       ) {
+       pickupError?.let {
         Text(
-         text = "ТЕКУЩИЙ БАЛАНС",
-         color = secondaryText,
-         fontSize = 11.sp,
-         fontWeight = FontWeight.Bold,
-         letterSpacing = 1.sp
-        )
-        Text(
-         text = walletBalanceKopecks?.let { "${formatWalletRubles(it)} ₽" } ?: "—",
-         color = if (dark) VexaTeal else Color(0xFF087F75),
-         fontSize = 32.sp,
-         fontWeight = FontWeight.ExtraBold
-        )
-        Text(
-         text = walletAvailableKopecks?.let {
-          "Доступно к выводу: ${formatWalletRubles(it)} ₽"
-         } ?: "Доступно к выводу: —",
-         color = secondaryText,
-         fontSize = 12.sp
+         it,
+         color = CancelRed,
+         fontSize = 11.sp
         )
        }
       }
-     }
 
-     item {
-      VexaCard(dark = dark) {
-       Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-       ) {
-        Column(
-         modifier = Modifier.weight(1f),
-         verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-         Text(
-          text = "Финансы",
-          color = foregroundColor,
-          fontSize = 17.sp,
-          fontWeight = FontWeight.Bold
-         )
-         Text(
-          text = "Доходы, комиссия сервиса и задолженность",
-          color = secondaryText,
-          fontSize = 11.sp
-         )
-        }
-
-        Button(
-         onClick = {
-          context.startActivity(
-           Intent(context, DriverFinanceActivity::class.java)
-          )
+      DropdownMenu(
+       expanded = pickupSuggestions.isNotEmpty(),
+       onDismissRequest = {
+        pickupSuggestions = emptyList()
+       },
+       modifier = Modifier.fillMaxWidth(0.92f)
+      ) {
+       pickupSuggestions.forEach { address ->
+        DropdownMenuItem(
+         text = {
+          Text(address.name)
          },
-         shape = RoundedCornerShape(14.dp),
-         colors = ButtonDefaults.buttonColors(
-          containerColor = VexaTeal,
-          contentColor = VexaInk
-         )
-        ) {
-         Text("Открыть")
-        }
-       }
-      }
-     }
-
-     item {
-      VexaCard(dark = dark) {
-       Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-       ) {
-        Column(
-         modifier = Modifier.weight(1f),
-         verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-         Text(
-          text = if (online) "Вы на линии" else "Вы не на линии",
-          color = foregroundColor,
-          fontSize = 18.sp,
-          fontWeight = FontWeight.Bold
-         )
-
-         Text(
-          text = if (online) {
-           "Вы доступны для получения заказов"
-          } else {
-           "Включите режим, чтобы получать заказы"
-          },
-          color = secondaryText,
-          fontSize = 11.sp
-         )
-        }
-
-        Switch(
-         checked = online,
-         onCheckedChange = { changeOnlineStatus(it) },
-         enabled = !loading,
-         colors = SwitchDefaults.colors(
-          checkedThumbColor = Color.White,
-          checkedTrackColor = VexaTeal,
-          uncheckedThumbColor = Color.White,
-          uncheckedTrackColor = Color.Gray
-         )
+         onClick = {
+          pickup = address.name
+          selectedPickup = address
+          pickupSuggestions = emptyList()
+          pickupError = null
+         }
         )
        }
       }
      }
 
-     item {
-      VexaCard(
-       dark = dark,
-       modifier = Modifier
-      ) {
-       SectionTitle(
-        title = "Карта",
-        subtitle = "Ваше местоположение · Оболенск",
-        color = foregroundColor
+     Box {
+      Column {
+       OutlinedTextField(
+        value = destination,
+        onValueChange = {
+         destination = it
+         selectedDestination = null
+         destinationError = null
+         orderError = null
+        },
+        label = {
+         Text("Куда")
+        },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true
        )
 
-       ClipMapContainer {
-        DriverMap(
-         modifier = Modifier
-          .fillMaxWidth()
-          .height(300.dp)
-        )
-       }
-      }
-     }
-
-     if (offerPollStatusMessage.isNotBlank() && online) {
-      item {
-       Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.errorContainer,
-        shape = RoundedCornerShape(14.dp)
-       ) {
+       if (destinationSearching) {
         Text(
-         text = offerPollStatusMessage,
-         modifier = Modifier.padding(12.dp),
-         color = MaterialTheme.colorScheme.onErrorContainer,
-         fontSize = 12.sp
-        )
-       }
-      }
-     }
-
-     if (currentOffer != null && online) {
-      item {
-       val offer = currentOffer!!
-       val order = offer.optJSONObject("order") ?: JSONObject()
-       val pickup = order.optJSONObject("pickup")
-        ?.optString("address", "Не указан")
-        ?: "Не указан"
-       val destination = order.optJSONObject("destination")
-        ?.optString("address", "Не указан")
-        ?: "Не указан"
-       val orderNumber = order.optString(
-        "public_number",
-        order.optString("id", "—")
-       )
-       val price = order.optString("price_rub", "")
-       val distanceMeters = offer.optInt("distance_to_pickup_meters", -1)
-       val distanceText = when {
-        distanceMeters < 0 -> ""
-        distanceMeters >= 1000 -> String.format(
-         Locale("ru", "RU"),
-         "%.1f км",
-         distanceMeters / 1000.0
-        )
-        else -> "$distanceMeters м"
-       }
-
-       VexaCard(dark = dark) {
-        Row(
-         modifier = Modifier.fillMaxWidth(),
-         verticalAlignment = Alignment.CenterVertically
-        ) {
-         Column(modifier = Modifier.weight(1f)) {
-          Text(
-           text = "НОВОЕ ПРЕДЛОЖЕНИЕ",
-           color = VexaTeal,
-           fontSize = 12.sp,
-           fontWeight = FontWeight.ExtraBold,
-           letterSpacing = 1.sp
-          )
-          Text(
-           text = "Заказ № $orderNumber",
-           color = foregroundColor,
-           fontSize = 18.sp,
-           fontWeight = FontWeight.Bold
-          )
-         }
-         Surface(
-          color = if (offerSecondsLeft <= 5) {
-           MaterialTheme.colorScheme.errorContainer
-          } else {
-           VexaTeal.copy(alpha = 0.16f)
-          },
-          shape = RoundedCornerShape(14.dp)
-         ) {
-          Text(
-           text = "$offerSecondsLeft сек.",
-           modifier = Modifier.padding(
-            horizontal = 12.dp,
-            vertical = 9.dp
-           ),
-           color = if (offerSecondsLeft <= 5) {
-            MaterialTheme.colorScheme.onErrorContainer
-           } else {
-            if (dark) VexaTeal else Color(0xFF087F75)
-           },
-           fontSize = 16.sp,
-           fontWeight = FontWeight.ExtraBold
-          )
-         }
-        }
-
-        HorizontalDivider(
-         color = if (dark) Color.White.copy(alpha = 0.08f)
-         else Color.Black.copy(alpha = 0.06f)
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-         Text(
-          text = "ОТКУДА",
-          color = VexaMuted,
-          fontSize = 9.sp,
-          fontWeight = FontWeight.Bold
-         )
-         Text(
-          text = pickup,
-          color = foregroundColor,
-          fontSize = 14.sp,
-          fontWeight = FontWeight.Medium
-         )
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-         Text(
-          text = "КУДА",
-          color = VexaMuted,
-          fontSize = 9.sp,
-          fontWeight = FontWeight.Bold
-         )
-         Text(
-          text = destination,
-          color = foregroundColor,
-          fontSize = 14.sp,
-          fontWeight = FontWeight.Medium
-         )
-        }
-
-        Row(
-         modifier = Modifier.fillMaxWidth(),
-         verticalAlignment = Alignment.CenterVertically
-        ) {
-         if (price.isNotBlank() && price != "null") {
-          Text(
-           text = "Стоимость: $price ₽",
-           color = foregroundColor,
-           fontSize = 17.sp,
-           fontWeight = FontWeight.Bold
-          )
-         }
-         Spacer(Modifier.weight(1f))
-         if (distanceText.isNotBlank()) {
-          Text(
-           text = "До подачи: $distanceText",
-           color = secondaryText,
-           fontSize = 11.sp
-          )
-         }
-        }
-
-        Text(
-         text = "Ответьте до окончания таймера. Если не успеть, предложение автоматически перейдёт следующему водителю.",
-         color = secondaryText,
+         "Ищем адрес...",
+         color = Color.Gray,
          fontSize = 11.sp
         )
+       }
 
-        Row(
-         modifier = Modifier.fillMaxWidth(),
-         horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-         OutlinedButton(
-          onClick = { respondToOffer(false) },
-          enabled = !offerActionInProgress && offerSecondsLeft > 0,
-          modifier = Modifier.weight(1f).height(50.dp),
-          shape = RoundedCornerShape(14.dp)
-         ) {
-          Text("ОТКЛОНИТЬ")
-         }
+       destinationError?.let {
+        Text(
+         it,
+         color = CancelRed,
+         fontSize = 11.sp
+        )
+       }
+      }
 
-         Button(
-          onClick = { respondToOffer(true) },
-          enabled = !offerActionInProgress && offerSecondsLeft > 0,
-          modifier = Modifier.weight(1f).height(50.dp),
-          shape = RoundedCornerShape(14.dp),
-          colors = ButtonDefaults.buttonColors(
-           containerColor = VexaTeal,
-           contentColor = VexaInk
-          )
-         ) {
-          Text(
-           text = if (offerActionInProgress) "ОТПРАВКА..." else "ПРИНЯТЬ",
-           fontWeight = FontWeight.Bold
-          )
+      DropdownMenu(
+       expanded = destinationSuggestions.isNotEmpty(),
+       onDismissRequest = {
+        destinationSuggestions = emptyList()
+       },
+       modifier = Modifier.fillMaxWidth(0.92f)
+      ) {
+       destinationSuggestions.forEach { address ->
+        DropdownMenuItem(
+         text = {
+          Text(address.name)
+         },
+         onClick = {
+          destination = address.name
+          selectedDestination = address
+          destinationSuggestions = emptyList()
+          destinationError = null
          }
-        }
+        )
        }
       }
      }
 
-     item {
-      Row(
+     routeSummary?.let { summary ->
+      Text(
+       summary,
+       color = Teal,
+       style = MaterialTheme.typography.titleMedium
+      )
+     }
+
+     routeError?.let { error ->
+      Text(
+       error,
+       color = CancelRed,
+       fontSize = 11.sp
+      )
+     }
+
+     Text(
+      "Ваше имя",
+      color = Ink,
+      style = MaterialTheme.typography.titleMedium
+     )
+
+     OutlinedTextField(
+      value = customerName,
+      onValueChange = {
+       customerName = it
+       orderError = null
+      },
+      label = {
+       Text("Имя")
+      },
+      placeholder = {
+       Text("Введите ваше имя")
+      },
+      modifier = Modifier.fillMaxWidth(),
+      singleLine = true
+     )
+
+     Text(
+      if (isAnonymousOrder) {
+       "Имя не указано или включена анонимность. " +
+               "К стоимости подачи добавится 100 ₽."
+      } else {
+       "Ваше имя будет видно водителю."
+      },
+      color = if (isAnonymousOrder) CancelRed else Color.Gray,
+      fontSize = 11.sp
+     )
+
+     Text(
+      "Тариф",
+      color = Ink,
+      style = MaterialTheme.typography.titleMedium
+     )
+
+     Row(
+      modifier = Modifier.horizontalScroll(
+       rememberScrollState()
+      ),
+      horizontalArrangement = Arrangement.spacedBy(6.dp)
+     ) {
+      listOf(
+       "Economy",
+       "Comfort",
+       "Comfort+",
+       "Business",
+       "Premier",
+       "Грузовой"
+      ).forEach { item ->
+       FilterChip(
+        selected = tariff == item,
+        onClick = {
+         tariff = item
+         orderError = null
+        },
+        label = {
+         Text(item, fontSize = 11.sp)
+        },
+        colors = FilterChipDefaults.filterChipColors(
+         selectedContainerColor =
+          Teal.copy(alpha = 0.18f)
+        )
+       )
+      }
+     }
+
+     if (tariff == "Грузовой") {
+      Text(
+       "Тип грузового автомобиля",
+       color = Ink,
+       style = MaterialTheme.typography.titleSmall
+      )
+
+      Column(
+       verticalArrangement = Arrangement.spacedBy(6.dp)
+      ) {
+       listOf(
+        "Универсал",
+        "Каблук / небольшой фургон",
+        "Средний грузовой фургон",
+        "Газель"
+       ).forEach { vehicle ->
+        FilterChip(
+         selected = cargoVehicle == vehicle,
+         onClick = {
+          cargoVehicle = vehicle
+         },
+         label = {
+          Text(vehicle)
+         }
+        )
+       }
+      }
+
+      OutlinedTextField(
+       value = cargoDescription,
+       onValueChange = {
+        cargoDescription = it
+       },
+       label = {
+        Text("Описание груза")
+       },
        modifier = Modifier.fillMaxWidth(),
-       verticalAlignment = Alignment.CenterVertically
+       minLines = 2
+      )
+
+      Text(
+       "Дополнительная услуга",
+       color = Ink,
+       style = MaterialTheme.typography.titleSmall
+      )
+
+      Text("Количество грузчиков")
+
+      Row(
+       horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-       Column {
-        Text(
-         text = "Активные заказы",
-         color = foregroundColor,
-         fontSize = 20.sp,
-         fontWeight = FontWeight.Bold
+       (0..4).forEach { count ->
+        FilterChip(
+         selected = cargoLoaders == count,
+         onClick = {
+          cargoLoaders = count
+         },
+         label = {
+          Text(
+           if (count == 0) {
+            "Без грузчиков"
+           } else {
+            "$count"
+           }
+          )
+         }
         )
-        Text(
-         text = "Ваши текущие поездки",
-         color = secondaryText,
-         fontSize = 11.sp
-        )
-       }
-
-       Spacer(Modifier.weight(1f))
-
-       TextButton(
-        onClick = { refreshOrders() },
-        enabled = !loading
-       ) {
-        Text("Обновить", color = VexaTeal)
        }
       }
      }
 
-     if (orders.isEmpty()) {
-      item {
-       VexaCard(dark = dark) {
-        Box(
-         modifier = Modifier
-          .fillMaxWidth()
-          .padding(vertical = 20.dp),
-         contentAlignment = Alignment.Center
-        ) {
-         Column(
-          horizontalAlignment = Alignment.CenterHorizontally,
-          verticalArrangement = Arrangement.spacedBy(8.dp)
-         ) {
-          Text(
-           text = "—",
-           color = VexaTeal,
-           fontSize = 32.sp,
-           fontWeight = FontWeight.Bold
-          )
-          Text(
-           text = "Активных заказов пока нет",
-           color = foregroundColor,
-           fontWeight = FontWeight.SemiBold
-          )
-          Text(
-           text = "Новые назначения появятся здесь",
-           color = secondaryText,
-           fontSize = 11.sp
-          )
-         }
-        }
-       }
+     Box {
+      OutlinedButton(
+       onClick = {
+        optionsMenu = true
+       },
+       modifier = Modifier.fillMaxWidth()
+      ) {
+       Text("Дополнительно ▾")
       }
-     } else {
-      items(
-       items = orders,
-       key = { it.optString("id") }
-      ) { order ->
-       val pickup = order
-        .optJSONObject("pickup")
-        ?.optString("address", "Не указан")
-        ?: "Не указан"
 
-       val destination = order
-        .optJSONObject("destination")
-        ?.optString("address", "Не указан")
-        ?: "Не указан"
-
-       val status = order.optString("status")
-       val orderNumber = order.optString(
-        "public_number",
-        order.optString("id")
-       )
-
-       val statusText = when (status) {
-        "new" -> "Новый заказ"
-        "accepted" -> "Принят диспетчером"
-        "assigned" -> "Водитель назначен"
-        "arrived" -> "Вы на месте"
-        "in_progress" -> "Поездка выполняется"
-        "completed" -> "Поездка завершена"
-        "cancelled" -> "Заказ отменён"
-        else -> status
+      DropdownMenu(
+       expanded = optionsMenu,
+       onDismissRequest = {
+        optionsMenu = false
        }
-
-       val nextAction = when (status) {
-        "assigned" -> "Я на месте"
-        "arrived" -> "Начать поездку"
-        "in_progress" -> "Завершить поездку"
-        else -> null
-       }
-
-       val price = order.optString("price_rub", "")
-
-       VexaCard(dark = dark) {
-        Row(
-         modifier = Modifier.fillMaxWidth(),
-         verticalAlignment = Alignment.CenterVertically
-        ) {
-         Text(
-          text = "ЗАКАЗ № $orderNumber",
-          color = VexaTeal,
-          fontSize = 13.sp,
-          fontWeight = FontWeight.Bold
-         )
-
-         Spacer(Modifier.weight(1f))
-
-         Surface(
-          color = VexaTeal.copy(alpha = 0.14f),
-          shape = RoundedCornerShape(50)
-         ) {
-          Text(
-           text = statusText,
-           modifier = Modifier.padding(
-            horizontal = 10.dp,
-            vertical = 6.dp
-           ),
-           color = if (dark) VexaTeal else Color(0xFF087F75),
-           fontSize = 10.sp,
-           fontWeight = FontWeight.SemiBold
-          )
-         }
-        }
-
-        HorizontalDivider(
-         color = if (dark) Color.White.copy(alpha = 0.08f)
-         else Color.Black.copy(alpha = 0.06f)
-        )
-
-        Column(
-         verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-         Text(
-          text = "ОТКУДА",
-          color = VexaMuted,
-          fontSize = 9.sp,
-          fontWeight = FontWeight.Bold
-         )
-         Text(
-          text = pickup,
-          color = foregroundColor,
-          fontSize = 14.sp,
-          fontWeight = FontWeight.Medium
-         )
-        }
-
-        Row(
-         modifier = Modifier.padding(start = 5.dp),
-         verticalAlignment = Alignment.CenterVertically
-        ) {
-         Box(
-          modifier = Modifier
-           .width(2.dp)
-           .height(18.dp)
-           .background(VexaTeal)
-         )
-         Text(
-          text = "  ↓",
-          color = VexaTeal,
-          fontSize = 12.sp
-         )
-        }
-
-        Column(
-         verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-         Text(
-          text = "КУДА",
-          color = VexaMuted,
-          fontSize = 9.sp,
-          fontWeight = FontWeight.Bold
-         )
-         Text(
-          text = destination,
-          color = foregroundColor,
-          fontSize = 14.sp,
-          fontWeight = FontWeight.Medium
-         )
-        }
-
-        if (price.isNotBlank() && price != "null") {
+      ) {
+       DropdownMenuItem(
+        text = {
          Row(
-          modifier = Modifier.fillMaxWidth(),
           verticalAlignment = Alignment.CenterVertically
          ) {
-          Text(
-           text = "Стоимость поездки",
-           color = secondaryText,
-           fontSize = 12.sp
+          Checkbox(
+           checked = child,
+           onCheckedChange = null
           )
-          Spacer(Modifier.weight(1f))
-          Text(
-           text = "$price ₽",
-           color = foregroundColor,
-           fontSize = 18.sp,
-           fontWeight = FontWeight.Bold
-          )
+          Text("Детское кресло +100 ₽")
          }
+        },
+        onClick = {
+         child = !child
         }
+       )
 
-        if (nextAction != null) {
-         Button(
-          onClick = { advanceOrder(order) },
-          enabled = !loading,
-          modifier = Modifier
-           .fillMaxWidth()
-           .height(50.dp),
-          shape = RoundedCornerShape(14.dp),
-          colors = ButtonDefaults.buttonColors(
-           containerColor = VexaTeal,
-           contentColor = VexaInk
-          )
+       DropdownMenuItem(
+        text = {
+         Row(
+          verticalAlignment = Alignment.CenterVertically
          ) {
-          Text(
-           text = nextAction,
-           fontWeight = FontWeight.Bold
+          Checkbox(
+           checked = animal,
+           onCheckedChange = null
           )
+          Text("Перевозка животного +100 ₽")
          }
+        },
+        onClick = {
+         animal = !animal
         }
-       }
-      }
-     }
-     item {
-      VexaCard(dark = dark) {
-       SectionTitle(
-        title = "Внешний вид",
-        subtitle = "Настройте оформление приложения",
-        color = foregroundColor
        )
 
-       Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-       ) {
-        listOf(
-         "Дневная",
-         "Ночная",
-         "Системная"
-        ).forEach { option ->
-         FilterChip(
-          selected = theme == option,
-          onClick = { theme = option },
-          label = {
-           Text(option, fontSize = 11.sp)
-          },
-          colors = FilterChipDefaults.filterChipColors(
-           selectedContainerColor = VexaTeal.copy(alpha = 0.2f),
-           selectedLabelColor = if (dark) VexaTeal else VexaInk
+       DropdownMenuItem(
+        text = {
+         Row(
+          verticalAlignment = Alignment.CenterVertically
+         ) {
+          Checkbox(
+           checked = anonymous,
+           onCheckedChange = null
           )
-         )
-        }
-       }
-
-       HorizontalDivider(
-        color = if (dark) Color.White.copy(alpha = 0.08f)
-        else Color.Black.copy(alpha = 0.06f)
-       )
-
-       Text(
-        text = "Звуковой профиль",
-        color = foregroundColor,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 13.sp
-       )
-
-       val soundNames = listOf(
-        "classic",
-        "modern",
-        "soft",
-        "dynamic",
-        "calm",
-        "premium"
-       )
-
-       soundNames.chunked(3).forEach { rowItems ->
-        Row(
-         modifier = Modifier.fillMaxWidth(),
-         horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-         rowItems.forEach { option ->
-          FilterChip(
-           modifier = Modifier.weight(1f),
-           selected = sound == option,
-           onClick = { sound = option },
-           label = {
-            Text(
-             option,
-             fontSize = 10.sp,
-             maxLines = 1
-            )
-           },
-           colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = VexaTeal.copy(alpha = 0.2f)
-           )
-          )
+          Text("Скрыть имя (+100 ₽)")
          }
+        },
+        onClick = {
+         anonymous = !anonymous
         }
+       )
+      }
+     }
+
+     Text(
+      "Опции: " +
+              listOfNotNull(
+               if (child) "Детское кресло" else null,
+               if (animal) "Животное" else null,
+               if (isAnonymousOrder) "Анонимность (+100 ₽)" else null
+              ).ifEmpty {
+               listOf("Не выбраны")
+              }.joinToString(", "),
+      color = Color.Gray,
+      fontSize = 12.sp
+     )
+
+     Box {
+      OutlinedButton(
+       onClick = {
+        paymentMenu = true
+       },
+       modifier = Modifier.fillMaxWidth()
+      ) {
+       Text("Оплата: $payment  ▾")
+      }
+
+      DropdownMenu(
+       expanded = paymentMenu,
+       onDismissRequest = {
+        paymentMenu = false
        }
-
-       Text(
-        text = "Выбор звукового профиля пока сохраняется только на экране приложения.",
-        color = secondaryText,
-        fontSize = 10.sp
-       )
-      }
-     }
-
-     if (loading) {
-      item {
-       LinearProgressIndicator(
-        modifier = Modifier
-         .fillMaxWidth()
-         .height(3.dp),
-        color = VexaTeal,
-        trackColor = VexaTeal.copy(alpha = 0.15f)
-       )
-      }
-     }
-
-     if (errorMessage.isNotBlank()) {
-      item {
-       Surface(
-        color = MaterialTheme.colorScheme.errorContainer,
-        shape = RoundedCornerShape(12.dp)
-       ) {
-        Text(
-         text = errorMessage,
-         modifier = Modifier.padding(12.dp),
-         color = MaterialTheme.colorScheme.onErrorContainer,
-         fontSize = 12.sp
+      ) {
+       listOf(
+        "Наличные",
+        "Перевод водителю",
+        "Банковская карта",
+        "СБП"
+       ).forEach { method ->
+        DropdownMenuItem(
+         text = {
+          Text(method)
+         },
+         onClick = {
+          payment = method
+          paymentMenu = false
+         }
         )
        }
       }
      }
 
-     if (infoMessage.isNotBlank()) {
-      item {
+     // Здесь отображается карточка предварительного расчёта.
+     // Пассажиру показываем только итоговую стоимость поездки.
+     if (
+      pricePreview != null &&
+      pricePreviewSignature == currentPricePreviewSignature
+     ) {
+      val preview = pricePreview!!
+
+      val totalPrice = preview.optString(
+       "price_rub",
+       ""
+      )
+
+      val minutes = priceQuoteSecondsRemaining / 60
+      val seconds = priceQuoteSecondsRemaining % 60
+
+      Surface(
+       modifier = Modifier.fillMaxWidth(),
+       shape = RoundedCornerShape(16.dp),
+       color = if (priceQuoteExpired) {
+        CancelRed.copy(alpha = 0.08f)
+       } else {
+        Teal.copy(alpha = 0.10f)
+       }
+      ) {
+       Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+       ) {
+        Text(
+         if (priceQuoteExpired) {
+          "Расчёт стоимости устарел"
+         } else {
+          "Стоимость поездки"
+         },
+         color = if (priceQuoteExpired) CancelRed else Ink,
+         style = MaterialTheme.typography.titleMedium
+        )
+
+        Text(
+         "$totalPrice ₽",
+         color = if (priceQuoteExpired) Color.Gray else Ink,
+         fontSize = 30.sp,
+         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+        )
+
+        if (priceQuoteExpired) {
+         Text(
+          "Срок действия расчёта истёк. " +
+                  "Для заказа необходимо рассчитать стоимость заново.",
+          color = CancelRed,
+          fontSize = 12.sp
+         )
+        } else {
+         Text(
+          "Расчёт действителен ещё: %02d:%02d".format(
+           minutes,
+           seconds
+          ),
+          color = if (priceQuoteSecondsRemaining <= 20) {
+           CancelRed
+          } else {
+           Color.DarkGray
+          },
+          fontSize = 12.sp
+         )
+
+         Text(
+          "После подтверждения заказа стоимость фиксируется.",
+          color = Color.DarkGray,
+          fontSize = 11.sp
+         )
+        }
+       }
+      }
+     }
+
+     orderError?.let { error ->
+      Text(
+       text = error,
+       color = CancelRed,
+       fontSize = 12.sp
+      )
+     }
+
+     orderPublicNumber?.let { number ->
+      Text(
+       text = "Номер заказа: $number",
+       color = Teal,
+       style = MaterialTheme.typography.titleMedium
+      )
+
+      PassengerOrderStatusPanel(
+       orderIdentifier = number
+      )
+     }
+
+     Button(
+      onClick = {
+       if (orderCreated || orderSubmitting) {
+        return@Button
+       }
+
+       if (ApiClient.getAccessToken().isNullOrBlank()) {
+        showPassengerAuthDialog = true
+        return@Button
+       }
+
+       val pickupAddress = selectedPickup
+       val destinationAddress = selectedDestination
+
+       if (pickupAddress == null) {
+        orderError = "Выберите адрес подачи из подсказок."
+        return@Button
+       }
+
+       if (destinationAddress == null) {
+        orderError = "Выберите адрес назначения из подсказок."
+        return@Button
+       }
+
+       if (routeGeometry == null) {
+        orderError = "Дождитесь построения маршрута."
+        return@Button
+       }
+
+       val requestSignature =
+        currentPricePreviewSignature
+
+       val hasCurrentPreview =
+        pricePreview != null &&
+         pricePreviewSignature == requestSignature &&
+         !priceQuoteExpired
+
+       orderSubmitting = true
+       orderError = null
+
+       coroutineScope.launch {
+        try {
+         if (!hasCurrentPreview) {
+          val preview =
+           PassengerOrderRepository.previewOrderPrice(
+            tariffLabel = tariff,
+            customerName = customerName.trim(),
+            anonymous = anonymous,
+            pickupAddress = pickupAddress.name,
+            destinationAddress = destinationAddress.name,
+            pickupLatitude = pickupAddress.latitude,
+            pickupLongitude = pickupAddress.longitude,
+            destinationLatitude = destinationAddress.latitude,
+            destinationLongitude = destinationAddress.longitude,
+            paymentLabel = payment,
+            childSeat = child,
+            animalTransport = animal,
+            cargoVehicle = cargoVehicle,
+            cargoDescription = cargoDescription,
+            cargoLoaders = cargoLoaders
+           )
+
+          pricePreview = preview
+          pricePreviewSignature = requestSignature
+
+         } else {
+          val priceQuoteToken =
+           pricePreview?.optString("price_quote_token").orEmpty()
+
+          if (priceQuoteToken.isBlank()) {
+           throw IllegalStateException(
+            "Сервер не вернул токен расчёта стоимости. " +
+                    "Рассчитайте стоимость заново."
+           )
+          }
+
+          // Один токен ценового предложения всегда даёт один
+          // и тот же ключ. Повтор после сетевой ошибки не создаст
+          // второй заказ, если сервер уже обработал первый запрос.
+          val idempotencyKey = UUID.nameUUIDFromBytes(
+           priceQuoteToken.toByteArray(Charsets.UTF_8)
+          ).toString()
+
+          val response =
+           PassengerOrderRepository.createOrder(
+            tariffLabel = tariff,
+            customerName = customerName.trim(),
+            anonymous = anonymous,
+            pickupAddress = pickupAddress.name,
+            destinationAddress = destinationAddress.name,
+            pickupLatitude = pickupAddress.latitude,
+            pickupLongitude = pickupAddress.longitude,
+            destinationLatitude = destinationAddress.latitude,
+            destinationLongitude = destinationAddress.longitude,
+            paymentLabel = payment,
+            childSeat = child,
+            animalTransport = animal,
+            cargoVehicle = cargoVehicle,
+            cargoDescription = cargoDescription,
+            cargoLoaders = cargoLoaders,
+            priceQuoteToken = priceQuoteToken,
+            idempotencyKey = idempotencyKey
+           )
+
+          val publicNumber =
+           response.optString("public_number")
+
+          orderPublicNumber =
+           publicNumber.ifBlank {
+            response.optString("id")
+           }
+
+          orderCreated = true
+         }
+        } catch (error: Exception) {
+         val errorMessage = error.message
+          ?: "Не удалось выполнить запрос. Попробуйте ещё раз."
+
+         val requiresPriceRecalculation =
+          errorMessage.contains(
+           "Ошибка сервера: 409"
+          ) && (
+           errorMessage.contains(
+            "ценовое предложение",
+            ignoreCase = true
+           ) ||
+           errorMessage.contains(
+            "Рассчитайте стоимость повторно",
+            ignoreCase = true
+           ) ||
+           errorMessage.contains(
+            "Параметры заказа изменились",
+            ignoreCase = true
+           )
+          )
+
+         if (requiresPriceRecalculation) {
+          pricePreview = null
+          pricePreviewSignature = null
+
+          orderError =
+           "Срок действия расчёта истёк или параметры цены изменились. " +
+                   "Проверьте стоимость и нажмите «Рассчитать стоимость» ещё раз."
+         } else {
+          orderError = errorMessage
+         }
+        } finally {
+         orderSubmitting = false
+        }
+       }
+      },
+      enabled = !orderSubmitting && !orderCreated,
+      modifier = Modifier
+       .fillMaxWidth()
+       .height(54.dp),
+      colors = ButtonDefaults.buttonColors(
+       containerColor = if (orderCreated) {
+        Color.Gray
+       } else {
+        Teal
+       }
+      ),
+      shape = RoundedCornerShape(14.dp)
+     ) {
+      if (orderSubmitting) {
+       CircularProgressIndicator(
+        modifier = Modifier.size(22.dp),
+        color = Color.White,
+        strokeWidth = 2.dp
+       )
+      } else {
        Text(
-        text = infoMessage,
-        color = VexaTeal,
-        fontSize = 11.sp
+        text = when {
+         orderCreated -> "Заказ создан"
+         hasCurrentPricePreview -> "Подтвердить и заказать"
+         else -> "Рассчитать стоимость"
+        },
+        color = Color.White,
+        fontSize = 16.sp
        )
       }
      }
 
-     item {
-      Text(
-       text = "VEXA Driver · Оболенск",
-       modifier = Modifier
-        .fillMaxWidth()
-        .padding(top = 8.dp),
-       color = secondaryText,
-       fontSize = 10.sp
-      )
-     }
+     Text(
+      "VEXA такси.",
+      color = Color.Gray,
+      fontSize = 10.sp
+     )
     }
    }
-   if (selectedStatusDetails != null) {
-    val details = selectedStatusDetails!!
-    AlertDialog(
-     onDismissRequest = { selectedStatusDetails = null },
-     title = {
-      Text(
-       text = details.first,
-       fontWeight = FontWeight.Bold
-      )
-     },
-     text = {
-      Text(details.second)
-     },
-     confirmButton = {
-      TextButton(
-       onClick = { selectedStatusDetails = null }
-      ) {
-       Text("Понятно")
-      }
-     }
-    )
-   }
   }
- }
-}
 
-@Composable
-private fun ClipMapContainer(
- content: @Composable () -> Unit
-) {
- Surface(
-  shape = RoundedCornerShape(16.dp),
-  color = Color.Transparent
- ) {
-  content()
+  if (showPassengerAuthDialog) {
+   PassengerAuthDialog(
+    onAuthenticated = {
+     showPassengerAuthDialog = false
+    },
+    onDismiss = {
+     showPassengerAuthDialog = false
+    }
+   )
+  }
  }
 }
