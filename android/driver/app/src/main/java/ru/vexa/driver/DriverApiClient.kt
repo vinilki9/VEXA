@@ -197,6 +197,68 @@ object DriverApiClient {
     }
 
     /**
+     * Получить предложения новых заказов.
+     *
+     * GET /api/v1/driver/orders/offers
+     *
+     * Ответ сервера:
+     * offers_count — количество предложений;
+     * offers — массив предложений.
+     *
+     * Каждый элемент offers содержит:
+     * offer_id — идентификатор предложения;
+     * attempt_number — номер попытки;
+     * response_timeout_seconds — время на ответ;
+     * offered_at — время создания предложения;
+     * expires_at — время окончания предложения;
+     * distance_to_pickup_meters — расстояние до подачи;
+     * order — информация о заказе.
+     */
+    fun getOrderOffers(): JSONObject {
+        val response = request(
+            path = "/api/v1/driver/orders/offers"
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
+     * Принять предложение заказа.
+     *
+     * POST /api/v1/driver/orders/offers/{offer_id}/accept
+     */
+    fun acceptOrderOffer(offerId: String): JSONObject {
+        require(offerId.isNotBlank()) {
+            "Не указан идентификатор предложения"
+        }
+
+        val response = request(
+            path = "/api/v1/driver/orders/offers/$offerId/accept",
+            method = "POST"
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
+     * Отклонить предложение заказа.
+     *
+     * POST /api/v1/driver/orders/offers/{offer_id}/reject
+     */
+    fun rejectOrderOffer(offerId: String): JSONObject {
+        require(offerId.isNotBlank()) {
+            "Не указан идентификатор предложения"
+        }
+
+        val response = request(
+            path = "/api/v1/driver/orders/offers/$offerId/reject",
+            method = "POST"
+        )
+
+        return JSONObject(response)
+    }
+
+    /**
      * Получить карточку заказа из истории кошелька.
      *
      * GET /api/v1/driver/orders/{order_id}
