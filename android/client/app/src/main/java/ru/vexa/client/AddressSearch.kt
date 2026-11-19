@@ -1,7 +1,6 @@
 
 package ru.vexa.client
 
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import ru.dgis.sdk.directory.SearchManager
@@ -21,7 +20,7 @@ object AddressSearch {
     @Volatile
     private var searchManager: SearchManager? = null
 
-    private fun getSearchManager(context: Context): SearchManager {
+    private fun getSearchManager(): SearchManager {
         searchManager?.let {
             return it
         }
@@ -31,8 +30,7 @@ object AddressSearch {
                 return it
             }
 
-            val sdkContext =
-                (context.applicationContext as VexaApplication).sdkContext
+            val sdkContext = VexaApplication.instance.sdkContext
 
             return SearchManager.createSmartManager(sdkContext).also {
                 searchManager = it
@@ -41,7 +39,6 @@ object AddressSearch {
     }
 
     fun search(
-        context: Context,
         query: String,
         onResult: (List<AddressResult>) -> Unit,
         onError: (String) -> Unit
@@ -56,7 +53,7 @@ object AddressSearch {
         }
 
         try {
-            val manager = getSearchManager(context)
+            val manager = getSearchManager()
 
             val request = SuggestQueryBuilder(normalizedQuery)
                 .setLimit(10)
