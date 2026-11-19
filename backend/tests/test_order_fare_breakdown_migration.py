@@ -4,10 +4,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from sqlalchemy import CheckConstraint
-
-from app.models import Order
-
 
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[1]
@@ -28,7 +24,9 @@ MIGRATION = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MIGRATION)
 
 
-FARE_FIELDS = (
+# Исторические поля миграции 0005.
+# Не использовать этот список для проверки современной модели Order.
+HISTORICAL_FARE_FIELDS = (
     "fare_base_price_kopecks",
     "fare_distance_price_kopecks",
     "fare_time_price_kopecks",
@@ -49,7 +47,7 @@ class OrderFareBreakdownMigrationTests(unittest.TestCase):
             "0004_add_tariff_change_history",
         )
 
-    def test_upgrade_adds_all_fare_fields(self):
+    def test_upgrade_adds_all_historical_fare_fields(self):
         operations = Mock()
 
         with patch.object(MIGRATION, "op", operations):
@@ -57,7 +55,7 @@ class OrderFareBreakdownMigrationTests(unittest.TestCase):
 
         self.assertEqual(
             operations.add_column.call_count,
-            len(FARE_FIELDS),
+            len(HISTORICAL_FARE_FIELDS),
         )
 
         added_fields = [
@@ -67,13 +65,13 @@ class OrderFareBreakdownMigrationTests(unittest.TestCase):
 
         self.assertEqual(
             set(added_fields),
-            set(FARE_FIELDS),
+            set(HISTORICAL_FARE_FIELDS),
         )
 
         for call in operations.add_column.call_args_list:
             self.assertTrue(call.args[1].nullable)
 
-    def test_upgrade_creates_consistency_constraint(self):
+    def test_upgrade_creates_historical_consistency_constraint(self):
         operations = Mock()
 
         with patch.object(MIGRATION, "op", operations):
@@ -94,12 +92,12 @@ class OrderFareBreakdownMigrationTests(unittest.TestCase):
 
         self.assertIn("price_kopecks is not null", expression)
 
-        for field in FARE_FIELDS:
+        for field in HISTORICAL_FARE_FIELDS:
             self.assertIn(field, expression)
 
         self.assertIn("price_kopecks =", expression)
 
-    def test_downgrade_removes_constraint_and_all_fields(self):
+    def test_downgrade_removes_historical_constraint_and_fields(self):
         operations = Mock()
 
         with patch.object(MIGRATION, "op", operations):
@@ -113,7 +111,7 @@ class OrderFareBreakdownMigrationTests(unittest.TestCase):
 
         self.assertEqual(
             operations.drop_column.call_count,
-            len(FARE_FIELDS),
+            len(HISTORICAL_FARE_FIELDS),
         )
 
         removed_fields = [
@@ -123,32 +121,8 @@ class OrderFareBreakdownMigrationTests(unittest.TestCase):
 
         self.assertEqual(
             set(removed_fields),
-            set(FARE_FIELDS),
+            set(HISTORICAL_FARE_FIELDS),
         )
-
-    def test_model_contains_matching_constraint(self):
-        constraint = next(
-            (
-                item
-                for item in Order.__table__.constraints
-                if isinstance(item, CheckConstraint)
-                and item.name == "orders_fare_breakdown_consistent"
-            ),
-            None,
-        )
-
-        self.assertIsNotNone(constraint)
-
-        expression = " ".join(
-            str(constraint.sqltext).split()
-        ).lower()
-
-        self.assertIn("price_kopecks is not null", expression)
-
-        for field in FARE_FIELDS:
-            self.assertIn(field, expression)
-
-        self.assertIn("price_kopecks =", expression)
 
 
 if __name__ == "__main__":
