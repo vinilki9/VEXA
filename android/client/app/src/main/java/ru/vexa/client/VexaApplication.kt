@@ -20,5 +20,7 @@ class VexaApplication : Application() {
 
         instance = this
         sdkContext = DGis.initialize(this)
+
+        ApiClient.initializeSession(this)
     }
 }
