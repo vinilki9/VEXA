@@ -15,7 +15,6 @@ class CalculateFareTests(unittest.TestCase):
         per_minute=0,
         distance="0",
         duration="0",
-        anonymous=False,
         minimum=None,
         maximum=None,
     ):
@@ -25,7 +24,6 @@ class CalculateFareTests(unittest.TestCase):
             price_per_minute_kopecks=per_minute,
             distance_km=Decimal(distance),
             duration_minutes=Decimal(duration),
-            anonymous=anonymous,
             minimum_fare_kopecks=minimum,
             maximum_fare_kopecks=maximum,
         )
@@ -46,15 +44,6 @@ class CalculateFareTests(unittest.TestCase):
         self.assertEqual(result.distance_price_kopecks, 6000)
         self.assertEqual(result.time_price_kopecks, 1000)
         self.assertEqual(result.total_price_kopecks, 12000)
-
-    def test_anonymous_surcharge(self):
-        result = self.calculate(anonymous=True)
-
-        self.assertEqual(
-            result.anonymous_surcharge_kopecks,
-            10000,
-        )
-        self.assertEqual(result.total_price_kopecks, 15000)
 
     def test_minimum_fare_is_applied(self):
         result = self.calculate(
@@ -79,28 +68,6 @@ class CalculateFareTests(unittest.TestCase):
             -50000,
         )
         self.assertEqual(result.total_price_kopecks, 100000)
-
-    def test_anonymous_surcharge_is_added_after_maximum(self):
-        result = self.calculate(
-            base=150000,
-            maximum=100000,
-            anonymous=True,
-        )
-
-        self.assertEqual(
-            result.anonymous_surcharge_kopecks,
-            10000,
-        )
-        self.assertEqual(result.total_price_kopecks, 110000)
-
-    def test_anonymous_surcharge_is_added_after_minimum(self):
-        result = self.calculate(
-            base=10000,
-            minimum=20000,
-            anonymous=True,
-        )
-
-        self.assertEqual(result.total_price_kopecks, 30000)
 
     def test_fare_inside_limits_is_not_changed(self):
         result = self.calculate(

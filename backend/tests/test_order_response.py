@@ -22,7 +22,6 @@ class OrderResponseSerializationTests(unittest.TestCase):
             "vehicle_id": None,
             "customer_name": "Иван",
             "customer_phone": "+79990000000",
-            "anonymous": False,
             "pickup_address": "Оболенск, улица Ленина, 1",
             "destination_address": "Оболенск, улица Центральная, 5",
             "pickup_latitude": 54.9,
@@ -59,6 +58,7 @@ class OrderResponseSerializationTests(unittest.TestCase):
         self.assertEqual(result["routing_provider"], "osrm")
         self.assertEqual(result["public_number"], "VEXA-OB-000125")
         self.assertEqual(result["price_kopecks"], 21000)
+        self.assertEqual(result["customer_name"], "Иван")
 
     def test_missing_route_metadata_is_serialized_as_null(self):
         order = self.make_order(

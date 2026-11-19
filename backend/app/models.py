@@ -448,6 +448,7 @@ class DriverLocation(Base):
     )
 
     updated_at: Mapped[datetime] = mapped_column(
+
         DateTime(timezone=True),
         nullable=False,
     )
@@ -586,7 +587,6 @@ class CityOrderCounter(Base):
 
 class Order(Base):
     __tablename__ = "orders"
-
     __table_args__ = (
         UniqueConstraint(
             "city_id",
@@ -616,7 +616,6 @@ class Order(Base):
                 AND fare_distance_price_kopecks IS NULL
                 AND fare_time_price_kopecks IS NULL
                 AND fare_limit_adjustment_kopecks IS NULL
-                AND anonymous_surcharge_kopecks IS NULL
                 AND child_seat_surcharge_kopecks IS NULL
                 AND animal_transport_surcharge_kopecks IS NULL
                 AND cargo_vehicle_surcharge_kopecks IS NULL
@@ -630,7 +629,6 @@ class Order(Base):
                 AND fare_distance_price_kopecks IS NOT NULL
                 AND fare_time_price_kopecks IS NOT NULL
                 AND fare_limit_adjustment_kopecks IS NOT NULL
-                AND anonymous_surcharge_kopecks IS NOT NULL
                 AND child_seat_surcharge_kopecks IS NOT NULL
                 AND animal_transport_surcharge_kopecks IS NOT NULL
                 AND cargo_vehicle_surcharge_kopecks IS NOT NULL
@@ -640,7 +638,6 @@ class Order(Base):
                 AND fare_base_price_kopecks >= 0
                 AND fare_distance_price_kopecks >= 0
                 AND fare_time_price_kopecks >= 0
-                AND anonymous_surcharge_kopecks >= 0
                 AND child_seat_surcharge_kopecks >= 0
                 AND animal_transport_surcharge_kopecks >= 0
                 AND cargo_vehicle_surcharge_kopecks >= 0
@@ -651,7 +648,6 @@ class Order(Base):
                     + fare_distance_price_kopecks
                     + fare_time_price_kopecks
                     + fare_limit_adjustment_kopecks
-                    + anonymous_surcharge_kopecks
                     + child_seat_surcharge_kopecks
                     + animal_transport_surcharge_kopecks
                     + cargo_vehicle_surcharge_kopecks
@@ -716,19 +712,13 @@ class Order(Base):
         ForeignKey("vehicles.id"),
     )
 
-    customer_name: Mapped[str | None] = mapped_column(
+    customer_name: Mapped[str] = mapped_column(
         String(120),
-        nullable=True,
+        nullable=False,
     )
 
     customer_phone: Mapped[str] = mapped_column(
         String(40),
-        nullable=False,
-    )
-
-    anonymous: Mapped[bool] = mapped_column(
-        Boolean,
-        default=False,
         nullable=False,
     )
 
@@ -829,11 +819,6 @@ class Order(Base):
     )
 
     fare_limit_adjustment_kopecks: Mapped[int | None] = mapped_column(
-        Integer,
-        nullable=True,
-    )
-
-    anonymous_surcharge_kopecks: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
     )

@@ -1,3 +1,4 @@
+
 services:
   db:
     image: postgres:16-alpine
@@ -46,6 +47,14 @@ services:
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:${DISPATCHER_PORT:-8081}:80"
+    restart: unless-stopped
+
+  platform_admin:
+    build:
+      context: ../platform-admin
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${PLATFORM_ADMIN_PORT:-8082}:80"
     restart: unless-stopped
 
 volumes:

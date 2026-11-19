@@ -22,7 +22,6 @@ type OrderTimelineEvent = {
   description?: string | null;
   actor?: string | null;
 };
-
 type VexaOrder = {
   id: string;
   public_number: string;
@@ -1083,7 +1082,7 @@ function App() {
                       </small>
 
                       <small>
-                        Клиент: {order.customer_name || 'Анонимный заказ'}
+                        Клиент: {order.customer_name || 'Имя не указано'}
                         {order.customer_phone ? ` · ${order.customer_phone}` : ''}
                       </small>
 
@@ -1208,7 +1207,7 @@ function App() {
               <div>
                 <span style={orderDetailLabelStyle}>Клиент</span>
                 <b style={orderDetailValueStyle}>
-                  {selectedOrder.customer_name || 'Анонимный заказ'}
+                  {selectedOrder.customer_name || 'Имя не указано'}
                 </b>
                 {selectedOrder.customer_phone && (
                   <span style={orderDetailSecondaryStyle}>

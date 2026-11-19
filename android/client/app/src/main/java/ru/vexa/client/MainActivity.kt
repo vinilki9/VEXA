@@ -584,10 +584,6 @@ fun ClientScreen(
   mutableStateOf(false)
  }
 
- var anonymous by remember {
-  mutableStateOf(false)
- }
-
  var payment by remember {
   mutableStateOf("Наличные")
  }
@@ -682,11 +678,9 @@ fun ClientScreen(
   mutableStateOf(false)
  }
 
- val isAnonymousOrder = anonymous || customerName.isBlank()
  val currentPricePreviewSignature = listOf(
   tariff,
   customerName.trim(),
-  anonymous.toString(),
   selectedPickup?.name.orEmpty(),
   selectedPickup?.latitude?.toString().orEmpty(),
   selectedPickup?.longitude?.toString().orEmpty(),
@@ -951,7 +945,7 @@ fun ClientScreen(
      }
 
      Text(
-      "Ваше имя",
+      "Ваше имя *",
       color = Ink,
       style = MaterialTheme.typography.titleMedium
      )
@@ -973,13 +967,8 @@ fun ClientScreen(
      )
 
      Text(
-      if (isAnonymousOrder) {
-       "Имя не указано или включена анонимность. " +
-               "К стоимости подачи добавится 100 ₽."
-      } else {
-       "Ваше имя будет видно водителю."
-      },
-      color = if (isAnonymousOrder) CancelRed else Color.Gray,
+      "Имя обязательно для оформления заказа и будет видно водителю.",
+      color = Color.Gray,
       fontSize = 11.sp
      )
 
@@ -1140,23 +1129,6 @@ fun ClientScreen(
          animal = !animal
         }
        )
-
-       DropdownMenuItem(
-        text = {
-         Row(
-          verticalAlignment = Alignment.CenterVertically
-         ) {
-          Checkbox(
-           checked = anonymous,
-           onCheckedChange = null
-          )
-          Text("Скрыть имя (+100 ₽)")
-         }
-        },
-        onClick = {
-         anonymous = !anonymous
-        }
-       )
       }
      }
 
@@ -1164,8 +1136,7 @@ fun ClientScreen(
       "Опции: " +
               listOfNotNull(
                if (child) "Детское кресло" else null,
-               if (animal) "Животное" else null,
-               if (isAnonymousOrder) "Анонимность (+100 ₽)" else null
+               if (animal) "Животное" else null
               ).ifEmpty {
                listOf("Не выбраны")
               }.joinToString(", "),
@@ -1316,6 +1287,11 @@ fun ClientScreen(
         return@Button
        }
 
+       if (customerName.isBlank()) {
+        orderError = "Укажите ваше имя."
+        return@Button
+       }
+
        val pickupAddress = selectedPickup
        val destinationAddress = selectedDestination
 
@@ -1352,7 +1328,6 @@ fun ClientScreen(
            PassengerOrderRepository.previewOrderPrice(
             tariffLabel = tariff,
             customerName = customerName.trim(),
-            anonymous = anonymous,
             pickupAddress = pickupAddress.name,
             destinationAddress = destinationAddress.name,
             pickupLatitude = pickupAddress.latitude,
@@ -1392,7 +1367,6 @@ fun ClientScreen(
            PassengerOrderRepository.createOrder(
             tariffLabel = tariff,
             customerName = customerName.trim(),
-            anonymous = anonymous,
             pickupAddress = pickupAddress.name,
             destinationAddress = destinationAddress.name,
             pickupLatitude = pickupAddress.latitude,
