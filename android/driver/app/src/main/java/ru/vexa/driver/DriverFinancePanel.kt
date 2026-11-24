@@ -38,8 +38,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import kotlinx.coroutines.launch
 
-private val FinanceTeal = Color(0xFF20C6B7)
-private val FinanceMuted = Color(0xFF64748B)
+private val FinanceTeal = VexaDesign.mutedTeal
+private val FinanceMuted = VexaDesign.lightScheme().onSurfaceVariant
 
 private fun formatFinanceMoney(kopecks: Long): String {
     val rubles = kopecks / 100
@@ -170,7 +170,7 @@ fun DriverFinancePanel(
     }
 
     val cardColor = if (dark) {
-        Color(0xFF1E293B)
+        VexaDesign.surfaceDark
     } else {
         Color.White
     }
@@ -219,7 +219,7 @@ fun DriverFinancePanel(
                     enabled = !loading,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = FinanceTeal,
-                        contentColor = Color(0xFF111827)
+                        contentColor = VexaDesign.graphite
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {

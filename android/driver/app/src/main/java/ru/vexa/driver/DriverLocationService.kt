@@ -118,7 +118,11 @@ class DriverLocationService : Service() {
                 try {
                     offersExecutor.execute {
                         try {
-                            DriverApiClient.refreshOrderOffers()
+                            val response = DriverApiClient.refreshOrderOffers()
+                            // Звук, вибрация и уведомление только для нового ID.
+                            if (serviceStarted && driverOnlineConfirmed) {
+                                DriverOfferAlerts.onPoll(this@DriverLocationService, response)
+                            }
                             setServerState(true)
 
                             Log.d(
@@ -723,6 +727,7 @@ class DriverLocationService : Service() {
     }
 
     private fun stopGpsService() {
+        DriverOfferAlerts.clearNotification(this)
         serviceStarted = false
         driverOnlineConfirmed = false
         updateHealth(gpsOk = false)
