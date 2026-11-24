@@ -7,7 +7,7 @@ import java.util.UUID
 
 object PassengerOrderRepository {
 
-    private const val CITY_CODE = "obolensk"
+    private val CITY_CODE = BuildConfig.VEXA_CITY_CODE
 
     private val activeStatuses = setOf(
         "new",
@@ -38,7 +38,8 @@ object PassengerOrderRepository {
         animalTransport: Boolean,
         cargoVehicle: String,
         cargoDescription: String,
-        cargoLoaders: Int
+        cargoLoaders: Int,
+        pickupComment: String = ""
     ): JSONObject {
         val payload = buildOrderPayload(
             tariffLabel = tariffLabel,
@@ -54,7 +55,8 @@ object PassengerOrderRepository {
             animalTransport = animalTransport,
             cargoVehicle = cargoVehicle,
             cargoDescription = cargoDescription,
-            cargoLoaders = cargoLoaders
+            cargoLoaders = cargoLoaders,
+            pickupComment = pickupComment
         )
 
         val response = ApiClient.previewOrderPrice(
@@ -88,7 +90,8 @@ object PassengerOrderRepository {
         cargoDescription: String,
         cargoLoaders: Int,
         priceQuoteToken: String,
-        idempotencyKey: String = UUID.randomUUID().toString()
+        idempotencyKey: String = UUID.randomUUID().toString(),
+        pickupComment: String = ""
     ): JSONObject {
 
         require(priceQuoteToken.isNotBlank()) {
@@ -109,7 +112,8 @@ object PassengerOrderRepository {
             animalTransport = animalTransport,
             cargoVehicle = cargoVehicle,
             cargoDescription = cargoDescription,
-            cargoLoaders = cargoLoaders
+            cargoLoaders = cargoLoaders,
+            pickupComment = pickupComment
         )
 
         payload.put("price_quote_token", priceQuoteToken)
@@ -142,7 +146,8 @@ object PassengerOrderRepository {
         animalTransport: Boolean,
         cargoVehicle: String,
         cargoDescription: String,
-        cargoLoaders: Int
+        cargoLoaders: Int,
+        pickupComment: String = ""
     ): JSONObject {
 
         val phone = ApiClient.getPassengerPhone()
@@ -177,7 +182,7 @@ object PassengerOrderRepository {
 
         if (tariffs.length() == 0) {
             throw IllegalStateException(
-                "В Оболенске пока не настроены активные тарифы."
+                "В выбранном городе пока не настроены активные тарифы."
             )
         }
 
@@ -204,6 +209,10 @@ object PassengerOrderRepository {
             )
         }
 
+        require(pickupComment.length <= 500) {
+            "Комментарий к точке подачи слишком длинный (не более 500 символов)."
+        }
+
         val cargoOrder = isCargoTariff(selectedTariff)
 
         return JSONObject().apply {
@@ -222,6 +231,7 @@ object PassengerOrderRepository {
             put("destination_longitude", destinationLongitude)
 
             put("payment_method", paymentMethod)
+            put("comment", pickupComment.trim().takeIf { it.isNotBlank() } ?: JSONObject.NULL)
 
             put("child_seat", if (cargoOrder) false else childSeat)
             put(

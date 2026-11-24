@@ -1,9 +1,18 @@
 
 package ru.vexa.client
 
-
 import android.os.Bundle
+import ru.vexa.offline.OfflineMapMode
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -33,6 +42,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -44,6 +59,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -55,53 +71,20 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import ru.dgis.sdk.Duration
-import ru.dgis.sdk.compose.map.MapComposable
-import ru.dgis.sdk.coordinates.GeoPoint
-import ru.dgis.sdk.coordinates.Latitude
-import ru.dgis.sdk.coordinates.Longitude
-import ru.dgis.sdk.geometry.ComplexGeometry
-import ru.dgis.sdk.geometry.Elevation
-import ru.dgis.sdk.geometry.GeoPointWithElevation
-import ru.dgis.sdk.geometry.PointGeometry
-import ru.dgis.sdk.map.CameraAnimationType
-import ru.dgis.sdk.map.CameraPosition
-import ru.dgis.sdk.map.DefaultMapControllerViewModel
-import ru.dgis.sdk.map.LogicalPixel
-import ru.dgis.sdk.map.MapControllerOptions
-import ru.dgis.sdk.map.MapCopyrightOptions
-import ru.dgis.sdk.map.MapObjectManager
-import ru.dgis.sdk.map.MapRenderOptions
-import ru.dgis.sdk.map.Marker
-import ru.dgis.sdk.map.MarkerOptions
-import ru.dgis.sdk.map.Padding
-import ru.dgis.sdk.map.RouteMapObject
-import ru.dgis.sdk.map.RouteMapObjectSource
-import ru.dgis.sdk.map.RouteVisualizationType
-import ru.dgis.sdk.map.Zoom
-import ru.dgis.sdk.map.awaitMap
-import ru.dgis.sdk.map.calcPosition
-import ru.dgis.sdk.map.imageFromResource
-import ru.dgis.sdk.routing.BriefRouteInfoSearchPoints
-import ru.dgis.sdk.routing.CarRouteSearchOptions
-import ru.dgis.sdk.routing.RouteIndex
-import ru.dgis.sdk.routing.RouteSearchOptions
-import ru.dgis.sdk.routing.RouteSearchPoint
-import ru.dgis.sdk.routing.RouteSearchType
-import ru.dgis.sdk.routing.TaxiRouteSearchOptions
-import ru.dgis.sdk.routing.TrafficRouter
 
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.util.UUID
 import kotlin.math.abs
 
-private val Teal = Color(0xFF1ED9C6)
+private val Teal = VexaDesign.mutedTeal
 private val Ink = Color(0xFF111827)
 private val PanelWhite = Color.White
 private val CancelRed = Color(0xFFE53935)
@@ -114,348 +97,116 @@ private fun parsePriceQuoteExpiry(value: String): Instant? {
  }.getOrNull()
 }
 
-class MainActivity : ComponentActivity() {
- private lateinit var mapViewModel: DefaultMapControllerViewModel
- private lateinit var trafficRouter: TrafficRouter
- private var mapObjectManager: MapObjectManager? = null
- private var routeMapObjectSource: RouteMapObjectSource? = null
- private val dgisMapState = mutableStateOf<ru.dgis.sdk.map.Map?>(null)
+private fun lastKnownClientLocation(context: Context): Location? {
+ val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+ val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+ if (!fine && !coarse) return null
+ val service = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+ return try {
+  val provider = when {
+   service.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+   service.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+   else -> return null
+  }
+  service.getLastKnownLocation(provider)
+ } catch (_: SecurityException) { null }
+}
 
+class MainActivity : ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
-
-  val sdkContext = (application as VexaApplication).sdkContext
-
-  mapViewModel = DefaultMapControllerViewModel(
-   sdkContext,
-   MapControllerOptions(
-    position = CameraPosition(
-     point = GeoPoint(55.751244, 37.618423),
-     zoom = Zoom(12.0f)
-    )
-   )
-  )
-
-  trafficRouter = TrafficRouter(sdkContext)
-
-  lifecycleScope.launch {
-   val map = mapViewModel.awaitMap()
-
-   mapObjectManager = MapObjectManager(map)
-   routeMapObjectSource = RouteMapObjectSource(
-    sdkContext,
-    RouteVisualizationType.NORMAL
-   ).also(map::addSource)
-
-   dgisMapState.value = map
-  }
-
   setContent {
-   ClientScreen(
-    mapViewModel = mapViewModel,
-    dgisMap = dgisMapState.value,
-    mapObjectManager = mapObjectManager,
-    routeMapObjectSource = routeMapObjectSource,
-    trafficRouter = trafficRouter
-   )
+   val context = LocalContext.current
+   var selectedTheme by remember { mutableStateOf(VexaClientPreferences.getTheme(context)) }
+   var defaultPayment by remember { mutableStateOf(VexaClientPreferences.getDefaultPayment(context)) }
+   var settingsOpen by rememberSaveable { mutableStateOf(false) }
+   var settingsRevision by remember { mutableIntStateOf(0) }
+   val useDarkTheme = when (selectedTheme) {
+    VexaThemeMode.DARK -> true
+    VexaThemeMode.LIGHT -> false
+    VexaThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+   }
+   val colors = if (useDarkTheme) VexaDesign.darkScheme() else VexaDesign.lightScheme()
+
+   MaterialTheme(colorScheme = colors) {
+    ClientScreen(
+     onOpenSettings = { settingsOpen = true },
+     defaultPayment = defaultPayment,
+     settingsRevision = settingsRevision
+    )
+    if (settingsOpen) {
+     BackHandler { settingsRevision++; settingsOpen = false }
+     // Separate full-screen dialog keeps map, form and active order state alive
+     // while the user edits settings; back or the top arrow closes this page.
+     Dialog(
+      onDismissRequest = { settingsRevision++; settingsOpen = false },
+      properties = DialogProperties(usePlatformDefaultWidth = false)
+     ) {
+      VexaClientSettingsScreen(
+       themeMode = selectedTheme,
+       onThemeModeChange = { next ->
+        VexaClientPreferences.setTheme(context, next)
+        selectedTheme = next
+       },
+       defaultPayment = defaultPayment,
+       onDefaultPaymentChange = { next ->
+        VexaClientPreferences.setDefaultPayment(context, next)
+        defaultPayment = next
+       },
+       onBack = { settingsRevision++; settingsOpen = false }
+      )
+     }
+    }
+   }
   }
- }
-
- override fun onDestroy() {
-  routeMapObjectSource?.let { source ->
-   dgisMapState.value?.removeSource(source)
-  }
-
-  routeMapObjectSource = null
-
-  if (::trafficRouter.isInitialized) {
-   trafficRouter.close()
-  }
-
-  if (::mapViewModel.isInitialized) {
-   mapViewModel.close()
-  }
-
-  super.onDestroy()
  }
 }
 
 @Composable
-fun ClientScreen(
- mapViewModel: DefaultMapControllerViewModel,
- dgisMap: ru.dgis.sdk.map.Map?,
- mapObjectManager: MapObjectManager?,
- routeMapObjectSource: RouteMapObjectSource?,
- trafficRouter: TrafficRouter
-) {
- var panelFraction by remember {
-  mutableFloatStateOf(0.45f)
+fun ClientScreen(onOpenSettings: () -> Unit, defaultPayment: String, settingsRevision: Int = 0) {
+ // All existing order state survives navigation to the settings dialog.
+ val Ink = MaterialTheme.colorScheme.onSurface
+ val PanelWhite = MaterialTheme.colorScheme.surface
+ val secondaryText = MaterialTheme.colorScheme.onSurfaceVariant
+
+ var panelFraction by remember { mutableFloatStateOf(0.45f) }
+ var pickup by remember { mutableStateOf("") }
+ var destination by remember { mutableStateOf("") }
+ var selectedPickup by remember { mutableStateOf<AddressResult?>(null) }
+ var selectedDestination by remember { mutableStateOf<AddressResult?>(null) }
+ val context = LocalContext.current
+ var gpsError by remember { mutableStateOf("") }
+ val gpsRequest = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+  if (!granted.values.any { it }) gpsError = "Разрешите доступ к геопозиции" else {
+   val current = lastKnownClientLocation(context)
+   if (current == null) gpsError = "GPS пока не определил позицию" else {
+    selectedPickup = AddressResult("Моя геопозиция", current.latitude, current.longitude)
+    pickup = "Моя геопозиция"
+    gpsError = ""
+   }
+  }
  }
+ var routeSummary by remember { mutableStateOf<String?>(null) }
+ var routeError by remember { mutableStateOf<String?>(null) }
+ var routeLine by remember { mutableStateOf<List<MapPoint>>(emptyList()) }
 
- var pickup by remember {
-  mutableStateOf("")
- }
-
- var destination by remember {
-  mutableStateOf("")
- }
-
- var selectedPickup by remember {
-  mutableStateOf<AddressResult?>(null)
- }
-
- var selectedDestination by remember {
-  mutableStateOf<AddressResult?>(null)
- }
-
- val sdkContext =
-  (LocalContext.current.applicationContext as VexaApplication).sdkContext
-
- val pickupIcon = remember {
-  imageFromResource(sdkContext, R.drawable.vexa_pickup_waving)
- }
-
- val destinationIcon = remember {
-  imageFromResource(sdkContext, R.drawable.vexa_destination_flag)
- }
-
- var routeSummary by remember {
-  mutableStateOf<String?>(null)
- }
-
- var routeError by remember {
-  mutableStateOf<String?>(null)
- }
-
- var routeRequestVersion by remember {
-  mutableStateOf(0)
- }
-
- var routeGeometry by remember {
-  mutableStateOf<ComplexGeometry?>(null)
- }
-
- LaunchedEffect(
-  selectedPickup,
-  selectedDestination,
-  mapObjectManager
- ) {
-  val source = routeMapObjectSource ?: return@LaunchedEffect
-
-  val pickupAddress = selectedPickup
-  val destinationAddress = selectedDestination
-
-  routeRequestVersion += 1
-  val requestVersion = routeRequestVersion
-
-  source.clear()
-  routeGeometry = null
-  routeSummary = "Строим маршрут..."
+ LaunchedEffect(selectedPickup, selectedDestination, OfflineMapMode.changeCounter.intValue) {
+  routeLine = emptyList()
+  routeSummary = null
   routeError = null
-
-  if (pickupAddress == null || destinationAddress == null) {
+  val start = selectedPickup ?: return@LaunchedEffect
+  val end = selectedDestination ?: return@LaunchedEffect
+  routeSummary = "Строим маршрут VEXA MAP..."
+  try {
+   val result = VexaRouting.route(context, start, end)
+   routeLine = result.line
+   routeSummary = "${if (result.offline) "Офлайн-предпросмотр (не для расчёта тарифа)" else "Маршрут"}: %.1f км, %d мин".format(
+    java.util.Locale("ru", "RU"), result.meters / 1000, (result.seconds / 60).toInt()
+   )
+  } catch (error: Exception) {
+   if (error is kotlinx.coroutines.CancellationException) throw error
    routeSummary = null
-   return@LaunchedEffect
-  }
-
-  val startPoint = RouteSearchPoint(
-   GeoPoint(
-    pickupAddress.latitude,
-    pickupAddress.longitude
-   )
-  )
-
-  val finishPoint = RouteSearchPoint(
-   GeoPoint(
-    destinationAddress.latitude,
-    destinationAddress.longitude
-   )
-  )
-
-  val routeSearchOptions = RouteSearchOptions(
-   TaxiRouteSearchOptions(
-    CarRouteSearchOptions(
-     routeSearchType = RouteSearchType.JAM
-    )
-   )
-  )
-
-  android.util.Log.d(
-   "VEXA_ROUTING",
-   "Запрос маршрута отправлен"
-  )
-
-  trafficRouter.findRoute(
-   startPoint = startPoint,
-   finishPoint = finishPoint,
-   routeSearchOptions = routeSearchOptions
-  ).onComplete(
-   resultCallback = { routes ->
-    if (requestVersion == routeRequestVersion) {
-     if (routes.isEmpty()) {
-      routeSummary = null
-      routeError = "Маршрут для выбранных адресов не найден."
-      routeGeometry = null
-
-      android.util.Log.w(
-       "VEXA_ROUTING",
-       "SDK не вернул маршруты"
-      )
-     } else {
-      routeGeometry = ComplexGeometry(
-       routes[0].route.geometry.entries.map { entry ->
-        PointGeometry(entry.value)
-       }
-      )
-
-      source.replaceAllObjects(
-       routes.mapIndexed { index, route ->
-        RouteMapObject(
-         trafficRoute = route,
-         isActive = index == 0,
-         index = RouteIndex(index.toLong())
-        )
-       }
-      )
-
-      android.util.Log.d(
-       "VEXA_ROUTING",
-       "Получено маршрутов: ${routes.size}"
-      )
-     }
-    }
-   },
-   errorCallback = { error ->
-    if (requestVersion == routeRequestVersion) {
-     routeError =
-      "Не удалось построить маршрут: ${error.message ?: "неизвестная ошибка"}"
-
-     routeGeometry = null
-
-     android.util.Log.e(
-      "VEXA_ROUTING",
-      "Ошибка построения маршрута",
-      error
-     )
-    }
-   }
-  )
-
-  trafficRouter.findBriefRouteInfos(
-   searchPoints = listOf(
-    BriefRouteInfoSearchPoints(startPoint, finishPoint)
-   ),
-   routeSearchOptions = routeSearchOptions
-  ).onComplete(
-   resultCallback = { routeInfos ->
-    val routeInfo = routeInfos.firstOrNull()
-    val carInfo = routeInfo?.extraInfo?.asCar
-
-    if (requestVersion == routeRequestVersion && carInfo != null) {
-     val kilometers =
-      carInfo.length.millimeters / 1_000_000.0
-
-     routeSummary = "Маршрут: %.1f км, %d мин".format(
-      kilometers,
-      routeInfo.duration.inMinutes
-     )
-    }
-   },
-   errorCallback = { error ->
-    if (requestVersion == routeRequestVersion) {
-     routeSummary = null
-
-     android.util.Log.w(
-      "VEXA_ROUTING",
-      "Не удалось получить сводку маршрута",
-      error
-     )
-    }
-   }
-  )
- }
-
- LaunchedEffect(
-  selectedPickup,
-  selectedDestination,
-  mapObjectManager,
-  panelFraction,
-  routeGeometry
- ) {
-  val manager = mapObjectManager ?: return@LaunchedEffect
-
-  manager.removeAll()
-
-  selectedPickup?.let { address ->
-   manager.addObject(
-    Marker(
-     MarkerOptions(
-      position = GeoPointWithElevation(
-       latitude = Latitude(value = address.latitude),
-       longitude = Longitude(value = address.longitude),
-       elevation = Elevation(value = 0.0f)
-      ),
-      icon = pickupIcon,
-      iconWidth = LogicalPixel(value = 32.0f),
-      text = "Подача"
-     )
-    )
-   )
-  }
-
-  selectedDestination?.let { address ->
-   manager.addObject(
-    Marker(
-     MarkerOptions(
-      position = GeoPointWithElevation(
-       latitude = Latitude(value = address.latitude),
-       longitude = Longitude(value = address.longitude),
-       elevation = Elevation(value = 0.0f)
-      ),
-      icon = destinationIcon,
-      iconWidth = LogicalPixel(value = 32.0f),
-      text = "Назначение"
-     )
-    )
-   )
-  }
-
-  val pickupAddress = selectedPickup
-  val destinationAddress = selectedDestination
-  val map = dgisMap
-
-  if (
-   pickupAddress != null &&
-   destinationAddress != null &&
-   map != null
-  ) {
-   val geometry = routeGeometry ?: return@LaunchedEffect
-
-   val position = calcPosition(
-    camera = map.camera,
-    geometry = geometry,
-    screenArea = Padding(
-     left = 40,
-     top = 100,
-     right = 40,
-     bottom = when {
-      panelFraction >= 0.70f -> 1400
-      panelFraction >= 0.30f -> 1000
-      else -> 400
-     }
-    )
-   )
-
-   android.util.Log.d(
-    "VEXA_CAMERA",
-    "Расчет камеры выполнен"
-   )
-
-   map.camera.move(
-    position,
-    Duration.ofMilliseconds(900),
-    CameraAnimationType.DEFAULT
-   )
+   routeError = error.message ?: "VEXA MAP: построение маршрута недоступно"
   }
  }
 
@@ -502,22 +253,20 @@ fun ClientScreen(
   pickupSearching = true
   pickupError = null
 
-  AddressSearch.search(
-   query = query,
-   onResult = { results ->
-    if (pickup.trim() == query) {
-     pickupSuggestions = results
-     pickupSearching = false
-    }
-   },
-   onError = { error ->
-    if (pickup.trim() == query) {
-     pickupError = error
-     pickupSearching = false
-     pickupSuggestions = emptyList()
-    }
+  try {
+   val results = AddressSearch.search(context, query)
+   if (pickup.trim() == query) {
+    pickupSuggestions = results
+    pickupSearching = false
    }
-  )
+  } catch (error: Exception) {
+   if (error is kotlinx.coroutines.CancellationException) throw error
+   if (pickup.trim() == query) {
+    pickupError = error.message ?: "Поиск VEXA MAP недоступен"
+    pickupSearching = false
+    pickupSuggestions = emptyList()
+   }
+  }
  }
 
  LaunchedEffect(destination) {
@@ -538,22 +287,20 @@ fun ClientScreen(
   destinationSearching = true
   destinationError = null
 
-  AddressSearch.search(
-   query = query,
-   onResult = { results ->
-    if (destination.trim() == query) {
-     destinationSuggestions = results
-     destinationSearching = false
-    }
-   },
-   onError = { error ->
-    if (destination.trim() == query) {
-     destinationError = error
-     destinationSearching = false
-     destinationSuggestions = emptyList()
-    }
+  try {
+   val results = AddressSearch.search(context, query)
+   if (destination.trim() == query) {
+    destinationSuggestions = results
+    destinationSearching = false
    }
-  )
+  } catch (error: Exception) {
+   if (error is kotlinx.coroutines.CancellationException) throw error
+   if (destination.trim() == query) {
+    destinationError = error.message ?: "Поиск VEXA MAP недоступен"
+    destinationSearching = false
+    destinationSuggestions = emptyList()
+   }
+  }
  }
 
  var tariff by remember {
@@ -585,7 +332,19 @@ fun ClientScreen(
  }
 
  var payment by remember {
-  mutableStateOf("Наличные")
+  mutableStateOf(defaultPayment)
+ }
+ LaunchedEffect(defaultPayment) { payment = defaultPayment }
+
+ var pickupComment by remember { mutableStateOf("") }
+ var home by remember(context) { mutableStateOf(VexaSavedPlaces.load(context, VexaSavedPlaces.HOME)) }
+ var work by remember(context) { mutableStateOf(VexaSavedPlaces.load(context, VexaSavedPlaces.WORK)) }
+ var savedPlaceMessage by remember { mutableStateOf("") }
+ val signedInPhone = if (ApiClient.getAccessToken().isNullOrBlank()) ""
+     else ApiClient.getPassengerPhone().orEmpty()
+ LaunchedEffect(signedInPhone, settingsRevision) {
+  home = VexaSavedPlaces.load(context, VexaSavedPlaces.HOME)
+  work = VexaSavedPlaces.load(context, VexaSavedPlaces.WORK)
  }
 
  var optionsMenu by remember {
@@ -599,6 +358,7 @@ fun ClientScreen(
  var orderCreated by remember {
   mutableStateOf(false)
  }
+ var orderTerminal by remember { mutableStateOf(false) }
 
  var orderSubmitting by remember {
   mutableStateOf(false)
@@ -677,6 +437,7 @@ fun ClientScreen(
  var showPassengerAuthDialog by remember {
   mutableStateOf(false)
  }
+ var tripHistoryOpen by remember { mutableStateOf(false) }
 
  val currentPricePreviewSignature = listOf(
   tariff,
@@ -692,7 +453,8 @@ fun ClientScreen(
   animal.toString(),
   cargoVehicle,
   cargoDescription.trim(),
-  cargoLoaders.toString()
+  cargoLoaders.toString(),
+  pickupComment.trim()
  ).joinToString("|")
  val coroutineScope = rememberCoroutineScope()
 
@@ -716,12 +478,34 @@ fun ClientScreen(
  Box(
   modifier = Modifier.fillMaxSize()
  ) {
-  MapComposable(
-   modifier = Modifier.fillMaxSize(),
-   viewModel = mapViewModel,
-   renderOptions = MapRenderOptions(),
-   copyrightOptions = MapCopyrightOptions()
+  VexaMapView(
+   pickup = selectedPickup,
+   destination = selectedDestination,
+   route = routeLine,
+   modifier = Modifier.fillMaxSize()
   )
+
+  // Settings entry point is pinned to the upper-right corner of the map.
+  Surface(
+   modifier = Modifier
+    .align(Alignment.TopEnd)
+    .statusBarsPadding()
+    .padding(top = 12.dp, end = 16.dp),
+   shape = RoundedCornerShape(16.dp),
+   color = MaterialTheme.colorScheme.surface,
+   shadowElevation = 6.dp
+  ) {
+   IconButton(
+    onClick = onOpenSettings,
+    modifier = Modifier.size(48.dp)
+   ) {
+    Icon(
+     imageVector = Icons.Default.MoreVert,
+     contentDescription = "Открыть настройки приложения",
+     tint = MaterialTheme.colorScheme.onSurface
+    )
+   }
+  }
 
   Surface(
    modifier = Modifier
@@ -808,11 +592,46 @@ fun ClientScreen(
       )
      }
 
-     Text(
-      "Куда едем?",
-      color = Ink,
-      style = MaterialTheme.typography.titleLarge
+     Row(verticalAlignment = Alignment.CenterVertically) {
+      Text(
+       "Куда едем?",
+       modifier = Modifier.weight(1f),
+       color = Ink,
+       style = MaterialTheme.typography.titleLarge
+      )
+      OutlinedButton(onClick = { tripHistoryOpen = true }) {
+       Text("Мои поездки")
+      }
+     }
+
+
+     VexaClientQuickDestinations(
+      home = home.takeUnless { ApiClient.getAccessToken().isNullOrBlank() },
+      work = work.takeUnless { ApiClient.getAccessToken().isNullOrBlank() },
+      hasSelectedDestination = selectedDestination != null,
+      canEditRoute = !orderCreated || orderTerminal,
+      onUse = { place ->
+       destination = place.name
+       selectedDestination = place
+       destinationSuggestions = emptyList()
+       pricePreview = null
+       pricePreviewSignature = null
+       savedPlaceMessage = "Адрес выбран. Стоимость будет рассчитана заново."
+      },
+      onSave = { kind ->
+       selectedDestination?.let { point ->
+        runCatching { VexaSavedPlaces.save(context, kind, point) }
+         .onSuccess {
+          home = VexaSavedPlaces.load(context, VexaSavedPlaces.HOME)
+          work = VexaSavedPlaces.load(context, VexaSavedPlaces.WORK)
+          savedPlaceMessage = "Адрес сохранён только на этом устройстве"
+         }.onFailure { savedPlaceMessage = it.message.orEmpty() }
+       }
+      }
      )
+     if (savedPlaceMessage.isNotBlank()) {
+      Text(savedPlaceMessage, color = secondaryText, fontSize = 11.sp)
+     }
 
      Box {
       Column {
@@ -831,10 +650,33 @@ fun ClientScreen(
         singleLine = true
        )
 
+       OutlinedButton(
+        onClick = {
+         val point = lastKnownClientLocation(context)
+         if (point != null) {
+          selectedPickup = AddressResult("Моя геопозиция", point.latitude, point.longitude)
+          pickup = "Моя геопозиция"
+          gpsError = ""
+         } else {
+          gpsRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+         }
+        },
+        modifier = Modifier.fillMaxWidth()
+       ) { Text("Использовать моё местоположение") }
+       if (gpsError.isNotBlank()) Text(gpsError, color = CancelRed, fontSize = 11.sp)
+       OutlinedTextField(
+        value = pickupComment,
+        onValueChange = { if (it.length <= 500) pickupComment = it },
+        label = { Text("Комментарий к подаче (подъезд, вход, ориентир)") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = false,
+        maxLines = 3
+       )
+
        if (pickupSearching) {
         Text(
          "Ищем адрес...",
-         color = Color.Gray,
+         color = secondaryText,
          fontSize = 11.sp
         )
        }
@@ -891,7 +733,7 @@ fun ClientScreen(
        if (destinationSearching) {
         Text(
          "Ищем адрес...",
-         color = Color.Gray,
+         color = secondaryText,
          fontSize = 11.sp
         )
        }
@@ -968,7 +810,7 @@ fun ClientScreen(
 
      Text(
       "Имя обязательно для оформления заказа и будет видно водителю.",
-      color = Color.Gray,
+      color = secondaryText,
       fontSize = 11.sp
      )
 
@@ -1140,7 +982,7 @@ fun ClientScreen(
               ).ifEmpty {
                listOf("Не выбраны")
               }.joinToString(", "),
-      color = Color.Gray,
+      color = secondaryText,
       fontSize = 12.sp
      )
 
@@ -1241,14 +1083,14 @@ fun ClientScreen(
           color = if (priceQuoteSecondsRemaining <= 20) {
            CancelRed
           } else {
-           Color.DarkGray
+           secondaryText
           },
           fontSize = 12.sp
          )
 
          Text(
           "После подтверждения заказа стоимость фиксируется.",
-          color = Color.DarkGray,
+          color = secondaryText,
           fontSize = 11.sp
          )
         }
@@ -1272,8 +1114,26 @@ fun ClientScreen(
       )
 
       PassengerOrderStatusPanel(
-       orderIdentifier = number
+       orderIdentifier = number,
+       onTerminal = { orderTerminal = true },
+       onNewTrip = {
+        orderPublicNumber = null
+        orderCreated = false
+        orderTerminal = false
+        pricePreview = null
+        pricePreviewSignature = null
+        orderError = null
+       }
       )
+      OutlinedButton(
+       onClick = {
+        runCatching { VexaRideShare.share(context, number, pickup, destination) }
+         .onFailure { orderError = "Не удалось открыть системное меню отправки" }
+       },
+       modifier = Modifier.fillMaxWidth()
+      ) { Text("Поделиться информацией о поездке") }
+      Text("В реальном времени поездка через эту кнопку пока не отслеживается.",
+       color = secondaryText, fontSize = 10.sp)
      }
 
      Button(
@@ -1305,7 +1165,7 @@ fun ClientScreen(
         return@Button
        }
 
-       if (routeGeometry == null) {
+       if (routeLine.isEmpty()) {
         orderError = "Дождитесь построения маршрута."
         return@Button
        }
@@ -1339,7 +1199,8 @@ fun ClientScreen(
             animalTransport = animal,
             cargoVehicle = cargoVehicle,
             cargoDescription = cargoDescription,
-            cargoLoaders = cargoLoaders
+            cargoLoaders = cargoLoaders,
+            pickupComment = pickupComment
            )
 
           pricePreview = preview
@@ -1379,6 +1240,7 @@ fun ClientScreen(
             cargoVehicle = cargoVehicle,
             cargoDescription = cargoDescription,
             cargoLoaders = cargoLoaders,
+            pickupComment = pickupComment,
             priceQuoteToken = priceQuoteToken,
             idempotencyKey = idempotencyKey
            )
@@ -1392,6 +1254,7 @@ fun ClientScreen(
            }
 
           orderCreated = true
+          orderTerminal = false
          }
         } catch (error: Exception) {
          val errorMessage = error.message
@@ -1456,7 +1319,7 @@ fun ClientScreen(
          hasCurrentPricePreview -> "Подтвердить и заказать"
          else -> "Рассчитать стоимость"
         },
-        color = Color.White,
+        color = MaterialTheme.colorScheme.onPrimary,
         fontSize = 16.sp
        )
       }
@@ -1464,16 +1327,45 @@ fun ClientScreen(
 
      Text(
       "VEXA такси.",
-      color = Color.Gray,
+      color = secondaryText,
       fontSize = 10.sp
      )
     }
    }
   }
 
+  if (tripHistoryOpen) {
+   VexaTripHistoryDialog(
+    onDismiss = { tripHistoryOpen = false },
+    onRepeatTrip = { previousPickup, previousDestination ->
+     if (orderCreated && !orderTerminal) {
+      orderError = "Сначала завершите текущий заказ. Новый маршрут пока не выбран."
+      tripHistoryOpen = false
+     } else {
+      pickup = previousPickup.name
+      destination = previousDestination.name
+      selectedPickup = previousPickup
+      selectedDestination = previousDestination
+      pickupSuggestions = emptyList()
+      destinationSuggestions = emptyList()
+      pricePreview = null
+      pricePreviewSignature = null
+      orderCreated = false
+      orderTerminal = false
+      orderPublicNumber = null
+      orderError = null
+      panelFraction = 0.80f
+      tripHistoryOpen = false
+     }
+    }
+   )
+  }
+
   if (showPassengerAuthDialog) {
    PassengerAuthDialog(
     onAuthenticated = {
+     home = VexaSavedPlaces.load(context, VexaSavedPlaces.HOME)
+     work = VexaSavedPlaces.load(context, VexaSavedPlaces.WORK)
      showPassengerAuthDialog = false
     },
     onDismiss = {
