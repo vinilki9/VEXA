@@ -1,0 +1,67 @@
+@import url('./brand.css');
+:root{font-family:Inter,'Segoe UI',ui-sans-serif,system-ui,sans-serif;color:var(--vexa-ink);background:var(--vexa-canvas);font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:flex}aside{width:238px;background:#111827;color:#e8eef6;padding:25px 17px;display:flex;flex-direction:column}.brand{display:flex;align-items:center;gap:9px;margin:2px 8px 45px}.brand b{font-size:20px;letter-spacing:2px}.brand small{font-size:9px;color:#8fa0b5;letter-spacing:1.5px;margin-left:auto}.mark{display:grid;place-items:center;width:34px;height:34px;background:#20c6b7;color:#10212a;border-radius:11px;font-weight:900;font-size:20px}nav{display:grid;gap:8px}nav a{display:flex;align-items:center;gap:13px;padding:12px;border-radius:10px;color:#9eacbd;font-size:13px}nav svg{width:18px}nav a.active{background:#1e293b;color:#fff;border-left:3px solid #20c6b7}.branch{margin-top:auto;color:#b9c5d2;font-size:11px;padding:12px 6px}.dot,.online i,.live i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#20c6b7;margin-right:8px}main{padding:30px 34px;max-width:1500px;width:100%;margin:auto}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px}.eyebrow{font-size:10px;letter-spacing:1.7px;color:#8491a2;margin:0 0 7px}h1{font-size:26px;margin:0;color:#111827}.headright{display:flex;align-items:center;gap:21px;color:#6b7788}.online{font-size:11px}.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#d9f6f2;color:#147d76;font-size:11px;font-weight:700}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:18px}.stats article,.mapcard,.orders,.bottom{background:#fff;border:1px solid #e8edf2;border-radius:15px;box-shadow:0 5px 20px #1d29390a}.stats article{padding:18px 19px}.stats label,.stats small{display:block;color:#8994a3;font-size:11px}.stats strong{display:block;font-size:26px;margin:10px 0 5px;color:#182334}.stats em{font-size:13px;font-style:normal;color:#8994a3}.positive{color:#159b8f!important}.content{display:grid;grid-template-columns:1.15fr .85fr;gap:17px}.mapcard,.orders{padding:18px}.cardhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}.cardhead h2{font-size:15px;margin:0 0 5px}.cardhead p{font-size:10px;color:#98a2af;margin:0}.live{font-size:9px;color:#159b8f;letter-spacing:1px}.maparea{height:320px;border-radius:11px;position:relative;overflow:hidden;background-color:#e9f0ed;background-image:linear-gradient(28deg,transparent 48%,#fff 49%,#fff 51%,transparent 52%),linear-gradient(115deg,transparent 47%,#fff 48%,#fff 50%,transparent 51%),linear-gradient(#dce6e1 1px,transparent 1px),linear-gradient(90deg,#dce6e1 1px,transparent 1px);background-size:100% 100%,100% 100%,48px 48px,48px 48px}.road{position:absolute;background:#fff;border:1px solid #dce4e1;height:9px;width:130%;transform:rotate(-20deg);top:42%;left:-10%}.r2{top:68%;transform:rotate(18deg)}.r3{top:20%;transform:rotate(72deg);left:-20%}.river{position:absolute;width:125%;height:30px;background:#b8e8e4;top:53%;left:-5%;transform:rotate(-27deg);opacity:.8}.district{position:absolute;color:#9aaba5;font-size:9px;letter-spacing:2px}.d1{left:43%;top:40%}.d2{left:18%;top:18%}.d3{right:12%;bottom:17%}.car{position:absolute;background:#fff;color:#117f78;border:1px solid #20c6b7;border-radius:8px;padding:4px 6px;font-size:13px;box-shadow:0 2px 7px #203b3b30}.maplegend{position:absolute;bottom:12px;left:12px;background:#ffffffdf;border-radius:8px;padding:8px 10px;display:flex;gap:13px;font-size:9px;color:#64748b}.maplegend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.tealbg{background:#20c6b7}.bluebg{background:#4e83d8}.cardhead button{border:1px solid #dfe6eb;background:#fff;border-radius:7px;padding:7px 10px;color:#64748b;font-size:10px}.order{display:flex;align-items:center;gap:10px;padding:14px 0;border-top:1px solid #edf0f3}.ordericon{width:33px;height:33px;display:grid;place-items:center;background:#e7f8f6;color:#159b8f;border-radius:9px}.ordericon svg{width:16px}.orderinfo{display:grid;gap:3px;flex:1}.orderinfo b{font-size:11px}.orderinfo span{font-size:10px;color:#667386}.orderinfo small{font-size:9px;color:#9aa4b0}.status{font-size:9px;padding:5px 7px;border-radius:20px;white-space:nowrap}.status.teal{background:#e5f8f5;color:#138d82}.status.blue{background:#edf3ff;color:#4b75c4}.status.amber{background:#fff5df;color:#ad7b1d}.status.gray{background:#f0f2f5;color:#7c8795}.bottom{margin-top:17px;padding:17px 20px;display:flex;align-items:center;justify-content:space-between}.bottom>div:first-child{display:grid;grid-template-columns:20px auto;gap:5px 9px;align-items:center}.bottom svg{color:#20a99f;width:17px}.bottom b{font-size:12px}.bottom span{grid-column:2;color:#96a0ad;font-size:10px}.barset{height:58px;width:43%;display:flex;align-items:end;gap:7px}.barset i{flex:1;background:#b6e9e4;border-radius:4px 4px 0 0}@media(max-width:900px){aside{width:65px;padding:20px 9px}.brand{margin:0 5px 35px}.brand b,.brand small,nav a:not(.active){display:none}nav a{font-size:0}.stats{grid-template-columns:repeat(2,1fr)}.content{grid-template-columns:1fr}}@media(max-width:560px){main{padding:20px 12px}.stats{grid-template-columns:1fr 1fr}.stats strong{font-size:20px}.headright .online{display:none}.orders{overflow:hidden}.status{display:none}}
+
+/* VEXA 0.3.5 — refined accessible dashboard surfaces and mobile navigation */
+:root { color-scheme: light; }
+body { line-height: 1.45; background: var(--vexa-canvas); }
+aside { background: linear-gradient(170deg,var(--vexa-ink),#1e3440); min-height: 100vh; position: sticky; top: 0; }
+nav a { text-decoration: none; transition: background-color .18s ease,color .18s ease; }
+nav a:hover { background: rgba(255,255,255,.09); color: #fff; }
+nav a.active { background: rgba(32,198,183,.18); border-left-color: var(--vexa-primary); }
+.stats article, .mapcard, .orders, .bottom { border: 1px solid var(--vexa-border); border-radius: var(--vexa-card-radius); box-shadow: 0 8px 28px rgba(17,24,39,.045); }
+.stats article { border-top: 3px solid var(--vexa-primary); }
+.brand .mark { background: var(--vexa-primary); }
+button { font: inherit; transition: background-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+button:not(:disabled):active { transform: translateY(1px); }
+button:disabled { cursor: not-allowed; opacity: .6; }
+:where(button, input, select, textarea, a):focus-visible { outline: 3px solid var(--vexa-primary); outline-offset: 3px; }
+input, select, textarea { font-family: inherit; }
+.stats strong { font-variant-numeric: tabular-nums; }
+.order { gap: 14px; }
+.ordericon { background: var(--vexa-primary-soft); color: var(--vexa-success); }
+.online i, .live i, .dot { background: var(--vexa-primary); }
+@media (max-width:900px) { aside { position: sticky; top: 0; height: 100vh; min-height: 0; } }
+@media (max-width:560px) { main { padding: 20px 12px; } .bottom { flex-wrap: wrap; gap: 15px; } .barset { width: 100%; } }
+@media (prefers-reduced-motion:reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+
+.online.offline { color:#b42318; }
+.online.offline i { background:#e0525b; }
+
+@media (max-width:900px) {
+  nav a:not(.active) { display:flex; }
+  nav a { justify-content:center; }
+  aside { flex-shrink:0; }
+}
+
+/* VEXA DESIGN 0.3.14: graphite operational dashboard, calm turquoise emphasis. */
+:root { color-scheme: dark; }
+html, body, .shell { background: var(--vexa-canvas); color: var(--vexa-text); }
+main { background: transparent; color: var(--vexa-text); }
+.brand b, h1, h2, .stats strong, .cardhead h2, .orderinfo b,
+.bottom b, .orderinfo strong { color: var(--vexa-text); }
+.brand .mark, .mark { background: var(--vexa-primary); color: var(--vexa-on-primary); }
+aside { background: linear-gradient(175deg, #202a2f, #151d21 85%); border-right: 1px solid var(--vexa-border); }
+nav a { color: var(--vexa-text-secondary); }
+nav a.active { background: rgba(84,182,170,.18); color: var(--vexa-text); }
+nav a:hover { color: var(--vexa-text); }
+.stats article, .mapcard, .orders, .bottom,
+.modal-panel { background: var(--vexa-surface); color: var(--vexa-text); border: 1px solid var(--vexa-border); box-shadow: 0 8px 32px rgba(0,0,0,.17); }
+.stats label, .stats small, .stats em, .cardhead p, .orderinfo span, .orderinfo small,
+.eyebrow, .headright, .branch, .bottom span { color: var(--vexa-text-secondary); }
+.stats article { border-top: 2px solid var(--vexa-primary); }
+.stats strong { color: var(--vexa-text); }
+.order { border-top-color: var(--vexa-border); }
+.ordericon, .avatar { background: var(--vexa-primary-soft); color: var(--vexa-primary); }
+.maparea { background-color: var(--vexa-surface-2); }
+.maplegend { background: rgba(32,42,47,.94); color: var(--vexa-text-secondary); }
+.car, .cardhead button, .status.gray, input, select, textarea { background: var(--vexa-surface-2); color: var(--vexa-text); border-color: var(--vexa-border); }
+.status.teal { background: var(--vexa-primary-soft); color: var(--vexa-primary); }
+.status.blue { background: rgba(101,153,193,.17); color: #B2D7ED; }
+.status.amber { background: rgba(234,189,108,.15); color: #EABD6C; }
+.status.gray { background: var(--vexa-surface-2); color: var(--vexa-text-secondary); }
+.positive, .live { color: var(--vexa-primary) !important; }
+.barset i { background: var(--vexa-primary); opacity: .5; }
+:where(button, input, select, textarea, a):focus-visible { outline: 3px solid var(--vexa-route); outline-offset: 2px; }
+::selection { color: var(--vexa-on-primary); background: var(--vexa-route); }
+@media(prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
