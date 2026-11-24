@@ -1,0 +1,11 @@
+[Unit]
+Description=VEXA daily verified PostgreSQL backup
+After=docker.service
+Requires=docker.service
+ConditionPathExists=/opt/vexa-deploy/state/current
+[Service]
+Type=oneshot
+User=vexa-deploy
+Group=vexa-deploy
+UMask=0077
+ExecStart=/opt/vexa-deploy/backup.sh

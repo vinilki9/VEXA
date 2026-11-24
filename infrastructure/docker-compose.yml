@@ -1,0 +1,124 @@
+# LEGACY local diagnostics only. For VPS use compose.production.yml.
+
+services:
+  vexa_map:
+    build:
+      context: ../VEXA_MAP
+      dockerfile: Dockerfile
+    environment:
+      VEXA_MAP_HOST: 0.0.0.0
+      VEXA_MAP_PORT: "8090"
+      VEXA_MAP_MBTILES: ${VEXA_MAP_MBTILES:-/data/regions}
+      VEXA_MAP_PLACES: ${VEXA_MAP_PLACES:-/data/places.sqlite}
+      VEXA_MAP_OSRM_URL: ${VEXA_MAP_OSRM_URL:-}
+      VEXA_MAP_TRUST_PROXY: "1"
+      VEXA_MAP_SERVE_OFFLINE_PACKS: ${VEXA_MAP_SERVE_OFFLINE_PACKS:-0}
+    ports:
+      - "127.0.0.1:${VEXA_MAP_PORT:-8090}:8090"
+    volumes:
+      - ../VEXA_MAP/data:/data:ro
+    restart: unless-stopped
+
+  # Optional local routing. Enable only after OSRM preprocessing finishes.
+  # Usage: docker compose --profile routing up -d osrm
+  osrm:
+    profiles: ["routing"]
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    command: ["osrm-routed", "--algorithm", "mld", "/data/region.osrm"]
+    volumes:
+      - ../VEXA_MAP/data/osrm:/data:ro
+    ports:
+      - "127.0.0.1:${OSRM_PORT:-5000}:5000"
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vexa}
+      POSTGRES_USER: ${POSTGRES_USER:-vexa_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vexa_app} -d ${POSTGRES_DB:-vexa}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+  # Initial startup and upgrades run database migrations exactly once,
+  # before the API begins accepting requests. Re-running is safe (Alembic).
+  migrate:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: vexa-backend:dev-0.3.5
+    command: ["alembic", "upgrade", "head"]
+    environment: &backend_env
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      DEFAULT_CITY_ID: ${DEFAULT_CITY_ID:-obolensk}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ROUTING_PROVIDER: ${ROUTING_PROVIDER:-osrm}
+      OSRM_BASE_URL: ${OSRM_BASE_URL:-}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-https://45.143.139.162}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: vexa-backend:dev-0.3.5
+    environment: *backend_env
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  dispatch_worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: vexa-backend:dev-0.3.5
+    command: ["python", "-m", "app.dispatch_worker"]
+    init: true
+    environment: *backend_env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  dispatcher:
+    build:
+      context: ../dispatcher
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${DISPATCHER_PORT:-8081}:80"
+    restart: unless-stopped
+
+  platform_admin:
+    build:
+      context: ../platform-admin
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${PLATFORM_ADMIN_PORT:-8082}:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

@@ -1,0 +1,12 @@
+[Unit]
+Description=VEXA health and web asset check
+After=docker.service
+Requires=docker.service
+ConditionPathExists=/opt/vexa-deploy/state/current
+ConditionPathExists=/opt/vexa-deploy/enabled
+[Service]
+Type=oneshot
+User=vexa-deploy
+Group=vexa-deploy
+ExecStart=/opt/vexa-deploy/healthcheck.sh
+TimeoutStartSec=180
