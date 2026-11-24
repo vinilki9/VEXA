@@ -70,10 +70,10 @@ type Props = {
   cityCode: string;
 };
 
-const API_BASE = 'https://109.120.184.20';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
 const cardStyle: React.CSSProperties = {
-  background: '#fff',
+  background: 'var(--vexa-surface)',
   border: '1px solid #e8edf2',
   borderRadius: 12,
   padding: 17,
@@ -81,15 +81,15 @@ const cardStyle: React.CSSProperties = {
 };
 
 const mutedStyle: React.CSSProperties = {
-  color: '#8994a3',
+  color: 'var(--vexa-text-secondary)',
   fontSize: 11,
 };
 
 const primaryButtonStyle: React.CSSProperties = {
   border: 0,
   borderRadius: 8,
-  background: '#20b8aa',
-  color: '#fff',
+  background: 'var(--vexa-primary)',
+  color: 'var(--vexa-on-primary)',
   padding: '10px 14px',
   fontSize: 12,
   fontWeight: 700,
@@ -101,8 +101,8 @@ const selectStyle: React.CSSProperties = {
   border: '1px solid #dfe6eb',
   borderRadius: 8,
   padding: '0 12px',
-  background: '#fff',
-  color: '#172033',
+  background: 'var(--vexa-surface)',
+  color: 'var(--vexa-text)',
   fontSize: 12,
   outline: 'none',
 };
@@ -213,7 +213,7 @@ function SummaryCard({
   value,
   description,
   icon,
-  valueColor = '#172033',
+  valueColor = 'var(--vexa-text)',
 }: {
   title: string;
   value: string;
@@ -230,7 +230,7 @@ function SummaryCard({
         gap: 10,
       }}>
         <span style={{
-          color: '#526174',
+          color: 'var(--vexa-text-secondary)',
           fontSize: 12,
           fontWeight: 600,
         }}>
@@ -243,8 +243,8 @@ function SummaryCard({
           display: 'grid',
           placeItems: 'center',
           borderRadius: 9,
-          background: '#f0f8f7',
-          color: '#15998d',
+          background: 'var(--vexa-primary-soft)',
+          color: 'var(--vexa-primary)',
           flexShrink: 0,
         }}>
           {icon}
@@ -292,7 +292,7 @@ function BreakdownRow({
       borderBottom: '1px solid #edf0f3',
     }}>
       <span style={{
-        color: strong ? '#172033' : '#526174',
+        color: strong ? 'var(--vexa-text)' : 'var(--vexa-text-secondary)',
         fontSize: 12,
         fontWeight: strong ? 700 : 500,
       }}>
@@ -300,7 +300,7 @@ function BreakdownRow({
       </span>
 
       <strong style={{
-        color: '#172033',
+        color: 'var(--vexa-text)',
         fontSize: 12,
         textAlign: 'right',
         overflowWrap: 'anywhere',
@@ -418,7 +418,7 @@ export default function FinanceSummaryPanel({
           </p>
 
           <h2 style={{
-            color: '#172033',
+            color: 'var(--vexa-text)',
             fontSize: 20,
             margin: '5px 0 0',
           }}>
@@ -507,8 +507,8 @@ export default function FinanceSummaryPanel({
 
           {exportError && (
             <div style={{
-              color: '#b42318',
-              background: '#fff0ee',
+              color: 'var(--vexa-danger)',
+              background: 'rgba(255, 133, 141, 0.12)',
               borderRadius: 8,
               padding: 10,
               fontSize: 12,
@@ -547,8 +547,8 @@ export default function FinanceSummaryPanel({
           display: 'flex',
           alignItems: 'center',
           gap: 9,
-          color: '#b42318',
-          background: '#fff0ee',
+          color: 'var(--vexa-danger)',
+          background: 'rgba(255, 133, 141, 0.12)',
           borderRadius: 9,
           padding: 12,
           fontSize: 12,
@@ -621,7 +621,7 @@ export default function FinanceSummaryPanel({
 
                 <h3 style={{
                   margin: 0,
-                  color: '#172033',
+                  color: 'var(--vexa-text)',
                   fontSize: 14,
                 }}>
                   Электронные платежи
@@ -664,7 +664,7 @@ export default function FinanceSummaryPanel({
 
                 <h3 style={{
                   margin: 0,
-                  color: '#172033',
+                  color: 'var(--vexa-text)',
                   fontSize: 14,
                 }}>
                   Оплата водителю
@@ -717,7 +717,7 @@ export default function FinanceSummaryPanel({
 
                 <h3 style={{
                   margin: 0,
-                  color: '#172033',
+                  color: 'var(--vexa-text)',
                   fontSize: 14,
                 }}>
                   Погашение задолженности
@@ -759,7 +759,7 @@ export default function FinanceSummaryPanel({
 
                 <h3 style={{
                   margin: 0,
-                  color: '#172033',
+                  color: 'var(--vexa-text)',
                   fontSize: 14,
                 }}>
                   Состояние кошельков
@@ -806,7 +806,7 @@ export default function FinanceSummaryPanel({
 
           <div style={{
             ...cardStyle,
-            background: '#f7f9fb',
+            background: 'var(--vexa-surface-2)',
           }}>
             <div style={{
               display: 'flex',
@@ -817,7 +817,7 @@ export default function FinanceSummaryPanel({
             }}>
               <div>
                 <strong style={{
-                  color: '#172033',
+                  color: 'var(--vexa-text)',
                   fontSize: 12,
                 }}>
                   Период отчёта
@@ -862,7 +862,7 @@ export default function FinanceSummaryPanel({
       {!summary && loading && (
         <div style={{
           ...cardStyle,
-          color: '#8994a3',
+          color: 'var(--vexa-text-secondary)',
           textAlign: 'center',
           padding: 30,
         }}>

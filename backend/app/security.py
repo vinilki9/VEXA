@@ -103,8 +103,8 @@ def get_current_dispatcher(
 
     user_id, token_type = _decode_token(credentials)
 
-    # None допускается для совместимости со старыми токенами.
-    if token_type not in (None, "dispatcher"):
+    # Только явно подписанные токены диспетчера; старые токены без роли требуют повторного входа.
+    if token_type != "dispatcher":
         raise unauthorized
 
     user = db.get(User, user_id)

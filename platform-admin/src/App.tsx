@@ -1,3 +1,4 @@
+import LegalDocumentsPanel from './components/LegalDocumentsPanel';
 
 import { useEffect, useState } from "react";
 import Organizations from "./Organizations";
@@ -22,37 +23,57 @@ function App() {
   );
   const [admin, setAdmin] = useState<AdminUser | null>(null);
   const [activeSection, setActiveSection] = useState<Section>(null);
+  const [sessionFailed, setSessionFailed] = useState(false);
+  const [sessionRetry, setSessionRetry] = useState(0);
 
   useEffect(() => {
     if (!token) {
       setAdmin(null);
+      setSessionFailed(false);
       return;
     }
 
     let cancelled = false;
+    setSessionFailed(false);
 
     async function verifySession() {
       try {
-        const response = await fetch(`${API_BASE}/organizations`, {
+        const response = await fetch(`${API_BASE}/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
 
-        if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
           throw new Error("Сессия недействительна");
+        }
+        if (!response.ok) {
+          throw new Error("Сервер временно недоступен");
+        }
+
+        const profile: AdminUser = await response.json();
+        if (!profile.username) {
+          throw new Error("Сервер не вернул профиль администратора");
         }
 
         if (!cancelled) {
-          setAdmin({ username: "Главный администратор" });
+          setAdmin({ username: profile.username });
+          setSessionFailed(false);
+          setError("");
         }
-      } catch {
-        sessionStorage.removeItem("vexa_platform_admin_token");
-        if (!cancelled) {
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof Error && err.message === "Сессия недействительна") {
+          sessionStorage.removeItem("vexa_platform_admin_token");
           setToken("");
           setAdmin(null);
           setActiveSection(null);
           setError("Сессия завершена. Войдите снова.");
+        } else {
+          // Network outage is NOT an authorization failure.
+          // Preserve encrypted transport session token and offer manual retry.
+          setSessionFailed(true);
+          setError("Не удалось связаться с сервером. Проверьте соединение.");
         }
       }
     }
@@ -62,7 +83,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, sessionRetry]);
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,8 +148,24 @@ function App() {
         <div className="auth-card loading-card">
           <div className="brand-mark">V</div>
           <h1>VEXA</h1>
-          <p>Проверяем доступ к панели управления...</p>
-          <div className="loader" />
+          {sessionFailed ? (
+            <>
+              <p role="alert">{error || 'Сервер временно недоступен'}</p>
+              <div className="session-actions">
+                <button type="button" className="login-button" onClick={() => setSessionRetry(value => value + 1)}>
+                  Повторить проверку
+                </button>
+                <button type="button" className="logout-button" onClick={handleLogout}>
+                  Выйти
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p>Проверяем доступ к панели управления...</p>
+              <div className="loader" />
+            </>
+          )}
         </div>
       </main>
     );
@@ -155,6 +192,7 @@ function App() {
   if (admin) {
     return (
       <main className="admin-screen">
+        <details style={{margin:12}}><summary>Юридические документы и история подтверждений</summary><LegalDocumentsPanel token={token} role="admin" /></details>
         <header className="admin-header">
           <div className="brand">
             <div className="brand-mark">V</div>

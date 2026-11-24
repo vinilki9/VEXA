@@ -248,6 +248,13 @@ class OrderPricePreviewResponse(APIModel):
     cargo_vehicle_surcharge_kopecks: int = 0
     cargo_loaders_surcharge_kopecks: int = 0
 
+    # База расчёта: включённые и оплачиваемые километры/минуты.
+    fare_allowances: dict[str, str] | None = None
+
+    # Прозрачные компоненты стоимости для пассажира и диспетчера.
+    # Суммы в копейках, могут включать отрицательную корректировку лимита.
+    price_breakdown: dict | None = None
+
     # Подписанное ценовое предложение.
     price_quote_token: str = Field(
         min_length=32,
@@ -334,6 +341,12 @@ class TariffCreate(APIModel):
     base_price_kopecks: int = Field(ge=0)
     price_per_km_kopecks: int = Field(ge=0)
     price_per_minute_kopecks: int = Field(ge=0)
+
+    included_km: Decimal = Field(default=Decimal("0"), ge=0, max_digits=9, decimal_places=3)
+    included_minutes: Decimal = Field(default=Decimal("0"), ge=0, max_digits=9, decimal_places=2)
+    free_wait_minutes: Decimal = Field(default=Decimal("0"), ge=0, max_digits=9, decimal_places=2)
+    waiting_price_per_minute_kopecks: int = Field(default=0, ge=0)
+    stop_price_kopecks: int = Field(default=0, ge=0)
 
     minimum_fare_kopecks: int | None = Field(
         default=None,
@@ -427,6 +440,12 @@ class TariffUpdate(APIModel):
         default=None,
         ge=0,
     )
+
+    included_km: Decimal | None = Field(default=None, ge=0, max_digits=9, decimal_places=3)
+    included_minutes: Decimal | None = Field(default=None, ge=0, max_digits=9, decimal_places=2)
+    free_wait_minutes: Decimal | None = Field(default=None, ge=0, max_digits=9, decimal_places=2)
+    waiting_price_per_minute_kopecks: int | None = Field(default=None, ge=0)
+    stop_price_kopecks: int | None = Field(default=None, ge=0)
 
     minimum_fare_kopecks: int | None = Field(
         default=None,

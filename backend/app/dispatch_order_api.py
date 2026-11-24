@@ -9,6 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.legal_dispatch_gate import legal_eligibility
 from app.driver_order_offer_models import DriverOrderOffer
 from app.models import (
     Branch,
@@ -114,12 +115,13 @@ def build_order_timeline(
     """
     status_labels = {
         "new": "Новый",
-        "accepted": "Принят диспетчером",
+        "accepted": "Автоматический поиск водителя",
         "assigned": "Водитель назначен",
         "arrived": "Водитель прибыл",
         "in_progress": "Поездка началась",
         "completed": "Поездка завершена",
         "cancelled": "Заказ отменён",
+        "no_driver_found": "Свободных машин не найдено",
     }
     offer_status_labels = {
         "accepted": "Водитель принял предложение",
@@ -618,7 +620,12 @@ def get_available_driver_candidates(
         if not vehicles:
             continue
 
-        vehicle = vehicles[0]
+        # Prevent unverified drivers from receiving even an offer.
+        vehicle = next((v for v in vehicles if legal_eligibility(
+            db, driver_id, v.id, child_seats_required=bool(order.child_seat)
+        )[0]), None)
+        if vehicle is None:
+            continue
 
         distance = calculate_distance_meters(
             order.pickup_latitude,
@@ -807,6 +814,8 @@ def create_next_driver_offer(
 def process_expired_driver_offers(
     db: Session,
     limit: int = 100,
+    *,
+    advance_to_next: bool = True,
 ) -> int:
     """
     Обрабатывает просроченные предложения.
@@ -857,6 +866,21 @@ def process_expired_driver_offers(
             processed_orders += 1
             continue
 
+        if not advance_to_next:
+            stale_offers = db.scalars(
+                select(DriverOrderOffer).where(
+                    DriverOrderOffer.order_id == order.id,
+                    DriverOrderOffer.status == "pending",
+                    DriverOrderOffer.expires_at <= now,
+                ).with_for_update()
+            ).all()
+            for offer in stale_offers:
+                offer.status = "expired"
+                offer.responded_at = now
+            db.commit()
+            processed_orders += 1
+            continue
+
         try:
             create_next_driver_offer(
                 db=db,
@@ -889,6 +913,10 @@ def save_driver_assignment(
     city: City,
     distance_meters: float | None = None,
 ) -> dict:
+    permitted, blockers = legal_eligibility(db, driver_profile.user_id, vehicle.id,
+        child_seats_required=bool(order.child_seat))
+    if not permitted:
+        raise HTTPException(409, {"code": "LEGAL_DISPATCH_BLOCKED", "reasons": list(blockers)})
     old_status = order.status
     now = datetime.now(timezone.utc)
 

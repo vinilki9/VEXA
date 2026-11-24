@@ -1,5 +1,6 @@
 
 import argparse
+from getpass import getpass
 from uuid import UUID
 
 from app.database import SessionLocal
@@ -13,7 +14,6 @@ def main():
     )
 
     parser.add_argument("--username", required=True)
-    parser.add_argument("--password", required=True)
 
     parser.add_argument(
         "--role",
@@ -30,10 +30,15 @@ def main():
 
     args = parser.parse_args()
 
-    if len(args.password) < 12:
-        raise SystemExit(
-            "Пароль должен содержать не менее 12 символов"
-        )
+    password = getpass("Введите пароль диспетчера: ")
+    confirmation = getpass("Повторите пароль: ")
+
+    if password != confirmation:
+        raise SystemExit("Пароли не совпадают")
+    if len(password) < 12:
+        raise SystemExit("Пароль должен содержать не менее 12 символов")
+    if len(password.encode("utf-8")) > 72:
+        raise SystemExit("Пароль не должен превышать 72 байта в UTF-8")
 
     if args.role == "dispatcher" and args.branch_id is None:
         raise SystemExit(
@@ -69,7 +74,7 @@ def main():
 
         user = User(
             username=args.username,
-            password_hash=hash_password(args.password),
+            password_hash=hash_password(password),
             is_active=True,
         )
 

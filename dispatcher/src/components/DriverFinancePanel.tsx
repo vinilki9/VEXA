@@ -68,7 +68,7 @@ type Props = {
   onOpenOrder?: (orderId: string) => void;
 };
 
-const API_BASE = 'https://109.120.184.20';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 const HISTORY_PAGE_SIZE = 30;
 
 const money = (kopecks: number) =>
@@ -84,15 +84,15 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid #dfe6eb',
   borderRadius: 8,
   padding: '10px 13px',
-  background: '#fff',
-  color: '#526174',
+  background: 'var(--vexa-surface)',
+  color: 'var(--vexa-text-secondary)',
   fontSize: 12,
   fontWeight: 600,
   cursor: 'pointer',
 };
 
 const mutedStyle: React.CSSProperties = {
-  color: '#8994a3',
+  color: 'var(--vexa-text-secondary)',
   fontSize: 12,
 };
 
@@ -100,7 +100,7 @@ const cardStyle: React.CSSProperties = {
   border: '1px solid #e8edf2',
   borderRadius: 11,
   padding: 14,
-  background: '#fff',
+  background: 'var(--vexa-surface)',
 };
 
 function formatDate(value: string): string {
@@ -291,7 +291,7 @@ export default function DriverFinancePanel({
           <h2 style={{
             margin: 0,
             fontSize: 19,
-            color: '#172033',
+            color: 'var(--vexa-text)',
           }}>
             Финансы водителей
           </h2>
@@ -328,7 +328,7 @@ export default function DriverFinancePanel({
       }}>
         <div style={{
           ...cardStyle,
-          background: '#f7f9fb',
+          background: 'var(--vexa-surface-2)',
         }}>
           <span style={mutedStyle}>
             Суммарный баланс кошельков
@@ -337,7 +337,7 @@ export default function DriverFinancePanel({
           <strong style={{
             display: 'block',
             fontSize: 23,
-            color: '#087e70',
+            color: 'var(--vexa-primary)',
             marginTop: 8,
           }}>
             {money(totalBalance)}
@@ -346,7 +346,7 @@ export default function DriverFinancePanel({
 
         <div style={{
           ...cardStyle,
-          background: '#f7f9fb',
+          background: 'var(--vexa-surface-2)',
         }}>
           <span style={mutedStyle}>
             Зарезервировано
@@ -355,7 +355,7 @@ export default function DriverFinancePanel({
           <strong style={{
             display: 'block',
             fontSize: 23,
-            color: '#526174',
+            color: 'var(--vexa-text-secondary)',
             marginTop: 8,
           }}>
             {money(totalReserved)}
@@ -364,7 +364,7 @@ export default function DriverFinancePanel({
 
         <div style={{
           ...cardStyle,
-          background: '#f7f9fb',
+          background: 'var(--vexa-surface-2)',
         }}>
           <span style={mutedStyle}>
             Водителей с отрицательным балансом
@@ -373,7 +373,7 @@ export default function DriverFinancePanel({
           <strong style={{
             display: 'block',
             fontSize: 23,
-            color: negativeBalanceCount > 0 ? '#b54708' : '#087e70',
+            color: negativeBalanceCount > 0 ? 'var(--vexa-warning)' : 'var(--vexa-primary)',
             marginTop: 8,
           }}>
             {negativeBalanceCount}
@@ -386,8 +386,8 @@ export default function DriverFinancePanel({
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          color: '#b42318',
-          background: '#fff0ee',
+          color: 'var(--vexa-danger)',
+          background: 'rgba(255, 133, 141, 0.12)',
           borderRadius: 8,
           padding: 11,
           fontSize: 12,
@@ -401,7 +401,7 @@ export default function DriverFinancePanel({
         <h3 style={{
           margin: '0 0 12px',
           fontSize: 15,
-          color: '#172033',
+          color: 'var(--vexa-text)',
         }}>
           Балансы водителей
         </h3>
@@ -425,8 +425,8 @@ export default function DriverFinancePanel({
 
               const balanceColor =
                 driver.balance_kopecks < 0
-                  ? '#b54708'
-                  : '#087e70';
+                  ? 'var(--vexa-warning)'
+                  : 'var(--vexa-primary)';
 
               return (
                 <div
@@ -448,7 +448,7 @@ export default function DriverFinancePanel({
                       gap: 5,
                     }}>
                       <b style={{
-                        color: '#172033',
+                        color: 'var(--vexa-text)',
                         fontSize: 13,
                       }}>
                         {driver.username}
@@ -517,7 +517,7 @@ export default function DriverFinancePanel({
                       marginTop: 12,
                       padding: 12,
                       borderRadius: 9,
-                      background: '#f7f9fb',
+                      background: 'var(--vexa-surface-2)',
                       display: 'grid',
                       gap: 12,
                     }}>
@@ -531,7 +531,7 @@ export default function DriverFinancePanel({
                         <div>
                           <b style={{
                             fontSize: 13,
-                            color: '#172033',
+                            color: 'var(--vexa-text)',
                           }}>
                             История операций кошелька
                           </b>
@@ -565,8 +565,8 @@ export default function DriverFinancePanel({
 
                       {historyError && (
                         <div style={{
-                          color: '#b42318',
-                          background: '#fff0ee',
+                          color: 'var(--vexa-danger)',
+                          background: 'rgba(255, 133, 141, 0.12)',
                           borderRadius: 8,
                           padding: 10,
                           fontSize: 12,
@@ -596,7 +596,7 @@ export default function DriverFinancePanel({
                                 <div
                                   key={transaction.id}
                                   style={{
-                                    background: '#fff',
+                                    background: 'var(--vexa-surface)',
                                     border: '1px solid #e8edf2',
                                     borderRadius: 8,
                                     padding: 11,
@@ -616,7 +616,7 @@ export default function DriverFinancePanel({
                                       gap: 4,
                                     }}>
                                       <b style={{
-                                        color: '#172033',
+                                        color: 'var(--vexa-text)',
                                         fontSize: 12,
                                       }}>
                                         {transactionTypeLabel(
@@ -630,7 +630,7 @@ export default function DriverFinancePanel({
                                     </div>
 
                                     <strong style={{
-                                      color: change < 0 ? '#b54708' : '#087e70',
+                                      color: change < 0 ? 'var(--vexa-warning)' : 'var(--vexa-primary)',
                                       fontSize: 13,
                                     }}>
                                       {signedMoney(change)}
@@ -642,7 +642,7 @@ export default function DriverFinancePanel({
                                     justifyContent: 'space-between',
                                     gap: 8,
                                     flexWrap: 'wrap',
-                                    color: '#526174',
+                                    color: 'var(--vexa-text-secondary)',
                                     fontSize: 11,
                                   }}>
                                     <span>
@@ -653,7 +653,7 @@ export default function DriverFinancePanel({
                                       }
                                     </span>
 
-                                    <b style={{ color: '#172033' }}>
+                                    <b style={{ color: 'var(--vexa-text)' }}>
                                       Баланс после операции: {
                                         money(transaction.balance_after_kopecks)
                                       }
@@ -671,7 +671,7 @@ export default function DriverFinancePanel({
 
                                   {transaction.description && (
                                     <span style={{
-                                      color: '#8994a3',
+                                      color: 'var(--vexa-text-secondary)',
                                       fontSize: 11,
                                     }}>
                                       {transaction.description}
@@ -688,7 +688,7 @@ export default function DriverFinancePanel({
                                         border: 0,
                                         padding: 0,
                                         background: 'transparent',
-                                        color: onOpenOrder ? '#087e70' : '#526174',
+                                        color: onOpenOrder ? 'var(--vexa-primary)' : 'var(--vexa-text-secondary)',
                                         fontSize: 11,
                                         fontWeight: 700,
                                         textDecoration: onOpenOrder ? 'underline' : 'none',
@@ -703,7 +703,7 @@ export default function DriverFinancePanel({
                                     </button>
                                   ) : transaction.order_public_number ? (
                                     <b style={{
-                                      color: '#526174',
+                                      color: 'var(--vexa-text-secondary)',
                                       fontSize: 11,
                                     }}>
                                       Заказ №{transaction.order_public_number}

@@ -4,6 +4,8 @@ from uuid import UUID
 from decimal import Decimal, ROUND_HALF_UP
 from app.platform_admin_router import router as platform_admin_router
 from app.passenger_auth import router as passenger_auth_router
+from app.legal_documents import router as legal_documents_router
+from app.legal_account_api import router as legal_account_router
 from app.driver_api import router as driver_router
 from app.driver_transfer_api import router as driver_transfer_router
 from app.phone_utils import normalize_phone
@@ -22,9 +24,11 @@ from sqlalchemy.orm import Session
 
 from app.routing import RoutingError
 from app.route_pricing import calculate_order_route_price
+from app.price_breakdown import PriceBreakdownError, build_price_breakdown
 
 from app.config import settings
 from app.database import get_db
+from app.driver_order_offer_models import DriverOrderOffer
 from app.models import (
     Branch,
     City,
@@ -55,8 +59,17 @@ from app.security import (
 )
 
 
-app = FastAPI(title="VEXA API", version="0.6.0")
+_production_mode = settings.environment.strip().lower() in {"production", "prod"}
+app = FastAPI(
+    title="VEXA API",
+    version="0.3.12",
+    docs_url=None if _production_mode else "/docs",
+    redoc_url=None if _production_mode else "/redoc",
+    openapi_url=None if _production_mode else "/openapi.json",
+)
 app.include_router(passenger_auth_router)
+app.include_router(legal_documents_router)
+app.include_router(legal_account_router)
 app.include_router(driver_router)
 app.include_router(driver_transfer_router)
 app.include_router(dispatch_order_router)
@@ -70,6 +83,7 @@ ORDER_STATUSES = {
     "in_progress": {"completed", "cancelled"},
     "completed": set(),
     "cancelled": set(),
+    "no_driver_found": set(),
 }
 
 
@@ -384,6 +398,12 @@ def tariff_snapshot(tariff: Tariff) -> dict:
         "price_per_minute_kopecks": (
             tariff.price_per_minute_kopecks
         ),
+        # JSON audit history must serialize Decimal deterministically.
+        "included_km": str(tariff.included_km),
+        "included_minutes": str(tariff.included_minutes),
+        "free_wait_minutes": str(tariff.free_wait_minutes),
+        "waiting_price_per_minute_kopecks": tariff.waiting_price_per_minute_kopecks,
+        "stop_price_kopecks": tariff.stop_price_kopecks,
         "minimum_fare_kopecks": (
             tariff.minimum_fare_kopecks
         ),
@@ -553,6 +573,11 @@ def get_tariffs(
                 "price_per_minute_kopecks": (
                     tariff.price_per_minute_kopecks
                 ),
+                "included_km": tariff.included_km,
+                "included_minutes": tariff.included_minutes,
+                "free_wait_minutes": tariff.free_wait_minutes,
+                "waiting_price_per_minute_kopecks": tariff.waiting_price_per_minute_kopecks,
+                "stop_price_kopecks": tariff.stop_price_kopecks,
                 "minimum_fare_kopecks": (
                     tariff.minimum_fare_kopecks
                 ),
@@ -785,6 +810,11 @@ def update_tariff(
         "base_price_kopecks",
         "price_per_km_kopecks",
         "price_per_minute_kopecks",
+        "included_km",
+        "included_minutes",
+        "free_wait_minutes",
+        "waiting_price_per_minute_kopecks",
+        "stop_price_kopecks",
         "is_active",
     }
 
@@ -916,66 +946,6 @@ def get_tariff_history(
         ],
     }
 
-
-PRICE_QUOTE_TTL_MINUTES = 2
-
-
-def build_price_quote_fingerprint(
-    payload: OrderCreate,
-) -> dict:
-    """
-    Параметры заказа, от которых зависит рассчитанная стоимость.
-    """
-
-    return {
-        "city_code": payload.city_code,
-        "tariff_id": str(payload.tariff_id),
-        "pickup_address": payload.pickup_address.strip(),
-        "destination_address": payload.destination_address.strip(),
-        "pickup_latitude": payload.pickup_latitude,
-        "pickup_longitude": payload.pickup_longitude,
-        "destination_latitude": payload.destination_latitude,
-        "destination_longitude": payload.destination_longitude,
-        "child_seat": bool(payload.child_seat),
-        "animal_transport": bool(payload.animal_transport),
-        "cargo_vehicle": payload.cargo_vehicle,
-        "cargo_description": (
-            (payload.cargo_description or "").strip() or None
-        ),
-        "cargo_loaders": payload.cargo_loaders,
-    }
-
-
-def create_price_quote_token(
-    passenger: User,
-    city: City,
-    branch: Branch,
-    payload: OrderCreate,
-    quote: dict,
-) -> tuple[str, datetime]:
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        minutes=PRICE_QUOTE_TTL_MINUTES
-    )
-
-    claims = {
-        "sub": str(passenger.id),
-        "token_type": "price_quote",
-        "city_id": str(city.id),
-        "branch_id": str(branch.id),
-        "request": build_price_quote_fingerprint(
-            payload,
-        ),
-        "quote": jsonable_encoder(quote),
-        "exp": expires_at,
-    }
-
-    token = jwt.encode(
-        claims,
-        settings.secret_key,
-        algorithm="HS256",
-    )
-
-    return token, expires_at
 
 PRICE_QUOTE_TTL_MINUTES = 2
 
@@ -1179,6 +1149,8 @@ def preview_order_price(
             price_per_minute_kopecks=tariff.price_per_minute_kopecks,
             minimum_fare_kopecks=tariff.minimum_fare_kopecks,
             maximum_fare_kopecks=tariff.maximum_fare_kopecks,
+            included_km=tariff.included_km,
+            included_minutes=tariff.included_minutes,
         )
 
         dynamic_pricing = calculate_order_dynamic_pricing(
@@ -1278,6 +1250,12 @@ def preview_order_price(
         "fare_base_price_kopecks": fare.base_price_kopecks,
         "fare_distance_price_kopecks": fare.distance_price_kopecks,
         "fare_time_price_kopecks": fare.time_price_kopecks,
+        "fare_allowances": {
+            "included_km": str(fare.included_km),
+            "included_minutes": str(fare.included_minutes),
+            "charged_distance_km": str(fare.charged_distance_km),
+            "charged_duration_minutes": str(fare.charged_duration_minutes),
+        },
         "fare_limit_adjustment_kopecks": (
             fare.fare_limit_adjustment_kopecks
         ),
@@ -1321,6 +1299,9 @@ def preview_order_price(
 
     result["price_quote_token"] = price_quote_token
     result["price_quote_expires_at"] = price_quote_expires_at
+
+    # Пассажир получает те же суммы, что подписаны сервером.
+    result["price_breakdown"] = build_price_breakdown(result)
 
     return result
 
@@ -1631,6 +1612,16 @@ def create_order(
             "Не удалось проверить снимок ценового предложения",
         ) from exc
 
+    try:
+        # Запрещаем создание заказа из противоречивой расшифровки цены.
+        # Источник суммы — исключительно подписанный серверный снимок.
+        build_price_breakdown(quote)
+    except PriceBreakdownError as exc:
+        raise HTTPException(
+            409,
+            "Некорректная детализация ценового предложения",
+        ) from exc
+
     if (
         not isinstance(total_kopecks, int)
         or total_kopecks < 0
@@ -1929,6 +1920,114 @@ def list_passenger_orders(
             )
 
     return result
+
+
+@app.get(
+    "/api/v1/passenger/orders/{order_identifier}",
+    response_model=OrderResponse,
+)
+def get_passenger_order(
+    order_identifier: str,
+    passenger: User = Depends(get_current_passenger),
+    db: Session = Depends(get_db),
+):
+    """Fetch one passenger order, including when it is older than history page 1."""
+    if len(order_identifier) > 80 or not order_identifier:
+        raise HTTPException(404, "Заказ не найден")
+
+    try:
+        order_uuid = UUID(order_identifier)
+    except ValueError:
+        order_uuid = None
+
+    if order_uuid is not None:
+        identifier_filter = Order.id == order_uuid
+    else:
+        identifier_filter = Order.public_number == order_identifier
+
+    order = db.scalar(
+        select(Order).where(
+            identifier_filter,
+            Order.passenger_user_id == passenger.id,
+        )
+    )
+    if order is None:
+        raise HTTPException(404, "Заказ не найден")
+
+    city = db.get(City, order.city_id)
+    if city is None:
+        raise HTTPException(404, "Заказ не найден")
+
+    return order_to_response(order, city)
+
+
+@app.post(
+    "/api/v1/passenger/orders/{order_id}/cancel",
+    response_model=OrderResponse,
+)
+def cancel_passenger_order(
+    order_id: UUID,
+    passenger: User = Depends(get_current_passenger),
+    db: Session = Depends(get_db),
+):
+    """Cancel an unassigned order belonging to the logged-in passenger.
+
+    Assigned/arrived trips need a separate cancellation policy that can
+    notify the driver and reconcile fees; avoid silently ending those trips.
+    """
+    order = db.scalar(
+        select(Order)
+        .where(
+            Order.id == order_id,
+            Order.passenger_user_id == passenger.id,
+        )
+        .with_for_update()
+    )
+    if order is None:
+        raise HTTPException(404, "Заказ не найден")
+
+    city = db.get(City, order.city_id)
+    if city is None:
+        raise HTTPException(404, "Заказ не найден")
+
+    # Repeated cancellation must not create additional history records.
+    if order.status == "cancelled":
+        return order_to_response(order, city)
+
+    if order.status not in {"new", "accepted"}:
+        raise HTTPException(
+            409,
+            "После назначения водителя отмена доступна через диспетчера",
+        )
+
+    now = datetime.now(timezone.utc)
+    previous_status = order.status
+    order.status = "cancelled"
+    order.updated_at = now
+
+    offers = db.scalars(
+        select(DriverOrderOffer)
+        .where(
+            DriverOrderOffer.order_id == order.id,
+            DriverOrderOffer.status == "pending",
+        )
+        .with_for_update()
+    ).all()
+    for offer in offers:
+        offer.status = "cancelled"
+        offer.responded_at = now
+
+    db.add(
+        OrderStatusHistory(
+            order_id=order.id,
+            old_status=previous_status,
+            new_status="cancelled",
+            changed_by_user_id=passenger.id,
+        )
+    )
+    db.commit()
+    db.refresh(order)
+    return order_to_response(order, city)
 
 
 # ============================================================

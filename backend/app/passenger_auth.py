@@ -21,6 +21,8 @@ from app.auth_providers import (
 )
 from app.config import settings
 from app.database import get_db
+from app.legal_documents import validate_acceptances
+from app.legal_acceptance_service import record_acceptances
 from app.models import PassengerProfile, User
 from app.phone_utils import normalize_phone
 from app.security import create_passenger_access_token
@@ -34,6 +36,7 @@ router = APIRouter(
 
 class PhoneRequest(BaseModel):
     phone: str = Field(min_length=10, max_length=30)
+    legal_acceptances: list[dict] = Field(default_factory=list)
 
 
 class CodeRequest(BaseModel):
@@ -166,6 +169,9 @@ def complete_authentication(
     try:
         user = create_or_get_passenger(db, phone)
 
+        # Persist legally significant document revision by verified identity.
+        # Draft document catalogue must be formally approved before production.
+        record_acceptances(db, user.id, "client", session.legal_acceptances, "verified_sms_session")
         session.status = "verified"
         session.verified_at = now_utc()
         session.updated_at = now_utc()
@@ -205,6 +211,10 @@ def complete_authentication(
                 "Сессия авторизации не найдена",
             )
 
+        # Persist legally significant document revision by verified identity.
+        # Draft document catalogue must be formally approved before production.
+        record_acceptances(db, user.id, "client", session.legal_acceptances, "verified_sms_session")
+        record_acceptances(db, user.id, "client", session.legal_acceptances, "verified_sms_session")
         session.status = "verified"
         session.verified_at = now_utc()
         session.updated_at = now_utc()
@@ -303,6 +313,10 @@ def request_authentication(
     payload: PhoneRequest,
     db: Session = Depends(get_db),
 ):
+    try:
+        verified_acceptances = validate_acceptances("client", payload.legal_acceptances)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     phone = normalize_phone(payload.phone)
 
     since = now_utc() - timedelta(hours=1)
@@ -369,6 +383,7 @@ def request_authentication(
         )
 
     session = PassengerAuthSession(
+        legal_acceptances=verified_acceptances,
         phone=phone,
         provider=provider,
         provider_session_id=provider_session_id,

@@ -16,7 +16,6 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
             routing_provider=" OSRM ",
             osrm_base_url="http://localhost:5000",
             routing_timeout_seconds=8.0,
-            two_gis_api_key="",
             yandex_api_key="",
         ),
     )
@@ -52,7 +51,6 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
             provider_name="osrm",
             osrm_base_url="http://localhost:5000",
             timeout_seconds=8.0,
-            two_gis_api_key="",
             yandex_api_key="",
         )
         provider.get_route.assert_called_once_with(
@@ -69,7 +67,6 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
             routing_provider="osrm",
             osrm_base_url="http://localhost:5000",
             routing_timeout_seconds=8.0,
-            two_gis_api_key="",
             yandex_api_key="",
         ),
     )
@@ -98,7 +95,6 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
             routing_provider="osrm",
             osrm_base_url="http://localhost:5000",
             routing_timeout_seconds=8.0,
-            two_gis_api_key="",
             yandex_api_key="",
         ),
     )
@@ -130,7 +126,6 @@ class CalculateOrderRoutePriceTests(unittest.TestCase):
             routing_provider="osrm",
             osrm_base_url="http://localhost:5000",
             routing_timeout_seconds=8.0,
-            two_gis_api_key="",
             yandex_api_key="",
         ),
     )

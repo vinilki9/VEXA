@@ -9,6 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import Uuid
@@ -56,6 +57,13 @@ class DriverOrderOffer(Base):
         CheckConstraint(
             "distance_meters IS NULL OR distance_meters >= 0",
             name="driver_order_offers_distance_nonnegative",
+        ),
+        # A driver cannot have two simultaneous pending offers (even across orders).
+        Index(
+            "uq_driver_order_offers_one_pending_per_driver",
+            "driver_user_id", unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
         ),
         Index(
             "ix_driver_order_offers_order_status",

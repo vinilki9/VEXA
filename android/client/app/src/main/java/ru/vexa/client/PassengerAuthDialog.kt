@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Row
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -22,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.json.JSONObject
+import org.json.JSONArray
 
 @Composable
 fun PassengerAuthDialog(
@@ -29,6 +32,11 @@ fun PassengerAuthDialog(
     onDismiss: () -> Unit
 ) {
     var phone by remember { mutableStateOf("") }
+    var legalDocs by remember { mutableStateOf(JSONArray()) }
+    var selectedDocs by remember { mutableStateOf(setOf<String>()) }
+    var openLegalDocument by remember { mutableStateOf<String?>(null) }
+    var legalLoading by remember { mutableStateOf(true) }
+
     var code by remember { mutableStateOf("") }
 
     var sessionId by remember { mutableStateOf<String?>(null) }
@@ -36,6 +44,16 @@ fun PassengerAuthDialog(
 
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        try { legalDocs = JSONArray(ApiClient.getLegalDocuments("client")) }
+        catch (error: Exception) { errorMessage = error.message ?: "Не удалось загрузить соглашения" }
+        finally { legalLoading = false }
+    }
+    val requiredChosen = !legalLoading && legalDocs.length() > 0 && (0 until legalDocs.length()).all { index ->
+        val doc = legalDocs.getJSONObject(index)
+        !doc.optBoolean("required", false) || doc.getString("id") in selectedDocs
+    }
 
     fun processStatus(response: String) {
         val json = JSONObject(response)
@@ -121,6 +139,19 @@ fun PassengerAuthDialog(
                         "Введите номер телефона. На него будет отправлен запрос подтверждения."
                     )
 
+                    (0 until legalDocs.length()).forEach { index ->
+                        val doc = legalDocs.getJSONObject(index)
+                        val documentId = doc.getString("id")
+                        Row {
+                            Checkbox(checked = documentId in selectedDocs,
+                                onCheckedChange = { checked ->
+                                    selectedDocs = if (checked) selectedDocs + documentId else selectedDocs - documentId
+                                })
+                            TextButton(onClick = { openLegalDocument = documentId }) {
+                                Text(doc.getString("title") + if (doc.optBoolean("required")) " *" else "")
+                            }
+                        }
+                    }
                     OutlinedTextField(
                         value = phone,
                         onValueChange = {
@@ -196,7 +227,7 @@ fun PassengerAuthDialog(
         confirmButton = {
             if (sessionId == null) {
                 Button(
-                    enabled = !loading &&
+                    enabled = !loading && requiredChosen &&
                         phone.count { it.isDigit() } >= 10,
                     onClick = {
                         loading = true
@@ -237,12 +268,36 @@ fun PassengerAuthDialog(
         }
     )
 
+    if (openLegalDocument != null) {
+        val documentId = openLegalDocument!!
+        var content by remember(documentId) { mutableStateOf("Загрузка...") }
+        LaunchedEffect(documentId) {
+            try {
+                content = JSONObject(ApiClient.getLegalDocument("client", documentId)).getString("body")
+            } catch (error: Exception) { content = "Не удалось загрузить документ: ${error.message}" }
+        }
+        AlertDialog(onDismissRequest = { openLegalDocument = null },
+            title = { Text("Юридический документ") },
+            text = { androidx.compose.foundation.lazy.LazyColumn { item { Text(content) } } },
+            confirmButton = { TextButton(onClick = { openLegalDocument = null }) { Text("Закрыть") } })
+    }
+
     LaunchedEffect(authStatus) {
         if (authStatus == "starting") {
             try {
                 loading = true
 
-                val response = ApiClient.requestPassengerAuth(phone)
+                val accepted = JSONArray()
+                (0 until legalDocs.length()).forEach { index ->
+                    val doc = legalDocs.getJSONObject(index)
+                    if (doc.getString("id") in selectedDocs) {
+                        accepted.put(JSONObject().put("id", doc.getString("id"))
+                            .put("version", doc.getString("version"))
+                            .put("sha256", doc.getString("sha256"))
+                            .put("accepted", true))
+                    }
+                }
+                val response = ApiClient.requestPassengerAuth(phone, accepted.toString())
                 val json = JSONObject(response)
 
                 val newSessionId = json.optString("session_id")

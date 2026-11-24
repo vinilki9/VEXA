@@ -8,15 +8,20 @@ import java.util.concurrent.TimeUnit
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.RequestBody.Companion.toRequestBody
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** Ошибка HTTP с доступным клиенту кодом ответа для обработки 401/403/409. */
+class ApiHttpException(val statusCode: Int, detail: String) :
+    Exception("Ошибка сервера: $statusCode $detail")
+
 object ApiClient {
 
-    private const val BASE_URL = "https://109.120.184.20"
-    private const val DEFAULT_CITY_CODE = "obolensk"
+    private val BASE_URL = BuildConfig.VEXA_API_BASE_URL
+    private val DEFAULT_CITY_CODE = BuildConfig.VEXA_CITY_CODE
 
     private val JSON_MEDIA_TYPE =
         "application/json; charset=utf-8".toMediaType()
@@ -143,9 +148,7 @@ object ApiClient {
                 val result = response.body?.string().orEmpty()
 
                 if (!response.isSuccessful) {
-                    throw Exception(
-                        "Ошибка сервера: ${response.code} $result"
-                    )
+                    throw ApiHttpException(response.code, result)
                 }
 
                 result
@@ -219,12 +222,20 @@ object ApiClient {
      *
      * POST /api/v1/auth/passenger/request
      */
+    suspend fun getLegalDocuments(role: String): String =
+        executeRequest(Request.Builder().url("$BASE_URL/api/v1/legal/roles/$role").get().build())
+
+    suspend fun getLegalDocument(role: String, id: String): String =
+        executeRequest(Request.Builder().url("$BASE_URL/api/v1/legal/roles/$role/$id").get().build())
+
     suspend fun requestPassengerAuth(
-        phone: String
+        phone: String,
+        legalAcceptancesJson: String
     ): String {
         val json = """
             {
-                "phone": ${jsonString(phone)}
+                "phone": ${jsonString(phone)},
+                "legal_acceptances": $legalAcceptancesJson
             }
         """.trimIndent()
 
@@ -304,6 +315,56 @@ object ApiClient {
             .post(body)
             .build()
 
+        return executeRequest(request)
+    }
+
+    /**
+     * Получить один заказ по UUID или публичному номеру.
+     * Сервер возвращает только заказы текущего пассажира.
+     */
+    suspend fun getPassengerOrder(orderIdentifier: String): String {
+        val token = accessToken
+            ?: throw IllegalStateException(
+                "Для просмотра заказа необходимо войти в профиль"
+            )
+
+        require(orderIdentifier.isNotBlank() && orderIdentifier.length <= 80) {
+            "Некорректный идентификатор заказа"
+        }
+
+        val url = BASE_URL.toHttpUrl()
+            .newBuilder()
+            .addPathSegments("api/v1/passenger/orders")
+            .addPathSegment(orderIdentifier)
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+
+        return executeRequest(request)
+    }
+
+    /** Отменить свой ещё не назначенный заказ (POST, идемпотентно). */
+    suspend fun cancelPassengerOrder(orderIdentifier: String): String {
+        val token = accessToken
+            ?: throw IllegalStateException("Для отмены заказа войдите в профиль")
+        require(orderIdentifier.isNotBlank() && orderIdentifier.length <= 80) {
+            "Некорректный идентификатор заказа"
+        }
+        val url = BASE_URL.toHttpUrl()
+            .newBuilder()
+            .addPathSegments("api/v1/passenger/orders")
+            .addPathSegment(orderIdentifier)
+            .addPathSegment("cancel")
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .post("".toRequestBody(JSON_MEDIA_TYPE))
+            .build()
         return executeRequest(request)
     }
 

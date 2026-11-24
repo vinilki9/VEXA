@@ -4,7 +4,6 @@ import unittest
 from app.routing import RoutingError
 from app.routing_providers import (
     OSRMProvider,
-    TwoGISProvider,
     YandexProvider,
     get_routing_provider,
 )
@@ -26,16 +25,9 @@ class RoutingProviderTests(unittest.TestCase):
         )
         self.assertEqual(provider.timeout_seconds, 8.0)
 
-    def test_selects_two_gis_provider(self):
-        provider = get_routing_provider(
-            provider_name="2gis",
-            osrm_base_url="",
-            two_gis_api_key=" test-key ",
-            timeout_seconds=8.0,
-        )
-
-        self.assertIsInstance(provider, TwoGISProvider)
-        self.assertEqual(provider.api_key, "test-key")
+    def test_legacy_2gis_is_rejected(self):
+        with self.assertRaises(RoutingError):
+            get_routing_provider(provider_name="2gis", osrm_base_url="http://localhost:5000")
 
     def test_selects_yandex_provider(self):
         provider = get_routing_provider(
@@ -80,15 +72,6 @@ class RoutingProviderTests(unittest.TestCase):
                         timeout_seconds=timeout,
                     )
 
-    def test_two_gis_rejects_invalid_timeout(self):
-        with self.assertRaises(ValueError):
-            get_routing_provider(
-                provider_name="2gis",
-                osrm_base_url="",
-                two_gis_api_key="test-key",
-                timeout_seconds=0,
-            )
-
     def test_yandex_rejects_invalid_timeout(self):
         with self.assertRaises(ValueError):
             get_routing_provider(
@@ -97,16 +80,6 @@ class RoutingProviderTests(unittest.TestCase):
                 yandex_api_key="test-key",
                 timeout_seconds=31,
             )
-
-    def test_two_gis_rejects_empty_api_key(self):
-        provider = get_routing_provider(
-            provider_name="2gis",
-            osrm_base_url="",
-            two_gis_api_key="   ",
-        )
-
-        with self.assertRaises(RoutingError):
-            provider.get_route(55.1, 37.2, 55.2, 37.3)
 
     def test_yandex_rejects_empty_api_key(self):
         provider = get_routing_provider(

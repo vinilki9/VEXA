@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     osrm_base_url: str = ""
     osrm_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
     routing_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
-    two_gis_api_key: str = ""
     yandex_api_key: str = ""
     default_city_id: str = "obolensk"
 
@@ -30,7 +29,15 @@ class Settings(BaseSettings):
         le=10,
     )
 
-    public_api_base_url: str = "https://109.120.184.20"
+    # One dedicated background matcher, independent from HTTP application.
+    dispatch_search_timeout_seconds: int = Field(default=180, ge=30, le=1800)
+    dispatch_poll_interval_seconds: float = Field(default=2.0, ge=0.5, le=30)
+    dispatch_batch_size: int = Field(default=100, ge=1, le=500)
+
+    # Fail-closed by default; dev-only opt-out is explicit and forbidden in production.
+    legal_dispatch_enforcement: bool = True
+
+    public_api_base_url: str = "https://45.143.139.162"
 
     # SMS Aero
     sms_aero_email: str = ""
@@ -58,6 +65,8 @@ class Settings(BaseSettings):
         environment = self.environment.strip().lower()
 
         if environment in {"production", "prod"}:
+            if not self.legal_dispatch_enforcement:
+                raise ValueError("Production requires LEGAL_DISPATCH_ENFORCEMENT=true")
             if (
                 self.secret_key == "CHANGE_ME_BEFORE_DEPLOYMENT"
                 or len(self.secret_key) < 32
@@ -79,9 +88,6 @@ class Settings(BaseSettings):
 
         allowed_providers = {
             "osrm",
-            "2gis",
-            "two_gis",
-            "2гис",
             "yandex",
             "yandex_maps",
             "яндекс",

@@ -1,7 +1,4 @@
 
-import asyncio
-import logging
-
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from uuid import UUID
@@ -12,7 +9,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.database import SessionLocal, get_db
+from app.database import get_db
+from app.legal_dispatch_gate import legal_eligibility
 from app.models import (
     Branch,
     City,
@@ -39,7 +37,7 @@ from app.dispatch_driver_api import router as dispatch_driver_router
 from app.dispatch_order_api import (
     NO_AVAILABLE_DRIVERS_MESSAGE,
     create_next_driver_offer,
-    process_expired_driver_offers,
+    normalize_datetime,
 )
 
 
@@ -273,6 +271,7 @@ def driver_order_response(
         "status": order.status,
         "customer_name": order.customer_name,
         "customer_phone": order.customer_phone,
+        "comment": order.comment,
         "pickup": {
             "address": order.pickup_address,
             "latitude": order.pickup_latitude,
@@ -514,7 +513,7 @@ def driver_active_orders(
 
 @router.post("/api/v1/driver/orders/{order_id}/status")
 def update_driver_order_status(
-    order_id: str,
+    order_id: UUID,
     payload: DriverOrderStatusRequest,
     driver: User = Depends(get_current_driver),
     db: Session = Depends(get_db),
@@ -536,6 +535,16 @@ def update_driver_order_status(
             404,
             "Активный заказ водителя не найден",
         )
+
+    # Повторный POST после потери сетевого ответа не должен создавать
+    # второй журнал события или повторно начислять деньги водителю.
+    if payload.status == order.status and payload.status in DRIVER_ORDER_STATUS_TRANSITIONS.values():
+        vehicle = db.get(Vehicle, order.vehicle_id) if order.vehicle_id is not None else None
+        return {
+            "success": True,
+            "message": "Статус уже установлен",
+            "order": driver_order_response(order, vehicle),
+        }
 
     expected_status = DRIVER_ORDER_STATUS_TRANSITIONS.get(
         order.status
@@ -817,15 +826,11 @@ router.include_router(dispatch_driver_router)
 # DRIVER ORDER OFFERS
 # ============================================================
 
-logger = logging.getLogger(__name__)
-
 DRIVER_OFFER_ACTIVE_ORDER_STATUSES = (
     "assigned",
     "arrived",
     "in_progress",
 )
-
-_driver_offer_worker_task: asyncio.Task | None = None
 
 
 def _advance_after_driver_offer(
@@ -850,9 +855,24 @@ def _advance_after_driver_offer(
         return {
             "success": True,
             "offered": False,
-            "waiting_for_dispatcher": True,
+            "search_in_progress": False,
             "message": "Заказ больше не ожидает назначения водителя",
         }
+
+    # Automatic search is bounded, including the fast rejection path.
+    from app.dispatch_engine import mark_no_driver_found
+    from app.config import settings
+    now = datetime.now(timezone.utc)
+    created_at = normalize_datetime(order.created_at)
+    if (now - created_at).total_seconds() >= settings.dispatch_search_timeout_seconds:
+        if mark_no_driver_found(db, order, now):
+            return {
+                "success": True,
+                "offered": False,
+                "no_driver_found": True,
+                "message": "Поиск завершён: свободных машин не найдено",
+            }
+        return {"success": True, "offered": False, "search_in_progress": True}
 
     try:
         return create_next_driver_offer(
@@ -867,11 +887,8 @@ def _advance_after_driver_offer(
             return {
                 "success": True,
                 "offered": False,
-                "waiting_for_dispatcher": True,
-                "message": (
-                    "Свободных водителей нет. "
-                    "Заказ ожидает назначения диспетчером."
-                ),
+                "search_in_progress": True,
+                "message": "Автопоиск продолжается, система проверит новых водителей.",
             }
         raise
 
@@ -1127,6 +1144,17 @@ def accept_driver_order_offer(
             "next_offer": next_offer,
         }
 
+    # Re-check at acceptance: eligibility can expire after the offer was created.
+    permitted, blockers = legal_eligibility(db, driver.id, vehicle.id,
+        child_seats_required=bool(order.child_seat))
+    if not permitted:
+        offer.status = "cancelled"
+        offer.responded_at = now
+        db.commit()
+        return {"success": False, "cancelled": True,
+                "message": "Допуск к заказу не подтверждён",
+                "reason_code": "LEGAL_DISPATCH_BLOCKED", "reasons": list(blockers)}
+
     busy_order_id = db.scalar(
         select(Order.id)
         .where(
@@ -1291,53 +1319,4 @@ def reject_driver_order_offer(
     }
 
 
-async def _driver_offer_expiry_worker() -> None:
-    """
-    Периодически обрабатывает предложения, на которые водитель
-    не ответил за установленное время.
-    """
-    while True:
-        await asyncio.sleep(1)
-
-        db = SessionLocal()
-
-        try:
-            process_expired_driver_offers(
-                db=db,
-                limit=100,
-            )
-        except Exception:
-            db.rollback()
-            logger.exception(
-                "Ошибка фоновой обработки просроченных предложений заказов"
-            )
-        finally:
-            db.close()
-
-
-@router.on_event("startup")
-async def start_driver_offer_expiry_worker() -> None:
-    global _driver_offer_worker_task
-
-    if (
-        _driver_offer_worker_task is None
-        or _driver_offer_worker_task.done()
-    ):
-        _driver_offer_worker_task = asyncio.create_task(
-            _driver_offer_expiry_worker()
-        )
-
-
-@router.on_event("shutdown")
-async def stop_driver_offer_expiry_worker() -> None:
-    global _driver_offer_worker_task
-
-    if _driver_offer_worker_task is not None:
-        _driver_offer_worker_task.cancel()
-
-        try:
-            await _driver_offer_worker_task
-        except asyncio.CancelledError:
-            pass
-
-        _driver_offer_worker_task = None
+# Offer expiry now belongs to app.dispatch_worker, not the HTTP API.

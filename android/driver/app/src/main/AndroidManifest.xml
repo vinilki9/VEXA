@@ -11,11 +11,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- Разрешение на отображение уведомлений Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <application
         android:name=".VexaApplication"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:label="VEXA Driver"
-        android:usesCleartextTraffic="false"
+        android:usesCleartextTraffic="${vexaCleartext}"
+        android:networkSecurityConfig="@xml/vexa_network_security_config"
+        android:allowBackup="false"
         tools:ignore="MissingClass">
         <!-- Финансовый экран водителя -->
         <activity

@@ -1,128 +1,62 @@
-
 package ru.vexa.client
 
-import android.os.Handler
-import android.os.Looper
-import ru.dgis.sdk.directory.SearchManager
-import ru.dgis.sdk.directory.SuggestQueryBuilder
+import android.content.Context
+import ru.vexa.offline.OfflineMapMode
+import ru.vexa.offline.OfflineMapConnectivity
+import ru.vexa.offline.OfflineNavigation
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.Request
+import org.json.JSONObject
+import java.net.URLEncoder
 
-data class AddressResult(
-    val name: String,
-    val latitude: Double,
-    val longitude: Double
-)
+/** Online VEXA MAP + offline regional index; never falls back to third-party maps. */
+data class AddressResult(val name: String, val latitude: Double, val longitude: Double)
 
 object AddressSearch {
-
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private val managerLock = Any()
-
-    @Volatile
-    private var searchManager: SearchManager? = null
-
-    private fun getSearchManager(): SearchManager {
-        searchManager?.let {
-            return it
+    suspend fun search(context: Context, query: String): List<AddressResult> = withContext(Dispatchers.IO) {
+        val mode = OfflineMapMode.load(context)
+        val offline = mode == OfflineMapMode.OFFLINE ||
+            (mode == OfflineMapMode.AUTO && !OfflineMapConnectivity.validatedInternet(context))
+        suspend fun local(): List<AddressResult> {
+            val nav = OfflineNavigation(context)
+            if (nav.status().addressRegions.isEmpty())
+                throw IllegalStateException("Нет офлайн-адресов: скачайте подготовленный пакет округа")
+            return nav.search(query).map { AddressResult(it.name, it.latitude, it.longitude) }
         }
-
-        synchronized(managerLock) {
-            searchManager?.let {
-                return it
-            }
-
-            val sdkContext = VexaApplication.instance.sdkContext
-
-            return SearchManager.createSmartManager(sdkContext).also {
-                searchManager = it
-            }
+        if (offline) return@withContext local()
+        try { onlineSearch(query) } catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (mode == OfflineMapMode.ONLINE) throw e
+            local()
         }
     }
 
-    fun search(
-        query: String,
-        onResult: (List<AddressResult>) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val normalizedQuery = query.trim()
-
-        if (normalizedQuery.isEmpty()) {
-            mainHandler.post {
-                onResult(emptyList())
+    private suspend fun onlineSearch(query: String): List<AddressResult> = withContext(Dispatchers.IO) {
+        val text = query.trim()
+        if (text.isEmpty()) return@withContext emptyList()
+        val encoded = URLEncoder.encode(text, "UTF-8")
+        val req = Request.Builder()
+            .url("${BuildConfig.VEXA_MAP_BASE_URL}/v1/search?q=$encoded")
+            .get().build()
+        ApiClient.client.newCall(req).execute().use { response ->
+            val raw = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val detail = runCatching { JSONObject(raw).optString("error") }.getOrDefault("")
+                throw IllegalStateException(detail.ifBlank { "VEXA MAP: поиск адресов недоступен (${response.code})" })
             }
-            return
-        }
-
-        try {
-            val manager = getSearchManager()
-
-            val request = SuggestQueryBuilder(normalizedQuery)
-                .setLimit(10)
-                .build()
-
-            manager.suggest(request)
-                .onComplete(
-                    { suggestResult ->
-
-                        val addresses = suggestResult.suggests
-                            .orEmpty()
-                            .mapNotNull { suggestion ->
-
-                                var addressResult: AddressResult? = null
-
-                                suggestion.handler.match(
-                                    objectHandler = { objectHandler ->
-
-                                        val item = objectHandler.item
-                                        val point = item.markerPosition
-
-                                        if (point != null) {
-                                            val name = suggestion.title.text
-
-                                            if (name.isNotBlank()) {
-                                                addressResult = AddressResult(
-                                                    name = name,
-                                                    latitude = point.latitude.value,
-                                                    longitude = point.longitude.value
-                                                )
-                                            }
-                                        }
-                                    },
-                                    performSearchHandler = {
-                                        // Поисковый запрос без готовых координат.
-                                    },
-                                    incompleteTextHandler = {
-                                        // Незавершённый текст не является адресом.
-                                    }
-                                )
-
-                                addressResult
-                            }
-                            .distinctBy {
-                                "${it.latitude}:${it.longitude}"
-                            }
-
-                        mainHandler.post {
-                            onResult(addresses)
-                        }
-                    },
-                    { error ->
-
-                        val message = error.message
-                            ?: "Не удалось выполнить поиск адреса."
-
-                        mainHandler.post {
-                            onError(message)
-                        }
+            val list = JSONObject(raw).optJSONArray("results") ?: return@use emptyList()
+            buildList {
+                for (i in 0 until list.length()) {
+                    val entry = list.optJSONObject(i) ?: continue
+                    val lat = entry.optDouble("latitude", Double.NaN)
+                    val lon = entry.optDouble("longitude", Double.NaN)
+                    val name = entry.optString("name").trim()
+                    if (name.isNotEmpty() && lat in -90.0..90.0 && lon in -180.0..180.0) {
+                        add(AddressResult(name, lat, lon))
                     }
-                )
-
-        } catch (error: Exception) {
-
-            val message = error.message
-                ?: "Ошибка запуска поиска адреса."
-
-            mainHandler.post {
-                onError(message)
+                }
             }
         }
     }

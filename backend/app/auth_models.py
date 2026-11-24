@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Index, Integer, String
+from sqlalchemy import DateTime, Index, Integer, String, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -33,6 +33,8 @@ class PassengerAuthSession(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
+
+    legal_acceptances: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
     phone: Mapped[str] = mapped_column(
         String(20),

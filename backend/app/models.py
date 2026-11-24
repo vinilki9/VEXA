@@ -184,6 +184,11 @@ class Tariff(Base):
             "price_per_minute_kopecks >= 0",
             name="tariffs_price_per_minute_nonnegative",
         ),
+        CheckConstraint("included_km >= 0", name="tariffs_included_km_nonnegative"),
+        CheckConstraint("included_minutes >= 0", name="tariffs_included_minutes_nonnegative"),
+        CheckConstraint("free_wait_minutes >= 0", name="tariffs_free_wait_nonnegative"),
+        CheckConstraint("waiting_price_per_minute_kopecks >= 0", name="tariffs_wait_price_nonnegative"),
+        CheckConstraint("stop_price_kopecks >= 0", name="tariffs_stop_price_nonnegative"),
         CheckConstraint(
             "minimum_fare_kopecks IS NULL OR minimum_fare_kopecks >= 0",
             name="tariffs_minimum_fare_nonnegative",
@@ -258,6 +263,26 @@ class Tariff(Base):
         Integer,
         nullable=False,
         default=0,
+    )
+
+    # Included route distance/minutes are deducted before per-unit pricing.
+    # Numeric values avoid floating-point money calculation drift.
+    included_km: Mapped[Decimal] = mapped_column(
+        Numeric(9, 3), nullable=False, default=Decimal("0"), server_default="0"
+    )
+    included_minutes: Mapped[Decimal] = mapped_column(
+        Numeric(9, 2), nullable=False, default=Decimal("0"), server_default="0"
+    )
+    # Operational charges are configured but not collected automatically until
+    # verified trip events are implemented end-to-end.
+    free_wait_minutes: Mapped[Decimal] = mapped_column(
+        Numeric(9, 2), nullable=False, default=Decimal("0"), server_default="0"
+    )
+    waiting_price_per_minute_kopecks: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    stop_price_kopecks: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
     )
 
     minimum_fare_kopecks: Mapped[int | None] = mapped_column(

@@ -1,5 +1,6 @@
 
 from dataclasses import dataclass
+from decimal import Decimal
 
 from app.config import settings
 from app.pricing import FareResult, calculate_fare
@@ -25,6 +26,8 @@ def calculate_order_route_price(
     price_per_minute_kopecks: int,
     minimum_fare_kopecks: int | None = None,
     maximum_fare_kopecks: int | None = None,
+    included_km: Decimal = Decimal("0"),
+    included_minutes: Decimal = Decimal("0"),
 ) -> OrderRoutePricing:
     """
     Получает маршрут у выбранного поставщика
@@ -40,7 +43,6 @@ def calculate_order_route_price(
         provider_name=provider_name,
         osrm_base_url=settings.osrm_base_url,
         timeout_seconds=settings.routing_timeout_seconds,
-        two_gis_api_key=settings.two_gis_api_key,
         yandex_api_key=settings.yandex_api_key,
     )
 
@@ -68,6 +70,8 @@ def calculate_order_route_price(
         duration_minutes=route.duration_minutes,
         minimum_fare_kopecks=minimum_fare_kopecks,
         maximum_fare_kopecks=maximum_fare_kopecks,
+        included_km=included_km,
+        included_minutes=included_minutes,
     )
 
     return OrderRoutePricing(

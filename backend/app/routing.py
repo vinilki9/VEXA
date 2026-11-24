@@ -1,5 +1,6 @@
 
 import json
+from contextlib import closing
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from math import isfinite
@@ -70,7 +71,7 @@ def get_driving_route(
     )
 
     try:
-        with urlopen(url, timeout=timeout_seconds) as response:
+        with closing(urlopen(url, timeout=timeout_seconds)) as response:
             payload = json.loads(response.read().decode("utf-8"))
 
     except (URLError, TimeoutError, OSError, HTTPException) as exc:

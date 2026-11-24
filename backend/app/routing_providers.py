@@ -67,35 +67,6 @@ class OSRMProvider(RoutingProvider):
         )
 
 
-class TwoGISProvider(RoutingProvider):
-    """Адаптер для будущей интеграции API 2ГИС."""
-
-    def __init__(
-        self,
-        api_key: str,
-        timeout_seconds: float = 8.0,
-    ) -> None:
-        _validate_timeout(timeout_seconds)
-        self.api_key = api_key.strip()
-        self.timeout_seconds = timeout_seconds
-
-    def get_route(
-        self,
-        pickup_latitude: float,
-        pickup_longitude: float,
-        destination_latitude: float,
-        destination_longitude: float,
-    ) -> RouteResult:
-        if not self.api_key:
-            raise RoutingError(
-                "Для подключения 2ГИС необходим API-ключ"
-            )
-
-        raise RoutingError(
-            "Интеграция API 2ГИС ещё не завершена"
-        )
-
-
 class YandexProvider(RoutingProvider):
     """Адаптер для будущей интеграции Яндекс Маршрутизации."""
 
@@ -130,7 +101,6 @@ def get_routing_provider(
     provider_name: str,
     osrm_base_url: str,
     timeout_seconds: float = 8.0,
-    two_gis_api_key: str = "",
     yandex_api_key: str = "",
 ) -> RoutingProvider:
     """Выбирает поставщика маршрутов по настройке сервера."""
@@ -140,12 +110,6 @@ def get_routing_provider(
     if provider == "osrm":
         return OSRMProvider(
             base_url=osrm_base_url,
-            timeout_seconds=timeout_seconds,
-        )
-
-    if provider in {"2gis", "two_gis", "2гис"}:
-        return TwoGISProvider(
-            api_key=two_gis_api_key,
             timeout_seconds=timeout_seconds,
         )
 

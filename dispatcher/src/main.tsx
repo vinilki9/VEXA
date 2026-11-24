@@ -9,9 +9,10 @@ import VexaMap from './components/VexaMap';
 import DriverFinancePanel from './components/DriverFinancePanel';
 import FinanceSummaryPanel from './components/FinanceSummaryPanel';
 import './style.css';
+import LegalDocumentsPanel from './components/LegalDocumentsPanel';
 
-const API_BASE = 'https://109.120.184.20';
-const CITY_CODE = 'obolensk';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const CITY_CODE = import.meta.env.VITE_CITY_CODE?.trim() || 'obolensk';
 const TOKEN_KEY = 'vexa_dispatch_token';
 
 type OrderTimelineEvent = {
@@ -159,19 +160,19 @@ function getPaymentLabel(method: string) {
 const inputStyle: React.CSSProperties = {
   width: '100%',
   height: 43,
-  border: '1px solid #dfe6eb',
+  border: '1px solid var(--vexa-border)',
   borderRadius: 8,
   padding: '0 12px',
   fontSize: 13,
   outline: 'none',
-  background: '#fff',
+  background: 'var(--vexa-surface)',
 };
 
 const primaryButtonStyle: React.CSSProperties = {
   border: 0,
   borderRadius: 8,
-  background: '#20b8aa',
-  color: '#fff',
+  background: 'var(--vexa-primary)',
+  color: 'var(--vexa-on-primary)',
   padding: '11px 15px',
   fontSize: 12,
   fontWeight: 700,
@@ -179,10 +180,10 @@ const primaryButtonStyle: React.CSSProperties = {
 };
 
 const secondaryButtonStyle: React.CSSProperties = {
-  border: '1px solid #dfe6eb',
+  border: '1px solid var(--vexa-border)',
   borderRadius: 8,
-  background: '#fff',
-  color: '#526174',
+  background: 'var(--vexa-surface)',
+  color: 'var(--vexa-text-secondary)',
   padding: '10px 14px',
   fontSize: 12,
   fontWeight: 600,
@@ -193,8 +194,8 @@ const errorStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  color: '#b42318',
-  background: '#fff0ee',
+  color: 'var(--vexa-danger)',
+  background: 'rgba(255, 133, 141, 0.13)',
   borderRadius: 8,
   padding: 10,
   fontSize: 11,
@@ -231,12 +232,12 @@ function LoginScreen({
       display: 'grid',
       placeItems: 'center',
       padding: 20,
-      background: '#f5f7fa',
+      background: 'var(--vexa-canvas)',
     }}>
       <form onSubmit={submit} style={{
         width: '100%',
         maxWidth: 390,
-        background: '#fff',
+        background: 'var(--vexa-surface)',
         border: '1px solid #e8edf2',
         borderRadius: 18,
         padding: 30,
@@ -252,7 +253,7 @@ function LoginScreen({
           Вход диспетчера
         </h1>
 
-        <p style={{ color: '#8994a3', fontSize: 13, marginBottom: 24 }}>
+        <p style={{ color: 'var(--vexa-text-secondary)', fontSize: 13, marginBottom: 24 }}>
           Войдите в панель управления VEXA
         </p>
 
@@ -304,7 +305,7 @@ function LoginScreen({
         </button>
 
         <p style={{
-          color: '#a0aab7',
+          color: 'var(--vexa-text-secondary)',
           fontSize: 10,
           textAlign: 'center',
           marginTop: 20,
@@ -326,6 +327,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   const [drivers, setDrivers] = useState<OnlineDriver[]>([]);
@@ -392,32 +394,56 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem(TOKEN_KEY);
-    if (!savedToken) return;
-
-    setToken(savedToken);
-
-    Promise.all([
-      loadProfile(savedToken),
-      loadOrders(savedToken),
-      loadDriverLocations(savedToken),
-    ]).catch(() => {
-      localStorage.removeItem(TOKEN_KEY);
-      setToken(null);
-      setDispatcher(null);
-    });
-  }, [loadOrders, loadProfile, loadDriverLocations]);
+    let active = true;
+    const checkHealth = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/health`, { cache: 'no-store' });
+        const body = await response.json().catch(() => null);
+        if (active) setServerOnline(response.ok && body?.service === 'vexa-api');
+      } catch {
+        if (active) setServerOnline(false);
+      }
+    };
+    void checkHealth();
+    const timer = window.setInterval(() => void checkHealth(), 15000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
-    if (!token) return;
+    const savedToken = localStorage.getItem(TOKEN_KEY);
+    if (!savedToken) return;
+    let cancelled = false;
 
+    // Do not expose the dispatcher workspace before the server verifies the role.
+    apiRequest('/api/v1/dispatch/auth/me', savedToken)
+      .then((profile: DispatcherProfile) => {
+        if (cancelled) return;
+        setDispatcher(profile);
+        setToken(savedToken);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        localStorage.removeItem(TOKEN_KEY);
+        setToken(null);
+        setDispatcher(null);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!token || !dispatcher) return;
+
+    // Failed order/driver fetches should show an error, not invalidate a valid login.
+    void loadOrders(token);
+    void loadDriverLocations(token);
     const interval = window.setInterval(() => {
-      loadOrders(token);
-      loadDriverLocations(token);
+      void loadOrders(token);
+      void loadDriverLocations(token);
     }, 15000);
 
     return () => window.clearInterval(interval);
-  }, [token, loadOrders, loadDriverLocations]);
+  }, [token, dispatcher, loadOrders, loadDriverLocations]);
 
   async function login(username: string, password: string) {
     const result = await apiRequest(
@@ -440,10 +466,7 @@ function App() {
     localStorage.setItem(TOKEN_KEY, accessToken);
     setToken(accessToken);
 
-    await Promise.all([
-      loadOrders(accessToken),
-      loadDriverLocations(accessToken),
-    ]);
+    // Initial data is loaded by the authenticated-session effect.
   }
 
   function closeAssignment() {
@@ -602,7 +625,7 @@ function App() {
     }
   }
 
-  if (!token) {
+  if (!token || !dispatcher) {
     return <LoginScreen onLogin={login} />;
   }
 
@@ -619,6 +642,7 @@ function App() {
 
   return (
     <div className="shell">
+      <div style={{position:"fixed",bottom:8,right:8,zIndex:1000,maxHeight:"65vh",overflow:"auto",maxWidth:500,background:"#17282b",color:"#fff",padding:6}}><details><summary>Юридические документы</summary><LegalDocumentsPanel token={token} role="dispatcher" apiBase={API_BASE} /></details></div>
       <aside>
         <div className="brand">
           <span className="mark">V</span>
@@ -680,7 +704,7 @@ function App() {
 
         <div className="branch">
           <span className="dot" />
-          Оболенск · Пилотный город
+          {CITY_CODE} · Рабочий город
         </div>
       </aside>
 
@@ -690,16 +714,18 @@ function App() {
             <p className="eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ</p>
             <h1>Обзор диспетчера</h1>
             <p style={{
-              color: '#8994a3',
+              color: 'var(--vexa-text-secondary)',
               fontSize: 11,
               marginTop: 7,
             }}>
-              {dispatcher?.username || 'Диспетчер'} · Оболенск
+              {dispatcher?.username || 'Диспетчер'} · {CITY_CODE}
             </p>
           </div>
 
           <div className="headright">
-            <span className="online"><i />Сервер подключён</span>
+            <span className={`online ${serverOnline === false ? 'offline' : ''}`} aria-live="polite">
+              <i />{serverOnline === null ? 'Проверка сервера' : serverOnline ? 'Сервер подключён' : 'Сервер недоступен'}
+            </span>
 
             <button
               onClick={() => {
@@ -819,7 +845,7 @@ function App() {
                   <span style={statLabelStyle}>На линии</span>
                   <strong style={{
                     ...statNumberStyle,
-                    color: '#07866f',
+                    color: 'var(--vexa-primary)',
                   }}>
                     {onlineDrivers.length}
                   </strong>
@@ -953,8 +979,8 @@ function App() {
                         <div style={onlineDriverTopStyle}>
                           <div style={{
                             ...driverAvatarStyle,
-                            background: '#f0f2f5',
-                            color: '#8994a3',
+                            background: 'var(--vexa-surface-2)',
+                            color: 'var(--vexa-text-secondary)',
                           }}>
                             <CarFront size={19} />
                           </div>
@@ -1020,7 +1046,7 @@ function App() {
                 <div className="cardhead">
                   <div>
                     <h2>Карта города</h2>
-                    <p>Карта 2ГИС · Местоположение водителей</p>
+                    <p>VEXA MAP · Местоположение водителей</p>
                   </div>
 
                   <span className="live">
@@ -1166,7 +1192,7 @@ function App() {
 
                 <p style={{
                   margin: '6px 0 0',
-                  color: '#8994a3',
+                  color: 'var(--vexa-text-secondary)',
                   fontSize: 12,
                 }}>
                   Заказ №{selectedOrder.public_number}
@@ -1269,7 +1295,7 @@ function App() {
                   <span style={orderDetailLabelStyle}>Хронология событий</span>
                   <p style={{
                     margin: '5px 0 0',
-                    color: '#8994a3',
+                    color: 'var(--vexa-text-secondary)',
                     fontSize: 11,
                     lineHeight: 1.5,
                   }}>
@@ -1299,10 +1325,10 @@ function App() {
                             marginTop: 4,
                             borderRadius: '50%',
                             background: event.event_type === 'order_status'
-                              ? '#0f9f91'
+                              ? 'var(--vexa-primary)'
                               : event.event_type === 'order_created'
-                                ? '#64748b'
-                                : '#3b82f6',
+                                ? 'var(--vexa-text-secondary)'
+                                : '#89C6ED',
                             flexShrink: 0,
                           }} />
                           {index < selectedOrder.timeline!.length - 1 && (
@@ -1310,7 +1336,7 @@ function App() {
                               width: 1,
                               flex: 1,
                               minHeight: 28,
-                              background: '#e2e8f0',
+                              background: 'var(--vexa-surface-2)',
                               marginTop: 4,
                             }} />
                           )}
@@ -1323,21 +1349,21 @@ function App() {
                           minWidth: 0,
                         }}>
                           <b style={{
-                            color: '#172033',
+                            color: 'var(--vexa-text)',
                             fontSize: 12,
                             lineHeight: 1.4,
                           }}>
                             {event.title}
                           </b>
                           <span style={{
-                            color: '#8994a3',
+                            color: 'var(--vexa-text-secondary)',
                             fontSize: 10,
                           }}>
                             {formatDate(event.occurred_at)}
                           </span>
                           {event.description && (
                             <span style={{
-                              color: '#526174',
+                              color: 'var(--vexa-text-secondary)',
                               fontSize: 11,
                               lineHeight: 1.5,
                               overflowWrap: 'anywhere',
@@ -1347,7 +1373,7 @@ function App() {
                           )}
                           {event.actor && (
                             <span style={{
-                              color: '#64748b',
+                              color: 'var(--vexa-text-secondary)',
                               fontSize: 10,
                             }}>
                               Участник: {event.actor}
@@ -1362,8 +1388,8 @@ function App() {
                     margin: 0,
                     padding: '12px',
                     borderRadius: 10,
-                    background: '#f8fafc',
-                    color: '#8994a3',
+                    background: 'var(--vexa-surface-2)',
+                    color: 'var(--vexa-text-secondary)',
                     fontSize: 11,
                   }}>
                     События пока не записаны.
@@ -1401,7 +1427,7 @@ function App() {
 
                 <p style={{
                   margin: '6px 0 0',
-                  color: '#8994a3',
+                  color: 'var(--vexa-text-secondary)',
                   fontSize: 12,
                 }}>
                   Заказ {assignmentOrder.public_number}
@@ -1421,7 +1447,7 @@ function App() {
             <div style={{
               margin: '16px 0',
               fontSize: 12,
-              color: '#526174',
+              color: 'var(--vexa-text-secondary)',
             }}>
               <div>
                 <b>Откуда:</b> {assignmentOrder.pickup_address}
@@ -1467,7 +1493,7 @@ function App() {
                         border: selected
                           ? '2px solid #20b8aa'
                           : '1px solid #e4eaf0',
-                        background: selected ? '#effbf9' : '#fff',
+                        background: selected ? 'var(--vexa-primary-soft)' : 'var(--vexa-surface)',
                       }}
                     >
                       <div style={{
@@ -1483,14 +1509,14 @@ function App() {
                           <b style={{
                             display: 'block',
                             fontSize: 13,
-                            color: '#172033',
+                            color: 'var(--vexa-text)',
                           }}>
                             {driver.username}
                           </b>
 
                           <span style={{
                             fontSize: 11,
-                            color: '#8994a3',
+                            color: 'var(--vexa-text-secondary)',
                           }}>
                             {driver.phone || 'Телефон не указан'}
                           </span>
@@ -1520,7 +1546,7 @@ function App() {
                       {driver.location && (
                         <small style={{
                           display: 'block',
-                          color: '#8994a3',
+                          color: 'var(--vexa-text-secondary)',
                           marginTop: 7,
                         }}>
                           GPS: {Number(driver.location.latitude).toFixed(5)},
@@ -1583,7 +1609,7 @@ function App() {
 const iconButtonStyle: React.CSSProperties = {
   border: 0,
   background: 'transparent',
-  color: '#64748b',
+  color: 'var(--vexa-text-secondary)',
   padding: 5,
   cursor: 'pointer',
   display: 'grid',
@@ -1594,8 +1620,8 @@ const successStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  color: '#087e70',
-  background: '#e8f8f4',
+  color: 'var(--vexa-primary)',
+  background: 'var(--vexa-primary-soft)',
   borderRadius: 9,
   padding: 12,
 
@@ -1604,7 +1630,7 @@ const successStyle: React.CSSProperties = {
 };
 
 const panelStyle: React.CSSProperties = {
-  background: '#fff',
+  background: 'var(--vexa-surface)',
   border: '1px solid #e8edf2',
   borderRadius: 14,
   padding: 20,
@@ -1622,11 +1648,11 @@ const panelHeaderStyle: React.CSSProperties = {
 const panelTitleStyle: React.CSSProperties = {
   margin: 0,
   fontSize: 17,
-  color: '#172033',
+  color: 'var(--vexa-text)',
 };
 
 const mutedTextStyle: React.CSSProperties = {
-  color: '#8994a3',
+  color: 'var(--vexa-text-secondary)',
   fontSize: 12,
 };
 
@@ -1638,7 +1664,7 @@ const driverStatsStyle: React.CSSProperties = {
 };
 
 const driverStatCardStyle: React.CSSProperties = {
-  background: '#f7f9fb',
+  background: 'var(--vexa-surface-2)',
   borderRadius: 10,
   padding: 13,
   display: 'grid',
@@ -1647,17 +1673,17 @@ const driverStatCardStyle: React.CSSProperties = {
 
 const statLabelStyle: React.CSSProperties = {
   fontSize: 11,
-  color: '#8994a3',
+  color: 'var(--vexa-text-secondary)',
 };
 
 const statNumberStyle: React.CSSProperties = {
   fontSize: 24,
-  color: '#172033',
+  color: 'var(--vexa-text)',
 };
 
 const subheadingStyle: React.CSSProperties = {
   fontSize: 13,
-  color: '#344054',
+  color: 'var(--vexa-text-secondary)',
   margin: '18px 0 10px',
 };
 
@@ -1671,7 +1697,7 @@ const onlineDriverCardStyle: React.CSSProperties = {
   border: '1px solid #e8edf2',
   borderRadius: 11,
   padding: 13,
-  background: '#fff',
+  background: 'var(--vexa-surface)',
   minWidth: 0,
 };
 
@@ -1686,8 +1712,8 @@ const driverAvatarStyle: React.CSSProperties = {
   height: 36,
   flexShrink: 0,
   borderRadius: 9,
-  background: '#e7f8f6',
-  color: '#159b8f',
+  background: 'var(--vexa-primary-soft)',
+  color: 'var(--vexa-primary)',
   display: 'grid',
   placeItems: 'center',
 };
@@ -1695,7 +1721,7 @@ const driverAvatarStyle: React.CSSProperties = {
 const driverNameStyle: React.CSSProperties = {
   display: 'block',
   fontSize: 13,
-  color: '#172033',
+  color: 'var(--vexa-text)',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
 };
@@ -1703,7 +1729,7 @@ const driverNameStyle: React.CSSProperties = {
 const driverPhoneStyle: React.CSSProperties = {
   display: 'block',
   fontSize: 11,
-  color: '#8994a3',
+  color: 'var(--vexa-text-secondary)',
   marginTop: 3,
 };
 
@@ -1711,8 +1737,8 @@ const onlineBadgeStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 5,
-  color: '#07866f',
-  background: '#e8f8f4',
+  color: 'var(--vexa-primary)',
+  background: 'var(--vexa-primary-soft)',
   borderRadius: 20,
   padding: '5px 8px',
   fontSize: 10,
@@ -1721,8 +1747,8 @@ const onlineBadgeStyle: React.CSSProperties = {
 };
 
 const offlineBadgeStyle: React.CSSProperties = {
-  color: '#667085',
-  background: '#f0f2f5',
+  color: 'var(--vexa-text-secondary)',
+  background: 'var(--vexa-surface-2)',
   borderRadius: 20,
   padding: '5px 8px',
   fontSize: 10,
@@ -1733,7 +1759,7 @@ const driverMetaStyle: React.CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
   gap: '6px 12px',
-  color: '#667085',
+  color: 'var(--vexa-text-secondary)',
   fontSize: 10,
   marginTop: 12,
 };
@@ -1745,7 +1771,7 @@ const locationInfoStyle: React.CSSProperties = {
   borderTop: '1px solid #edf0f3',
   marginTop: 11,
   paddingTop: 10,
-  color: '#159b8f',
+  color: 'var(--vexa-primary)',
   fontSize: 11,
 };
 
@@ -1753,7 +1779,7 @@ const gpsNoticeStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 6,
-  color: '#8994a3',
+  color: 'var(--vexa-text-secondary)',
   fontSize: 10,
   lineHeight: 1.5,
   marginTop: 16,
@@ -1761,7 +1787,7 @@ const gpsNoticeStyle: React.CSSProperties = {
 
 const offlineSummaryStyle: React.CSSProperties = {
   cursor: 'pointer',
-  color: '#667085',
+  color: 'var(--vexa-text-secondary)',
   fontSize: 12,
   fontWeight: 600,
   padding: '8px 0',
@@ -1770,8 +1796,8 @@ const offlineSummaryStyle: React.CSSProperties = {
 const emptyDriversStyle: React.CSSProperties = {
   padding: 25,
   textAlign: 'center',
-  color: '#8994a3',
-  background: '#f7f9fb',
+  color: 'var(--vexa-text-secondary)',
+  background: 'var(--vexa-surface-2)',
   borderRadius: 10,
   fontSize: 12,
 };
@@ -1791,7 +1817,7 @@ const modalStyle: React.CSSProperties = {
   maxWidth: 540,
   maxHeight: '90vh',
   overflowY: 'auto',
-  background: '#fff',
+  background: 'var(--vexa-surface)',
   borderRadius: 16,
   padding: 22,
   boxShadow: '0 20px 60px #0003',
@@ -1805,7 +1831,7 @@ const modalHeaderStyle: React.CSSProperties = {
 
 const modalDividerStyle: React.CSSProperties = {
   height: 1,
-  background: '#edf0f3',
+  background: 'var(--vexa-border)',
 };
 
 const driverListStyle: React.CSSProperties = {
@@ -1824,7 +1850,7 @@ const driverCardStyle: React.CSSProperties = {
 };
 
 const ratingStyle: React.CSSProperties = {
-  color: '#ad7b1d',
+  color: 'var(--vexa-warning)',
   fontSize: 12,
   fontWeight: 700,
 };
@@ -1836,14 +1862,14 @@ const vehicleInfoStyle: React.CSSProperties = {
   paddingTop: 9,
   borderTop: '1px solid #edf0f3',
   fontSize: 11,
-  color: '#526174',
+  color: 'var(--vexa-text-secondary)',
 };
 
 const selectedLabelStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 5,
-  color: '#087e70',
+  color: 'var(--vexa-primary)',
   fontSize: 11,
   fontWeight: 700,
   marginTop: 9,
@@ -1860,14 +1886,14 @@ const modalActionsStyle: React.CSSProperties = {
 
 const orderDetailLabelStyle: React.CSSProperties = {
   display: 'block',
-  color: '#8994a3',
+  color: 'var(--vexa-text-secondary)',
   fontSize: 11,
   marginBottom: 4,
 };
 
 const orderDetailValueStyle: React.CSSProperties = {
   display: 'block',
-  color: '#172033',
+  color: 'var(--vexa-text)',
   fontSize: 13,
   lineHeight: 1.5,
   overflowWrap: 'anywhere',
@@ -1875,7 +1901,7 @@ const orderDetailValueStyle: React.CSSProperties = {
 
 const orderDetailSecondaryStyle: React.CSSProperties = {
   display: 'block',
-  color: '#8994a3',
+  color: 'var(--vexa-text-secondary)',
   fontSize: 11,
   marginTop: 4,
   overflowWrap: 'anywhere',

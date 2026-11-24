@@ -9,8 +9,12 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,12 +43,12 @@ import java.util.TimeZone
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
-private val VexaTeal = Color(0xFF20C6B7)
-private val VexaInk = Color(0xFF111827)
-private val VexaNavy = Color(0xFF1E293B)
-private val VexaBackground = Color(0xFFF5F7FA)
-private val VexaMuted = Color(0xFF64748B)
-private val VexaRed = Color(0xFFE53935)
+private val VexaTeal = VexaDesign.mutedTeal
+private val VexaInk = VexaDesign.graphite
+private val VexaNavy = VexaDesign.surfaceDark
+private val VexaBackground = VexaDesign.lightCanvas
+private val VexaMuted = VexaDesign.lightScheme().onSurfaceVariant
+private val VexaRed = Color(0xFFD5444D)
 
 private fun formatWalletRubles(kopecks: Long): String {
  val formatter = NumberFormat.getNumberInstance(Locale("ru", "RU"))
@@ -84,7 +88,13 @@ class MainActivity : ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   setContent {
-   DriverScreen()
+   // Login screens and authenticated screens share the same graphite VEXA palette.
+   val preferences = remember { DriverPreferences.load(this@MainActivity) }
+   val systemDark = isSystemInDarkTheme()
+   val dark = preferences.theme == "dark" || (preferences.theme == "system" && systemDark)
+   MaterialTheme(colorScheme = if (dark) VexaDesign.darkScheme() else VexaDesign.lightScheme()) {
+    DriverScreen()
+   }
   }
  }
 }
@@ -268,6 +278,8 @@ fun DriverScreen() {
 
  var loading by remember { mutableStateOf(false) }
  var online by remember { mutableStateOf(false) }
+ // Visual break mode is session-local; the server's is_online flag is authoritative.
+ var onBreak by remember { mutableStateOf(false) }
 
  var driverName by remember { mutableStateOf("Водитель") }
  var phone by remember { mutableStateOf("") }
@@ -296,8 +308,15 @@ fun DriverScreen() {
  var errorMessage by remember { mutableStateOf("") }
  var infoMessage by remember { mutableStateOf("") }
 
- var theme by remember { mutableStateOf("Системная") }
- var sound by remember { mutableStateOf("classic") }
+ var driverPreferences by remember(context) {
+  mutableStateOf(DriverPreferences.load(context))
+ }
+ var settingsOpen by remember { mutableStateOf(false) }
+ BackHandler(enabled = settingsOpen) { settingsOpen = false }
+ fun updatePreferences(next: DriverPreferences.State) {
+  driverPreferences = next
+  DriverPreferences.save(context, next)
+ }
 
  DriverGpsReporter(
   enabled = authorized,
@@ -455,13 +474,13 @@ fun DriverScreen() {
  }
 
  val systemDark = isSystemInDarkTheme()
- val dark = theme == "Ночная" ||
-         (theme == "Системная" && systemDark)
+ val dark = driverPreferences.theme == "dark" ||
+         (driverPreferences.theme == "system" && systemDark)
 
- val backgroundColor = if (dark) VexaInk else VexaBackground
- val foregroundColor = if (dark) Color.White else VexaInk
- val secondaryText = if (dark) Color(0xFFCBD5E1) else VexaMuted
- val cardColor = if (dark) VexaNavy else Color.White
+ val backgroundColor = if (dark) VexaDesign.graphite else VexaDesign.lightCanvas
+ val foregroundColor = if (dark) VexaDesign.textDark else VexaDesign.textLight
+ val secondaryText = if (dark) VexaDesign.darkScheme().onSurfaceVariant else VexaDesign.lightScheme().onSurfaceVariant
+ val cardColor = if (dark) VexaDesign.surfaceDark else VexaDesign.lightSurface
 
  fun loadDriverData() {
   loading = true
@@ -493,6 +512,7 @@ fun DriverScreen() {
     driverName = profile.optString("username", "Водитель")
     phone = profile.optString("phone", "")
     online = profile.optBoolean("is_online", false)
+    if (online) onBreak = false
     rating = profile.optString("rating", "")
 
     cityName = profile
@@ -545,7 +565,7 @@ fun DriverScreen() {
   }
  }
 
- fun changeOnlineStatus(value: Boolean) {
+ fun changeOnlineStatus(value: Boolean, startBreak: Boolean = false) {
   if (loading) return
 
   loading = true
@@ -565,8 +585,12 @@ fun DriverScreen() {
 
     val response = result as JSONObject
     online = response.optBoolean("is_online", value)
+    onBreak = !online && startBreak
+    if (!online) DriverLocationService.stop(context)
 
-    infoMessage = if (online) {
+    infoMessage = if (onBreak) {
+     "Перерыв. Новые заказы не предлагаются"
+    } else if (online) {
      "Вы вышли на линию"
     } else {
      "Вы сняты с линии"
@@ -579,7 +603,7 @@ fun DriverScreen() {
   )
  }
 
- fun refreshOrders() {
+ fun refreshOrders(announce: Boolean = true) {
   if (loading) return
 
   loading = true
@@ -608,7 +632,7 @@ fun DriverScreen() {
     }
 
     orders = updated
-    infoMessage = "Список заказов обновлён"
+    if (announce) infoMessage = "Список заказов обновлён"
    }
   )
  }
@@ -696,7 +720,7 @@ fun DriverScreen() {
      status = nextStatus
     )
     val wallet = if (nextStatus == "completed") {
-     DriverApiClient.getWallet()
+     runCatching { DriverApiClient.getWallet() }.getOrNull()
     } else {
      null
     }
@@ -707,6 +731,8 @@ fun DriverScreen() {
 
     if (error != null) {
      errorMessage = error
+     // Статус мог сохраниться на сервере, даже если ответ потерялся.
+     refreshOrders(announce = false)
     } else {
      val data = result as Pair<*, *>
      val wallet = data.second as? JSONObject
@@ -714,39 +740,20 @@ fun DriverScreen() {
       walletBalanceKopecks = wallet.optLong("balance_kopecks", 0L)
       walletAvailableKopecks = wallet.optLong("available_kopecks", 0L)
      }
-     infoMessage = if (nextStatus == "completed") {
-      "Поездка завершена. Баланс обновлён"
-     } else {
-      "Статус заказа обновлён"
+     infoMessage = when {
+      nextStatus == "completed" && wallet == null ->
+       "Поездка завершена. Баланс обновится после восстановления связи"
+      nextStatus == "completed" -> "Поездка завершена. Баланс обновлён"
+      else -> "Статус заказа обновлён"
      }
-     refreshOrders()
+     refreshOrders(announce = false)
     }
    }
   )
  }
 
  MaterialTheme(
-  colorScheme = if (dark) {
-   darkColorScheme(
-    primary = VexaTeal,
-    secondary = VexaTeal,
-    background = VexaInk,
-    surface = VexaNavy,
-    onPrimary = VexaInk,
-    onBackground = Color.White,
-    onSurface = Color.White
-   )
-  } else {
-   lightColorScheme(
-    primary = VexaTeal,
-    secondary = VexaTeal,
-    background = VexaBackground,
-    surface = Color.White,
-    onPrimary = VexaInk,
-    onBackground = VexaInk,
-    onSurface = VexaInk
-   )
-  }
+  colorScheme = if (dark) VexaDesign.darkScheme() else VexaDesign.lightScheme()
  ) {
   Surface(
    modifier = Modifier.fillMaxSize(),
@@ -867,12 +874,33 @@ fun DriverScreen() {
       }
 
       Text(
-       text = "Сервер VEXA · 109.120.184.20",
+       text = "Сервер VEXA · локальный компьютер",
        color = VexaMuted,
        fontSize = 11.sp
       )
      }
     }
+   } else if (settingsOpen) {
+    DriverSettingsScreen(
+     value = driverPreferences,
+     onValueChange = ::updatePreferences,
+     onBack = { settingsOpen = false },
+     onLogout = {
+      DriverApiClient.clearAccessToken()
+      DriverLocationService.stop(context)
+      authorized = false
+      online = false
+      onBreak = false
+      orders = emptyList()
+      settingsOpen = false
+      errorMessage = ""
+      infoMessage = "Вы вышли из профиля"
+     },
+     driverName = driverName,
+     phone = phone,
+     cityName = cityName,
+     vehicleDescription = vehicleDescription
+    )
    } else {
     LazyColumn(
      modifier = Modifier
@@ -992,304 +1020,8 @@ fun DriverScreen() {
         )
        }
 
-       TextButton(
-        onClick = {
-         DriverApiClient.clearAccessToken()
-         authorized = false
-         online = false
-         orders = emptyList()
-         errorMessage = ""
-         infoMessage = "Вы вышли из профиля"
-        }
-       ) {
-        Text("Выйти")
-       }
-      }
-     }
-
-     item {
-      Row(
-       modifier = Modifier
-        .fillMaxWidth()
-        .padding(vertical = 4.dp),
-       verticalAlignment = Alignment.CenterVertically
-      ) {
-       Column {
-        Text(
-         text = "VEXA",
-         color = VexaTeal,
-         fontSize = 27.sp,
-         fontWeight = FontWeight.ExtraBold,
-         letterSpacing = 2.sp
-        )
-        Text(
-         text = "ВОДИТЕЛЬ",
-         color = secondaryText,
-         fontSize = 10.sp,
-         fontWeight = FontWeight.Bold,
-         letterSpacing = 3.sp
-        )
-       }
-
-       Spacer(Modifier.weight(1f))
-
-       Surface(
-        color = if (online) {
-         VexaTeal.copy(alpha = 0.16f)
-        } else {
-         Color.Gray.copy(alpha = 0.14f)
-        },
-        shape = RoundedCornerShape(50)
-       ) {
-        Text(
-         text = if (online) "● НА ЛИНИИ" else "● НЕ НА ЛИНИИ",
-         modifier = Modifier.padding(
-          horizontal = 12.dp,
-          vertical = 8.dp
-         ),
-         color = if (online) VexaTeal else secondaryText,
-         fontSize = 10.sp,
-         fontWeight = FontWeight.Bold
-        )
-       }
-      }
-     }
-
-     item {
-      VexaCard(dark = dark) {
-       Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-       ) {
-        Column(
-         modifier = Modifier.weight(1f),
-         verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-         Text(
-          text = driverName,
-          color = foregroundColor,
-          fontSize = 21.sp,
-          fontWeight = FontWeight.Bold
-         )
-
-         if (phone.isNotBlank()) {
-          Text(
-           text = phone,
-           color = secondaryText,
-           fontSize = 13.sp
-          )
-         }
-
-         Text(
-          text = "Город: $cityName",
-          color = secondaryText,
-          fontSize = 12.sp
-         )
-
-         if (branchName.isNotBlank()) {
-          Text(
-           text = "Филиал: $branchName",
-           color = secondaryText,
-           fontSize = 12.sp
-          )
-         }
-        }
-
-        if (rating.isNotBlank()) {
-         Surface(
-          color = VexaTeal.copy(alpha = 0.14f),
-          shape = RoundedCornerShape(16.dp)
-         ) {
-          Column(
-           modifier = Modifier.padding(
-            horizontal = 14.dp,
-            vertical = 10.dp
-           ),
-           horizontalAlignment = Alignment.CenterHorizontally
-          ) {
-           Text(
-            text = "★",
-            color = VexaTeal,
-            fontSize = 19.sp
-           )
-           Text(
-            text = rating,
-            color = foregroundColor,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp
-           )
-           Text(
-            text = "РЕЙТИНГ",
-            color = secondaryText,
-            fontSize = 8.sp
-           )
-          }
-         }
-        }
-       }
-
-       HorizontalDivider(
-        color = if (dark) Color.White.copy(alpha = 0.08f)
-        else Color.Black.copy(alpha = 0.06f)
-       )
-
-       Text(
-        text = vehicleDescription,
-        color = foregroundColor,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Medium
-       )
-      }
-     }
-
-     item {
-      VexaCard(dark = dark) {
-       Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-       ) {
-        Text(
-         text = "ТЕКУЩИЙ БАЛАНС",
-         color = secondaryText,
-         fontSize = 11.sp,
-         fontWeight = FontWeight.Bold,
-         letterSpacing = 1.sp
-        )
-        Text(
-         text = walletBalanceKopecks?.let { "${formatWalletRubles(it)} ₽" } ?: "—",
-         color = if (dark) VexaTeal else Color(0xFF087F75),
-         fontSize = 32.sp,
-         fontWeight = FontWeight.ExtraBold
-        )
-        Text(
-         text = walletAvailableKopecks?.let {
-          "Доступно к выводу: ${formatWalletRubles(it)} ₽"
-         } ?: "Доступно к выводу: —",
-         color = secondaryText,
-         fontSize = 12.sp
-        )
-       }
-      }
-     }
-
-     item {
-      VexaCard(dark = dark) {
-       Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-       ) {
-        Column(
-         modifier = Modifier.weight(1f),
-         verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-         Text(
-          text = "Финансы",
-          color = foregroundColor,
-          fontSize = 17.sp,
-          fontWeight = FontWeight.Bold
-         )
-         Text(
-          text = "Доходы, комиссия сервиса и задолженность",
-          color = secondaryText,
-          fontSize = 11.sp
-         )
-        }
-
-        Button(
-         onClick = {
-          context.startActivity(
-           Intent(context, DriverFinanceActivity::class.java)
-          )
-         },
-         shape = RoundedCornerShape(14.dp),
-         colors = ButtonDefaults.buttonColors(
-          containerColor = VexaTeal,
-          contentColor = VexaInk
-         )
-        ) {
-         Text("Открыть")
-        }
-       }
-      }
-     }
-
-     item {
-      VexaCard(dark = dark) {
-       Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-       ) {
-        Column(
-         modifier = Modifier.weight(1f),
-         verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-         Text(
-          text = if (online) "Вы на линии" else "Вы не на линии",
-          color = foregroundColor,
-          fontSize = 18.sp,
-          fontWeight = FontWeight.Bold
-         )
-
-         Text(
-          text = if (online) {
-           "Вы доступны для получения заказов"
-          } else {
-           "Включите режим, чтобы получать заказы"
-          },
-          color = secondaryText,
-          fontSize = 11.sp
-         )
-        }
-
-        Switch(
-         checked = online,
-         onCheckedChange = { changeOnlineStatus(it) },
-         enabled = !loading,
-         colors = SwitchDefaults.colors(
-          checkedThumbColor = Color.White,
-          checkedTrackColor = VexaTeal,
-          uncheckedThumbColor = Color.White,
-          uncheckedTrackColor = Color.Gray
-         )
-        )
-       }
-      }
-     }
-
-     item {
-      VexaCard(
-       dark = dark,
-       modifier = Modifier
-      ) {
-       SectionTitle(
-        title = "Карта",
-        subtitle = "Ваше местоположение · Оболенск",
-        color = foregroundColor
-       )
-
-       ClipMapContainer {
-        DriverMap(
-         modifier = Modifier
-          .fillMaxWidth()
-          .height(300.dp)
-        )
-       }
-      }
-     }
-
-     if (offerPollStatusMessage.isNotBlank() && online) {
-      item {
-       Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.errorContainer,
-        shape = RoundedCornerShape(14.dp)
-       ) {
-        Text(
-         text = offerPollStatusMessage,
-         modifier = Modifier.padding(12.dp),
-         color = MaterialTheme.colorScheme.onErrorContainer,
-         fontSize = 12.sp
-        )
+       IconButton(onClick = { settingsOpen = true }) {
+        Icon(Icons.Default.MoreVert, contentDescription = "Настройки VEXA Driver", tint = foregroundColor)
        }
       }
      }
@@ -1462,6 +1194,257 @@ fun DriverScreen() {
      }
 
      item {
+      DriverHomeMapCard(
+       cityName = cityName,
+       followGps = driverPreferences.followGps,
+       activeOrder = orders.firstOrNull { order ->
+        order.optString("status") in setOf("assigned", "arrived", "in_progress")
+       }
+      )
+     }
+
+     item {
+      VexaCard(dark = dark) {
+       Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+       ) {
+        Column(
+         modifier = Modifier.weight(1f),
+         verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+         Text(
+          text = driverName,
+          color = foregroundColor,
+          fontSize = 21.sp,
+          fontWeight = FontWeight.Bold
+         )
+
+         if (phone.isNotBlank()) {
+          Text(
+           text = phone,
+           color = secondaryText,
+           fontSize = 13.sp
+          )
+         }
+
+         Text(
+          text = "Город: $cityName",
+          color = secondaryText,
+          fontSize = 12.sp
+         )
+
+         if (branchName.isNotBlank()) {
+          Text(
+           text = "Филиал: $branchName",
+           color = secondaryText,
+           fontSize = 12.sp
+          )
+         }
+        }
+
+        if (rating.isNotBlank()) {
+         Surface(
+          color = VexaTeal.copy(alpha = 0.14f),
+          shape = RoundedCornerShape(16.dp)
+         ) {
+          Column(
+           modifier = Modifier.padding(
+            horizontal = 14.dp,
+            vertical = 10.dp
+           ),
+           horizontalAlignment = Alignment.CenterHorizontally
+          ) {
+           Text(
+            text = "★",
+            color = VexaTeal,
+            fontSize = 19.sp
+           )
+           Text(
+            text = rating,
+            color = foregroundColor,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+           )
+           Text(
+            text = "РЕЙТИНГ",
+            color = secondaryText,
+            fontSize = 8.sp
+           )
+          }
+         }
+        }
+       }
+
+       HorizontalDivider(
+        color = if (dark) Color.White.copy(alpha = 0.08f)
+        else Color.Black.copy(alpha = 0.06f)
+       )
+
+       Text(
+        text = vehicleDescription,
+        color = foregroundColor,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium
+       )
+      }
+     }
+
+     item {
+      VexaCard(dark = dark) {
+       Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+       ) {
+        Text(
+         text = "ТЕКУЩИЙ БАЛАНС",
+         color = secondaryText,
+         fontSize = 11.sp,
+         fontWeight = FontWeight.Bold,
+         letterSpacing = 1.sp
+        )
+        Text(
+         text = walletBalanceKopecks?.let { "${formatWalletRubles(it)} ₽" } ?: "—",
+         color = if (dark) VexaTeal else Color(0xFF087F75),
+         fontSize = 32.sp,
+         fontWeight = FontWeight.ExtraBold
+        )
+        Text(
+         text = walletAvailableKopecks?.let {
+          "Доступно к выводу: ${formatWalletRubles(it)} ₽"
+         } ?: "Доступно к выводу: —",
+         color = secondaryText,
+         fontSize = 12.sp
+        )
+       }
+      }
+     }
+
+     item {
+      VexaCard(dark = dark) {
+       Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+       ) {
+        Column(
+         modifier = Modifier.weight(1f),
+         verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+         Text(
+          text = "Финансы",
+          color = foregroundColor,
+          fontSize = 17.sp,
+          fontWeight = FontWeight.Bold
+         )
+         Text(
+          text = "Баланс, заработок, комиссия и история операций",
+          color = secondaryText,
+          fontSize = 11.sp
+         )
+        }
+
+        Button(
+         onClick = {
+          context.startActivity(
+           Intent(context, DriverFinanceActivity::class.java)
+          )
+         },
+         modifier = Modifier.height(48.dp),
+         shape = RoundedCornerShape(14.dp),
+         colors = ButtonDefaults.buttonColors(
+          containerColor = VexaTeal,
+          contentColor = VexaInk
+         )
+        ) {
+         Text(
+          text = "ДЕНЬГИ",
+          fontSize = 13.sp,
+          fontWeight = FontWeight.ExtraBold,
+          letterSpacing = 0.6.sp
+         )
+        }
+       }
+      }
+     }
+
+     item {
+      VexaCard(dark = dark) {
+       val canBreak = DriverDutyRules.canStartBreak(
+        orders.map { it.optString("status") }, currentOffer != null
+       )
+       Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+       ) {
+        Column(
+         modifier = Modifier.weight(1f),
+         verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+         Text(
+          text = if (online) "Вы на линии" else "Вы не на линии",
+          color = foregroundColor,
+          fontSize = 18.sp,
+          fontWeight = FontWeight.Bold
+         )
+
+         Text(
+          text = if (online) {
+           "Вы доступны для получения заказов"
+          } else {
+           "Включите режим, чтобы получать заказы"
+          },
+          color = secondaryText,
+          fontSize = 11.sp
+         )
+        }
+
+        Switch(
+         checked = online,
+         onCheckedChange = { changeOnlineStatus(it) },
+         enabled = !loading && (!online || canBreak),
+         colors = SwitchDefaults.colors(
+          checkedThumbColor = Color.White,
+          checkedTrackColor = VexaTeal,
+          uncheckedThumbColor = Color.White,
+          uncheckedTrackColor = Color.Gray
+         )
+        )
+       }
+        if (online || onBreak) {
+         OutlinedButton(
+          onClick = {
+           if (onBreak) changeOnlineStatus(true)
+           else if (canBreak) changeOnlineStatus(false, startBreak = true)
+          },
+          enabled = !loading && (onBreak || canBreak),
+          modifier = Modifier.fillMaxWidth()
+         ) { Text(if (onBreak) "Вернуться на линию" else "Перерыв") }
+         if (online && !canBreak) {
+          Text("Перерыв недоступен во время заказа или активного предложения",
+           color = secondaryText, fontSize = 11.sp)
+         }
+        }
+      }
+     }
+
+     if (offerPollStatusMessage.isNotBlank() && online) {
+      item {
+       Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = RoundedCornerShape(14.dp)
+       ) {
+        Text(
+         text = offerPollStatusMessage,
+         modifier = Modifier.padding(12.dp),
+         color = MaterialTheme.colorScheme.onErrorContainer,
+         fontSize = 12.sp
+        )
+       }
+      }
+     }
+
+     item {
       Row(
        modifier = Modifier.fillMaxWidth(),
        verticalAlignment = Alignment.CenterVertically
@@ -1616,6 +1599,11 @@ fun DriverScreen() {
           fontSize = 14.sp,
           fontWeight = FontWeight.Medium
          )
+         val pickupInstructions = order.optString("comment").trim()
+         if (pickupInstructions.isNotBlank()) {
+          Text("Ориентир / комментарий: $pickupInstructions",
+           color = secondaryText, fontSize = 12.sp)
+         }
         }
 
         Row(
@@ -1651,6 +1639,36 @@ fun DriverScreen() {
           fontWeight = FontWeight.Medium
          )
         }
+
+        val pickupPoint = order.optJSONObject("pickup")
+        val destinationPoint = order.optJSONObject("destination")
+        val passengerPhone = order.optString("customer_phone")
+        Row(
+         modifier = Modifier.fillMaxWidth(),
+         horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+         OutlinedButton(
+          onClick = { DriverQuickActions.openNavigator(context, pickupPoint) },
+          enabled = DriverQuickActions.validPoint(pickupPoint),
+          modifier = Modifier.weight(1f)
+         ) { Text("К подаче", fontSize = 12.sp) }
+         OutlinedButton(
+          onClick = { DriverQuickActions.openNavigator(context, destinationPoint) },
+          enabled = DriverQuickActions.validPoint(destinationPoint),
+          modifier = Modifier.weight(1f)
+         ) { Text("К адресу", fontSize = 12.sp) }
+        }
+        if (DriverQuickActions.validPhone(passengerPhone)) {
+         OutlinedButton(
+          onClick = { DriverQuickActions.openDialer(context, passengerPhone) },
+          modifier = Modifier.fillMaxWidth()
+         ) { Text("Позвонить пассажиру") }
+        }
+        Text(
+         "Навигация откроется во внешнем приложении",
+         color = secondaryText,
+         fontSize = 10.sp
+        )
 
         if (price.isNotBlank() && price != "null") {
          Row(
@@ -1694,91 +1712,6 @@ fun DriverScreen() {
        }
       }
      }
-     item {
-      VexaCard(dark = dark) {
-       SectionTitle(
-        title = "Внешний вид",
-        subtitle = "Настройте оформление приложения",
-        color = foregroundColor
-       )
-
-       Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-       ) {
-        listOf(
-         "Дневная",
-         "Ночная",
-         "Системная"
-        ).forEach { option ->
-         FilterChip(
-          selected = theme == option,
-          onClick = { theme = option },
-          label = {
-           Text(option, fontSize = 11.sp)
-          },
-          colors = FilterChipDefaults.filterChipColors(
-           selectedContainerColor = VexaTeal.copy(alpha = 0.2f),
-           selectedLabelColor = if (dark) VexaTeal else VexaInk
-          )
-         )
-        }
-       }
-
-       HorizontalDivider(
-        color = if (dark) Color.White.copy(alpha = 0.08f)
-        else Color.Black.copy(alpha = 0.06f)
-       )
-
-       Text(
-        text = "Звуковой профиль",
-        color = foregroundColor,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 13.sp
-       )
-
-       val soundNames = listOf(
-        "classic",
-        "modern",
-        "soft",
-        "dynamic",
-        "calm",
-        "premium"
-       )
-
-       soundNames.chunked(3).forEach { rowItems ->
-        Row(
-         modifier = Modifier.fillMaxWidth(),
-         horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-         rowItems.forEach { option ->
-          FilterChip(
-           modifier = Modifier.weight(1f),
-           selected = sound == option,
-           onClick = { sound = option },
-           label = {
-            Text(
-             option,
-             fontSize = 10.sp,
-             maxLines = 1
-            )
-           },
-           colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = VexaTeal.copy(alpha = 0.2f)
-           )
-          )
-         }
-        }
-       }
-
-       Text(
-        text = "Выбор звукового профиля пока сохраняется только на экране приложения.",
-        color = secondaryText,
-        fontSize = 10.sp
-       )
-      }
-     }
-
      if (loading) {
       item {
        LinearProgressIndicator(
@@ -1819,7 +1752,7 @@ fun DriverScreen() {
 
      item {
       Text(
-       text = "VEXA Driver · Оболенск",
+       text = "VEXA Driver · $cityName",
        modifier = Modifier
         .fillMaxWidth()
         .padding(top = 8.dp),

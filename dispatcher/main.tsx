@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import './style.css';
 
-const API_BASE = 'https://109.120.184.20';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 const CITY_CODE = 'obolensk';
 const TOKEN_KEY = 'vexa_dispatch_token';
 

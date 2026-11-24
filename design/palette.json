@@ -1,12 +1,20 @@
 {
   "brand": "VEXA",
+  "version": "0.3.14",
   "tokens": {
-    "teal": "#20C6B7",
-    "graphite": "#111827",
-    "navy_graphite": "#1E293B",
-    "light_surface": "#F5F7FA",
-    "white": "#FFFFFF",
-    "muted_text": "#64748B"
+    "graphite": "#151D21",
+    "surface": "#202A2F",
+    "surfaceElevated": "#2B383E",
+    "tealCalm": "#54B6AA",
+    "tealRouteBright": "#18E8D2",
+    "onGraphite": "#EDF5F4",
+    "mutedText": "#AABDBC",
+    "lightCanvas": "#F3F6F5"
   },
-  "notes": "Бирюзовый — главный фирменный акцент; графит/тёмно-синий — тёмные поверхности и навигация; светлый нейтральный фон — дневная тема. Значения — стартовые цифровые токены визуального концепта."
+  "themeModes": [
+    "dark",
+    "light",
+    "system"
+  ],
+  "notes": "Согласованная палитра VEXA. Яркий бирюзовый — только линия маршрута/навигация; обычные кнопки используют спокойный оттенок."
 }

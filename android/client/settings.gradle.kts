@@ -1,10 +1,19 @@
 pluginManagement {
-    repositories { google(); mavenCentral(); gradlePluginPortal() } }
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.
-FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral()
-maven { url = uri("https://artifactory.2gis.dev/sdk-maven-release")
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
     }
-  }
 }
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
 rootProject.name = "VEXA-client"
-include(":app")
+include(":app", ":vexa-map-offline")
+project(":vexa-map-offline").projectDir = file("../shared/vexa-map-offline")

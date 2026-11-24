@@ -10,6 +10,10 @@ class FareResult:
     time_price_kopecks: int
     fare_limit_adjustment_kopecks: int
     total_price_kopecks: int
+    included_km: Decimal = Decimal("0")
+    included_minutes: Decimal = Decimal("0")
+    charged_distance_km: Decimal = Decimal("0")
+    charged_duration_minutes: Decimal = Decimal("0")
 
 
 def calculate_fare(
@@ -21,6 +25,8 @@ def calculate_fare(
     duration_minutes: Decimal,
     minimum_fare_kopecks: int | None = None,
     maximum_fare_kopecks: int | None = None,
+    included_km: Decimal = Decimal("0"),
+    included_minutes: Decimal = Decimal("0"),
 ) -> FareResult:
     prices = (
         base_price_kopecks,
@@ -67,9 +73,16 @@ def calculate_fare(
     if distance_km < 0 or duration_minutes < 0:
         raise ValueError("Route values cannot be negative")
 
+    for name, value in (("included_km", included_km), ("included_minutes", included_minutes)):
+        if not isinstance(value, Decimal) or not value.is_finite() or value < 0:
+            raise ValueError(f"{name} must be a finite nonnegative Decimal")
+
+    charged_distance = max(Decimal("0"), distance_km - included_km)
+    charged_duration = max(Decimal("0"), duration_minutes - included_minutes)
+
     distance_price = int(
         (
-            Decimal(price_per_km_kopecks) * distance_km
+            Decimal(price_per_km_kopecks) * charged_distance
         ).quantize(
             Decimal("1"),
             rounding=ROUND_HALF_UP,
@@ -78,7 +91,7 @@ def calculate_fare(
 
     time_price = int(
         (
-            Decimal(price_per_minute_kopecks) * duration_minutes
+            Decimal(price_per_minute_kopecks) * charged_duration
         ).quantize(
             Decimal("1"),
             rounding=ROUND_HALF_UP,
@@ -120,4 +133,8 @@ def calculate_fare(
         time_price_kopecks=time_price,
         fare_limit_adjustment_kopecks=fare_limit_adjustment,
         total_price_kopecks=limited_trip_price,
+        included_km=included_km,
+        included_minutes=included_minutes,
+        charged_distance_km=charged_distance,
+        charged_duration_minutes=charged_duration,
     )

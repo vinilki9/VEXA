@@ -1,12 +1,12 @@
+@import "./vexa-brand.css";
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 
 /* =========================================
    VEXA — единая цветовая система
    ========================================= */
 
 :root {
-  font-family: "Inter", Arial, sans-serif;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
   color: #e8f0f1;
   background: #171f24;
   font-synthesis: none;
@@ -21,11 +21,11 @@
   --graphite-750: #2d3a41;
   --graphite-700: #35444b;
 
-  --turquoise: #20d6c2;
-  --turquoise-hover: #16bda9;
-  --turquoise-soft: rgba(32, 214, 194, 0.12);
-  --turquoise-border: rgba(32, 214, 194, 0.38);
-  --turquoise-glow: rgba(32, 214, 194, 0.17);
+  --turquoise: #54b6aa;
+  --turquoise-hover: #449c92;
+  --turquoise-soft: rgba(84, 182, 170, 0.12);
+  --turquoise-border: rgba(84, 182, 170, 0.38);
+  --turquoise-glow: rgba(84, 182, 170, 0.17);
 
   --text-primary: #edf5f5;
   --text-secondary: #a1b0b4;
@@ -104,8 +104,8 @@ button:disabled {
   padding: 54px 58px;
   color: #fff;
   background:
-    radial-gradient(circle at 15% 85%, rgba(32, 214, 194, 0.15), transparent 38%),
-    radial-gradient(circle at 90% 10%, rgba(32, 214, 194, 0.1), transparent 32%),
+    radial-gradient(circle at 15% 85%, rgba(84, 182, 170, 0.15), transparent 38%),
+    radial-gradient(circle at 90% 10%, rgba(84, 182, 170, 0.1), transparent 32%),
     linear-gradient(145deg, #26363c, #171f24 75%);
 }
 
@@ -401,7 +401,7 @@ button:disabled {
   padding: 48px 6% 43px;
   color: #fff;
   background:
-    radial-gradient(circle at 90% 20%, rgba(32, 214, 194, 0.12), transparent 32%),
+    radial-gradient(circle at 90% 20%, rgba(84, 182, 170, 0.12), transparent 32%),
     linear-gradient(110deg, #26363c, #1b242a);
 }
 
@@ -616,7 +616,7 @@ button:disabled {
   border-color: var(--turquoise);
   color: var(--graphite-950);
   background: var(--turquoise);
-  box-shadow: 0 0 13px rgba(32, 214, 194, 0.1);
+  box-shadow: 0 0 13px rgba(84, 182, 170, 0.1);
 }
 
 .org-button-primary:hover:not(:disabled) {
@@ -1219,3 +1219,41 @@ button:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* VEXA 0.3.5 design accessibility and responsive refinements */
+:where(button, input, select, textarea, a):focus-visible {
+  outline: 3px solid var(--turquoise);
+  outline-offset: 3px;
+}
+button:not(:disabled):active { transform: translateY(1px); }
+:where(input, textarea, select) { min-height: 42px; }
+@media (prefers-reduced-motion:reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}
+
+.session-actions { display:flex; flex-direction:column; align-items:stretch; gap:12px; margin-top:18px; }
+.session-actions .login-button, .session-actions .logout-button { width:100%; }
+
+/* VEXA DESIGN 0.3.14: same tokens as Android and Dispatcher. */
+:root {
+  --graphite-950: var(--vexa-graphite);
+  --graphite-900: var(--vexa-surface);
+  --graphite-850: #253137;
+  --graphite-800: var(--vexa-surface-2);
+  --graphite-750: #334246;
+  --graphite-700: #3C5053;
+  --turquoise: var(--vexa-primary);
+  --turquoise-hover: var(--vexa-primary-hover);
+  --turquoise-soft: var(--vexa-primary-soft);
+  --turquoise-border: rgba(84, 182, 170, 0.36);
+  --turquoise-glow: rgba(84, 182, 170, 0.15);
+  --text-primary: var(--vexa-text);
+  --text-secondary: var(--vexa-text-secondary);
+  --text-muted: #92A8A8;
+  --border: var(--vexa-border);
+  --success: var(--vexa-success);
+  --danger: var(--vexa-danger);
+  --warning: var(--vexa-warning);
+}
+:where(a, button, input, select):focus-visible { outline: 3px solid var(--vexa-route); outline-offset: 3px; }
+::selection { background: var(--vexa-route); color: var(--vexa-on-primary); }

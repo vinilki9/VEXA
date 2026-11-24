@@ -2,7 +2,7 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import create_engine, pool
+from sqlalchemy import create_engine, pool, text
 
 from app.config import settings
 from app.database import Base
@@ -46,7 +46,12 @@ def run_migrations_online() -> None:
     )
 
     try:
-        with connectable.connect() as connection:
+        with connectable.begin() as connection:
+            # Historic revision identifiers exceed Alembic's default VARCHAR(32).
+            # Preserve existing version rows; provision/widen before Alembic runs.
+            if connection.dialect.name == "postgresql":
+                connection.execute(text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(128) NOT NULL PRIMARY KEY)"))
+                connection.execute(text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"))
             context.configure(
                 connection=connection,
                 target_metadata=target_metadata,

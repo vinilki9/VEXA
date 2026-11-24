@@ -28,7 +28,7 @@ class DriverApiHttpException(
 
 object DriverApiClient {
 
-    private const val BASE_URL = "https://109.120.184.20"
+    private val BASE_URL = BuildConfig.VEXA_API_BASE_URL
 
     private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
     private const val KEY_ALIAS = "vexa_driver_access_token_key_v1"
@@ -299,6 +299,10 @@ object DriverApiClient {
 
             saveEncryptedToken(normalizedToken)
 
+            // Не показывать предложения предыдущего водителя после смены сессии.
+            if (accessToken != normalizedToken) {
+                clearCachedOrderOffers()
+            }
             accessToken = normalizedToken
         }
     }
@@ -580,12 +584,17 @@ object DriverApiClient {
             "Не указан идентификатор предложения"
         }
 
-        val response = request(
-            path = "/api/v1/driver/orders/offers/$offerId/accept",
-            method = "POST"
-        )
-
-        return JSONObject(response)
+        // Даже при потере ответа сервер мог уже обработать действие.
+        // Скрываем старый список и ждём следующего опроса.
+        try {
+            val response = request(
+                path = "/api/v1/driver/orders/offers/$offerId/accept",
+                method = "POST"
+            )
+            return JSONObject(response)
+        } finally {
+            clearCachedOrderOffers()
+        }
     }
 
     /**
@@ -598,12 +607,17 @@ object DriverApiClient {
             "Не указан идентификатор предложения"
         }
 
-        val response = request(
-            path = "/api/v1/driver/orders/offers/$offerId/reject",
-            method = "POST"
-        )
-
-        return JSONObject(response)
+        // Даже при потере ответа сервер мог уже обработать действие.
+        // Скрываем старый список и ждём следующего опроса.
+        try {
+            val response = request(
+                path = "/api/v1/driver/orders/offers/$offerId/reject",
+                method = "POST"
+            )
+            return JSONObject(response)
+        } finally {
+            clearCachedOrderOffers()
+        }
     }
 
     /**
@@ -635,6 +649,9 @@ object DriverApiClient {
     ): JSONObject {
         require(orderId.isNotBlank()) {
             "Не указан номер заказа"
+        }
+        require(status in setOf("arrived", "in_progress", "completed")) {
+            "Недопустимый статус поездки"
         }
 
         val json = JSONObject()

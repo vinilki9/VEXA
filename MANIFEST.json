@@ -1,81 +1,884 @@
 {
-  "package": "VEXA_FULL_RELEASE",
-  "version": "0.2.0",
+  "release": "VEXA 0.3.42 VPS Production Ready (candidate)",
+  "based_on": "VEXA_STAGE1_0.3.41_VPS_45.143.139.162_FIXED_SOURCE.zip",
+  "public_base_url": "https://45.143.139.162",
+  "kind": "source only; no APK, map datasets or production secrets",
+  "file_count": 369,
   "files": [
     {
+      "path": ".env.example",
+      "size": 874,
+      "sha256": "8cb8de512d5cf1036c031cbf1b3e6045b8322c6107a465c6607779e4b971300b"
+    },
+    {
+      "path": ".github/workflows/deploy.yml",
+      "size": 4587,
+      "sha256": "fa5cdd5bf390988a672d0786531dcdec268e3e00eb4f6fb2d838dc1de7fb4de2"
+    },
+    {
+      "path": ".github/workflows/deploy.yml.disabled",
+      "size": 1273,
+      "sha256": "1008dd1cef08ed8ba6af5ef71ded9b8a05914fef49c37f7f6a9be92f485ab1f3"
+    },
+    {
       "path": ".gitignore",
-      "size": 108,
-      "sha256": "65685a9e35bcdd7b67d11f9eda4a6a4131e934cb105098b58ce3c5913bce1399"
+      "size": 741,
+      "sha256": "e5b154e576d422dc361f992d90de04aee15e924336dd5a740768e72dcd493046"
+    },
+    {
+      "path": "README-DEPLOYMENT-FIXES.md",
+      "size": 3734,
+      "sha256": "a9dc0587ce4f92e5e99e2dea52e3b7a7d1761cef90a62a5a5afcdaf1082bc243"
     },
     {
       "path": "README.md",
-      "size": 3383,
-      "sha256": "97e29ab12805c1923a69f7ae91c86a06e7c713541022fd503fa2aa45a9890e88"
+      "size": 6681,
+      "sha256": "868cb11691bc78130eb7b5f37971f98164cd760b9d11a34fae5750ef2f826336"
+    },
+    {
+      "path": "README_LOCAL_SETUP.md",
+      "size": 13203,
+      "sha256": "9cd8cd6ad5ff73f7b6a57a3dc281eb55a7a98f5b58f8655ea1ea28d73051d477"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.0.md",
+      "size": 7189,
+      "sha256": "14590b08fbf4e9e11c9251d04030c6bddd75f6e09d86b6bcb256b4d8a41f4f5d"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.1.md",
+      "size": 4472,
+      "sha256": "6ad028ee0bfca730ac5e3a56dfd6948359bd2a2bc7fce59e84a4e7a82ca58712"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.14.md",
+      "size": 6204,
+      "sha256": "20c62a69f185d7937038c9b4dd32c2a56a0a8a29eb2e4dd20aad342a1257eddc"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.16.md",
+      "size": 1425,
+      "sha256": "1fe062b1f8e6b83ef7d3960eb1a7d7bd0a6f7721633bbf298c73221e9d89b751"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.17.md",
+      "size": 8221,
+      "sha256": "ed35ea1b4d78e16525f8681939c2556b957d70707ff82e1ff75f6ecb3fe3e8f8"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.18.md",
+      "size": 6608,
+      "sha256": "5b72a06570ff95926299172f0396bd701c7a6abde26737d9d75af9ea35fef5b9"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.2.md",
+      "size": 8988,
+      "sha256": "965af2c9f92c9e0f32c3b4ff0feff925d3e1ee5ee4af143d0a85c9035be45dc8"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.3.md",
+      "size": 4617,
+      "sha256": "5d00ea37c40040c4f102fa478e564407eed870998e6933626f3056361ab3e3b8"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.4.md",
+      "size": 5770,
+      "sha256": "8765131358e61d6bec07cb3ce8f308a98e5fe7d5d3d285af3b2f1cf8232545ee"
+    },
+    {
+      "path": "RELEASE_REPORT_0.3.5.md",
+      "size": 4991,
+      "sha256": "1a7537c65b8d5efac36fab8b6307366aab86b5af5d2b14e26dd28df5b0f733c1"
+    },
+    {
+      "path": "RELEASE_REPORT_ADDITIONAL_FEATURES_0.3.8.md",
+      "size": 5554,
+      "sha256": "1fb9c2955a8b857ba8977c49dbfde4af8c4a1cf99ec2b4c8574dbcdd72338b30"
+    },
+    {
+      "path": "RELEASE_REPORT_AUTO_DISPATCH_0.3.10.md",
+      "size": 8764,
+      "sha256": "714337e516c732300cd09aa7295d19c9a7216a114cb3ff3d7ce101b684e40329"
+    },
+    {
+      "path": "RELEASE_REPORT_CLIENT_SETTINGS_0.3.6.md",
+      "size": 5833,
+      "sha256": "3b2abb781ee0e99117acb5a7313fbeff6d913aa3a45b578592d099d2d8cec18d"
+    },
+    {
+      "path": "RELEASE_REPORT_DRIVER_SETTINGS_MONEY_0.3.7.md",
+      "size": 4796,
+      "sha256": "4961beff26096f754ec9f262177d42b542edfe72e769b4115bf93919f5a78842"
+    },
+    {
+      "path": "RELEASE_REPORT_PASSENGER_CANCEL_0.3.9.md",
+      "size": 3463,
+      "sha256": "006a03360187e315afb33b73f97081e370865bf740f0c2100ea676f4465dc317"
+    },
+    {
+      "path": "START_HERE.txt",
+      "size": 1582,
+      "sha256": "62086047fb5ab659d4f38cafe019fdd654783f112ac17b57b6016f3dcfde573d"
+    },
+    {
+      "path": "SYSTEM_AUDIT_STAGE3.md",
+      "size": 1996,
+      "sha256": "9b13c2066410c2c6b0e0850ca329157706b3c2c3355c5fa0b4eed9693854bc84"
+    },
+    {
+      "path": "VERSION",
+      "size": 7,
+      "sha256": "86c7a3747e08794ca13cc3f735dcb5f1bc425f13fc670f2dc418516e800af075"
+    },
+    {
+      "path": "VEXA_0.3.13_UX_RELEASE_REPORT.md",
+      "size": 9990,
+      "sha256": "dff0c71cc5ac3fc7c55e885dae8b8b6498f2947eca7773860d6ca452373dbe73"
+    },
+    {
+      "path": "VEXA_0.3.37_RELEASE_NOTES_RU.md",
+      "size": 2611,
+      "sha256": "a23bd34d9fbb060c4bd5cf64b2f56e863d1542e6014dfb22304450f588cb45a4"
+    },
+    {
+      "path": "VEXA_0.3.39_RELEASE_NOTES_RU.md",
+      "size": 1404,
+      "sha256": "7a41ae5a4c7a290fef3df6d6fbee942f9712916ebcd61b75f0a7ecd72657f620"
+    },
+    {
+      "path": "VEXA_0.3.41_INTEGRATION_AUDIT_RU.md",
+      "size": 7006,
+      "sha256": "24c0f3a7d62d30c7cc3cce0e6904d9c7a7819b3b42016cc6c92dfa90d0b45673"
+    },
+    {
+      "path": "VEXA_MAP/.dockerignore",
+      "size": 30,
+      "sha256": "baa0ce28953804d12a273fe438bdc2eb43cb0c0b33937c71b9c100faa0db27e1"
+    },
+    {
+      "path": "VEXA_MAP/.gitignore",
+      "size": 150,
+      "sha256": "d1f567d1b834257b53445c4660ea77a9f7eb6813968a59da3c61026734065059"
+    },
+    {
+      "path": "VEXA_MAP/ANDROID_OFFLINE_MANAGER_0.3.16.md",
+      "size": 7139,
+      "sha256": "16f85e918035227eb1912116294d6c40ae7a0be58352976e04fd106acf52101c"
+    },
+    {
+      "path": "VEXA_MAP/ANDROID_OFFLINE_NAVIGATION_0.3.18.md",
+      "size": 9393,
+      "sha256": "c2fc353c81b227dcd3cd08c87a88abc07634d9e53485b038453a47dca0358306"
+    },
+    {
+      "path": "VEXA_MAP/ANDROID_OFFLINE_RENDER_0.3.17.md",
+      "size": 8221,
+      "sha256": "ed35ea1b4d78e16525f8681939c2556b957d70707ff82e1ff75f6ecb3fe3e8f8"
+    },
+    {
+      "path": "VEXA_MAP/Dockerfile",
+      "size": 176,
+      "sha256": "2ccb1a84fe8a57764d4ff627ef954b4f16c34788f5fb3c75f901b07c9d83c8b8"
+    },
+    {
+      "path": "VEXA_MAP/README.md",
+      "size": 8534,
+      "sha256": "929b89a155f87dc66db4cfea95b7e42891ab947815d97cdad462e9fffad1484e"
+    },
+    {
+      "path": "VEXA_MAP/REGIONAL_DATA_PIPELINE_0.3.20.md",
+      "size": 13530,
+      "sha256": "676b577166945761e3897ae6f05df2cfe2557af08e421e5407d8b431185361ea"
+    },
+    {
+      "path": "VEXA_MAP/RELEASE_0.3.15.md",
+      "size": 5279,
+      "sha256": "ef409c761648cd13f65dd29fdd6adcb0abd6c7262edb9b2b52fc83cded5ba691"
+    },
+    {
+      "path": "VEXA_MAP/ROUTE_INTELLIGENCE_0.3.27.md",
+      "size": 2150,
+      "sha256": "388bacbf9fa3ff26c42dcc848ddfdf467c0517e2f9be438f539c376497b8ebd8"
+    },
+    {
+      "path": "VEXA_MAP/ROUTE_INTELLIGENCE_0.3.28.md",
+      "size": 1195,
+      "sha256": "76337c634b389f6128de4004065203b4d3c40a38fad803eab4dc7c255dda81b2"
+    },
+    {
+      "path": "VEXA_MAP/VECTOR_2D_3D_0.3.19.md",
+      "size": 6773,
+      "sha256": "744f9e77a9185f245dbab665a2e45a365a6ab3f58ecb4ace9886479bae9e9d8f"
+    },
+    {
+      "path": "VEXA_MAP/data/.gitkeep",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "VEXA_MAP/data/osrm/.gitkeep",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "VEXA_MAP/data/regions/.gitkeep",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "VEXA_MAP/design-palette.json",
+      "size": 135,
+      "sha256": "8e9101d57ca2ed472889fcefbb01b3bb22c5b61777800582983b6c1434da92ea"
+    },
+    {
+      "path": "VEXA_MAP/server/offline_packages.py",
+      "size": 6748,
+      "sha256": "b1f39e4063d4f2581d8c0ad7a07377710a27cda3ec0232a6310510e34715577f"
+    },
+    {
+      "path": "VEXA_MAP/server/vexa_map_server.py",
+      "size": 33815,
+      "sha256": "259e287299ad6db0cc35254c37c66333f1b0d19bbbff16f396e603d01224aa38"
+    },
+    {
+      "path": "VEXA_MAP/tests/test_graph_audit_0326.py",
+      "size": 2085,
+      "sha256": "46de378f5e20443e330fd51530aca3977c46d58502f2cb2afcb613c03cee9fd0"
+    },
+    {
+      "path": "VEXA_MAP/tests/test_map_server.py",
+      "size": 14377,
+      "sha256": "1c4051ff55c3a1544ca018dd33c83e674c393b2553cb0e299bd8bdf571027c50"
+    },
+    {
+      "path": "VEXA_MAP/tests/test_offline_navigation.py",
+      "size": 5273,
+      "sha256": "45b0e069bf2bac70cbf935e7c68aa9aadb0839028e3f66c7e867b9dbee034400"
+    },
+    {
+      "path": "VEXA_MAP/tests/test_offline_packages.py",
+      "size": 7851,
+      "sha256": "c9a5b495ac42774e42594f9d1fd6cf4441bb9be2dfe3dd4c78524736462835cb"
+    },
+    {
+      "path": "VEXA_MAP/tests/test_region_pipeline_0320.py",
+      "size": 6605,
+      "sha256": "a73462ff5df6d2842c91f4c0217aef5bd19daf6b42125b29eaf4a482b5afbc80"
+    },
+    {
+      "path": "VEXA_MAP/tests/test_vector_pbf_0319.py",
+      "size": 3612,
+      "sha256": "43dbec9a1b355114d24796d9c56a5a7c1291959f1d0cd6c91bc93b9a82b13116"
+    },
+    {
+      "path": "VEXA_MAP/tools/audit_navigation_graph.py",
+      "size": 3803,
+      "sha256": "692cdcb553a5b88fb089bf94fcd1acb70de8620911ea15e0deb54c782e1f3700"
+    },
+    {
+      "path": "VEXA_MAP/tools/build_region_0320.py",
+      "size": 14015,
+      "sha256": "5353b5e1b8d47538be78478de395995a2fe5bc19c2485e5d30eba089d7b25885"
+    },
+    {
+      "path": "VEXA_MAP/tools/prepare_offline_navigation.py",
+      "size": 8054,
+      "sha256": "cb3b8f8eddb5bc8ca9e126099e4d1e9c0b6fdfb329232f2d346ae1330c27e7de"
+    },
+    {
+      "path": "VEXA_MAP/tools/prepare_vector_mbtiles.py",
+      "size": 4903,
+      "sha256": "856fa2030bd2d2d0ece9a4d26a9618a163c8efa7a1d1f23d26a4aea99351d93d"
+    },
+    {
+      "path": "VEXA_MAP_MIGRATION_STATUS.md",
+      "size": 1519,
+      "sha256": "d24677f310640f846965d8946784dae0fd39412c88b0b01027ca77c43d84d2e7"
+    },
+    {
+      "path": "VEXA_PRICING_REVIEW_0.3.11.md",
+      "size": 8159,
+      "sha256": "0b1e24062d471a461288dc5e67eb8365bc535bd269f82f137fe36116bb69cbd6"
+    },
+    {
+      "path": "VEXA_PRICING_ROADMAP_0.3.12.md",
+      "size": 9213,
+      "sha256": "19fc2f1a66d5199a86986abf69c3e966152fe79d02747eb1269a301051e36e10"
+    },
+    {
+      "path": "VEXA_Project_Description.docx",
+      "size": 44333,
+      "sha256": "5db456166a2ad17dd6f044e360be6fae708ab1bd7930df916d1203edff268b90"
+    },
+    {
+      "path": "VEXA_RELEASE_0.3.19.md",
+      "size": 6947,
+      "sha256": "393286582c21cbebda8419d8f196e304e3ef347267c6f7fc03cf8c5319661be3"
+    },
+    {
+      "path": "VEXA_ROUTE_INTELLIGENCE_0.3.22_NOTES.md",
+      "size": 3534,
+      "sha256": "5ef0bc3d1bc958ad3363bb48d566dde64f96c3ca5e02b33a4b7f748c595763d0"
+    },
+    {
+      "path": "VEXA_ROUTE_INTELLIGENCE_0.3.23.md",
+      "size": 4518,
+      "sha256": "494d5dcd9d00c25fcc340807a326a82cc633e897b570dc643410aedbd83cd2d2"
+    },
+    {
+      "path": "VEXA_ROUTE_INTELLIGENCE_0.3.24.md",
+      "size": 3495,
+      "sha256": "e61193835d26a553f9fa9551301d10e539302430c312458dd5b552d33fadc4f9"
+    },
+    {
+      "path": "VEXA_ROUTE_INTELLIGENCE_0.3.25_GRAPH_CONNECTION.md",
+      "size": 3220,
+      "sha256": "be72edb2a6cd587f88cc30e67706f5ce3695892fa366d67d79fe988b6a122784"
+    },
+    {
+      "path": "VEXA_ROUTE_INTELLIGENCE_0.3.26.md",
+      "size": 2081,
+      "sha256": "cc65956e5eeaa6cca124cf770d7da18268df680e3006c1fde21c6689e25d0218"
+    },
+    {
+      "path": "VEXA_ROUTE_INTELLIGENCE_STAGE1.md",
+      "size": 4856,
+      "sha256": "ce81e5980533f58cdbefa92459513f70b989a846c7870b0f7185393c73c98be6"
+    },
+    {
+      "path": "VEXA_UX_FEATURE_ROADMAP.md",
+      "size": 5789,
+      "sha256": "6d7f29075e0fbc84cab26af7319564c19e30d4759c0f930394cfdc3021b5cd74"
+    },
+    {
+      "path": "VPS_CHANGE_REPORT.md",
+      "size": 5447,
+      "sha256": "3c8e0d9e5534c2ca7ea951b15404ad0a2ffd612109d5ae79d99c80b94d0a02d0"
+    },
+    {
+      "path": "VPS_PRODUCTION_REPORT_0.3.42.md",
+      "size": 2643,
+      "sha256": "d54d2f1cac57662c9a2c8b73df164b7eae82e6cb3b5ce42f19a68ab3d2f70499"
+    },
+    {
+      "path": "VPS_START_HERE.md",
+      "size": 12396,
+      "sha256": "0ba54d2618efb1236eeb018934275e20cc4d97e4fe94d3d7e5957830f868b3a8"
     },
     {
       "path": "android/client/app/build.gradle.kts",
-      "size": 805,
-      "sha256": "0ad3924806cc0dcaf2f4c058dab2834ab2ea4bd3f6cb2080aa87ea8fbdeaff58"
+      "size": 3672,
+      "sha256": "2c33ed5fa99dd2d4e69f618fb2b5e8f0f365b9f7fdb74e7c794e023556567bdf"
+    },
+    {
+      "path": "android/client/app/src/debug/res/xml/vexa_network_security_config.xml",
+      "size": 225,
+      "sha256": "a603931b29ae211a8d13e4a04946c676fce812831976b48ca284e145df201ef4"
     },
     {
       "path": "android/client/app/src/main/AndroidManifest.xml",
-      "size": 456,
-      "sha256": "9f7e7270993b87c26d9b84abe07b273f12f4f6c2f380692a9ba2c95b5c3a6a36"
+      "size": 1301,
+      "sha256": "2953f9e9f9c1c991edfdaf77f615bdb8e7bf60ef5be0befbafeacecbe014895d"
+    },
+    {
+      "path": "android/client/app/src/main/ic_launcher-playstore.png",
+      "size": 386947,
+      "sha256": "72d2c0ce9cba50591bc5317826937d9e0d6e4d24b403e5568b507245fa0b55d1"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/AddressSearch.kt",
+      "size": 3015,
+      "sha256": "e20fa9d384202b36ee93d2359559797d3d35fcde9071dbee0ff13667a8839328"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/ApiClient.kt",
+      "size": 12299,
+      "sha256": "5b5724f0f11bd12228e4cd61aaf13afbdcf7242d6661555411084d5eea493b3d"
     },
     {
       "path": "android/client/app/src/main/java/ru/vexa/client/MainActivity.kt",
-      "size": 4028,
-      "sha256": "53218e5a2c1214d84754cee376759ca117816bd996a5a76539b35021d8795dc9"
+      "size": 39343,
+      "sha256": "c05ce26f5c99694e8c0a9a494ff98f804c24088aa2619e84a3c673c0d23df036"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/PassengerAuthDialog.kt",
+      "size": 13093,
+      "sha256": "0f186de66b07360dc42964c5eaabf9a3b3421662d2d7856ee9fa8a449e62fef5"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/PassengerOrderRepository.kt",
+      "size": 12757,
+      "sha256": "d1fe9e1aeb62614bed3d5c444185aff529e7a1132a20d2af679e499f9f5b34fe"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/PassengerOrderStatusPanel.kt",
+      "size": 12097,
+      "sha256": "97776481fda5c24b373543dfe6a42656f0630e1656275f6d29f2eef97a8576eb"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/PassengerSessionStore.kt",
+      "size": 6041,
+      "sha256": "fcafb87fab3e0172a6db4f9a694c9ce10d09c677f14f0dccd005d23efb241388"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaApplication.kt",
+      "size": 273,
+      "sha256": "7b7a8e8e77b4cbd345d4697c0f6cf4617298fe17d1a409616a4ecdf0066c6057"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaClientPreferences.kt",
+      "size": 1554,
+      "sha256": "b7290ff4597ce9c5da1c919dc606546dfce68f02a2201df5ccf232e093abed2e"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaClientQuickDestinations.kt",
+      "size": 2070,
+      "sha256": "c516d44c7f66075e5c178d6acb0147be3110b6ab526d2e9e1618f6f422d08394"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaClientSettingsScreen.kt",
+      "size": 15148,
+      "sha256": "b8e1580b598914c075dc1029081e8bfb7129da842ab5dc7b3f9449e68bc36b56"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaDesign.kt",
+      "size": 1932,
+      "sha256": "ce160557257311c391edaad6d054950189fbf6849e21abffade2f49c6aa8e888"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaMapView.kt",
+      "size": 9756,
+      "sha256": "943489bef9825ade39277d349785bc922a201c8274c572cb13b8c4dfbd137100"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaRideShare.kt",
+      "size": 1098,
+      "sha256": "73dfa61072e2bf43d3f3b63e412409ddbe98129a350bc7ded8a6f4eb79e4b0aa"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaRouting.kt",
+      "size": 3178,
+      "sha256": "c97e32325cfce8b8ef107dd026fb692cfbc2644659eac1b8e73adf9001226b17"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaSavedPlaces.kt",
+      "size": 2907,
+      "sha256": "ad6f080e114574bdd15072bf1727094ed60944f315faea855a5f11dfbaa58993"
+    },
+    {
+      "path": "android/client/app/src/main/java/ru/vexa/client/VexaTripHistoryDialog.kt",
+      "size": 8080,
+      "sha256": "23de53357d5c558842f822574caf217760ed81c77c5f6fabe668c9eb0425f6a8"
+    },
+    {
+      "path": "android/client/app/src/main/res/drawable/ic_launcher_background.xml",
+      "size": 5130,
+      "sha256": "ec7273202d7e4579acf841938cc4ad741e858968c0443e37923699adf609a420"
+    },
+    {
+      "path": "android/client/app/src/main/res/drawable-nodpi/vexa_destination_flag.png",
+      "size": 7829,
+      "sha256": "df3af735158fa25ef00daa7d9535a03678656cbe32cffd6a20c298ad59f519bc"
+    },
+    {
+      "path": "android/client/app/src/main/res/drawable-nodpi/vexa_pickup_waving.png",
+      "size": 9180,
+      "sha256": "3b382a5874a7f398bd0d47348db1730ff58cf5027b7ae1854d4b04102310d7d9"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "size": 341,
+      "sha256": "c74e86233a543e9e03e93697cf01170e0cd7dff7ff1b82532764aede79683eb0"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "size": 341,
+      "sha256": "c74e86233a543e9e03e93697cf01170e0cd7dff7ff1b82532764aede79683eb0"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-hdpi/ic_launcher.webp",
+      "size": 6446,
+      "sha256": "95266b73ef7677552259310bb943d4c24f85db75cf4a53d743633947ebfec0cc"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.webp",
+      "size": 15738,
+      "sha256": "cfa60e78ae5eca662867c6e805e45c70fc00666c9583482e3e9dfaa5970e60ee"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp",
+      "size": 7888,
+      "sha256": "fadb38b7a944aa0c5eab8402404d182a02d6c7142b3b21c33dce94772225a180"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-mdpi/ic_launcher.webp",
+      "size": 3600,
+      "sha256": "85a625bcff782d89eb876d476f8ebdf0912706b5e1ad7ad9bdaa182baae43931"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.webp",
+      "size": 8920,
+      "sha256": "5dbf1ee0fa3975ba145107c4b2d99523cb3f98b269c3677eb27a671685c95207"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp",
+      "size": 4468,
+      "sha256": "d68a39916a95c336b52a9b6025ab27ec6c566407d1f647a6cd9c9fed29fe3265"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-xhdpi/ic_launcher.webp",
+      "size": 9668,
+      "sha256": "25d37cefb0125162726df64528e0f731760ba9998773faa60a98934a1562b66e"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.webp",
+      "size": 24186,
+      "sha256": "9ca03070f700f13958e615f7c09ed6abc85072b2969d8f2d86e691b93b4ebd29"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp",
+      "size": 11854,
+      "sha256": "26ec46468e6ab2e3651f87c9deaf107509e5042081f24cb03cf008dfe2002ce2"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp",
+      "size": 17614,
+      "sha256": "c90a88e408f3365c443e50a8581e2f18a7a840c948b2cf434e9010b580ad35e3"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.webp",
+      "size": 46552,
+      "sha256": "ad17aec324b6a6980fe6881449f9c54f514f1bdd428a15bced3c72d8b1134b40"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp",
+      "size": 20142,
+      "sha256": "93dfef4832eedd064c64675f3828de16da2452d2e2fdbf3520ea67e8223999d4"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp",
+      "size": 26314,
+      "sha256": "2339acfc1dd81349d037a1ccec2f40ed5be5cecfddb040153941d46a1d531ecb"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.webp",
+      "size": 79418,
+      "sha256": "f2460a3ef3fe2605e71544dc00fd3952ea058185c856c920a3b2733a538201d3"
+    },
+    {
+      "path": "android/client/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp",
+      "size": 30612,
+      "sha256": "5a460b140bc6bac220b21ed3d9b1e4719d98ddda8ae6e41cc1f865c8321d24c1"
+    },
+    {
+      "path": "android/client/app/src/release/res/xml/vexa_network_security_config.xml",
+      "size": 334,
+      "sha256": "7cde0588d3b1ef0b646315443e82dc0ed6a8aead145e977430ddbb9de20c2e39"
     },
     {
       "path": "android/client/build.gradle.kts",
-      "size": 207,
-      "sha256": "e1cd0888abdf99f6ae05800a853dcc26ee458b9d7925d1a1059c666d61fb5490"
+      "size": 278,
+      "sha256": "22b600cfcb377e8f6abc809e02e1fcd5bcf7520767ed48bfa76afbb42cf79c04"
+    },
+    {
+      "path": "android/client/gradle/gradle-daemon-jvm.properties",
+      "size": 1138,
+      "sha256": "6c13aa5ba36690ccfbbb25a8807d01d98c15833e446d7ae82ddc726472cb8ef7"
+    },
+    {
+      "path": "android/client/gradle/wrapper/gradle-wrapper.jar",
+      "size": 48462,
+      "sha256": "497c8c2a7e5031f6aa847f88104aa80a93532ec32ee17bdb8d1d2f67a194a9c7"
+    },
+    {
+      "path": "android/client/gradle/wrapper/gradle-wrapper.properties",
+      "size": 231,
+      "sha256": "4432b77fd0ff4a49a7ba7e17a8657eb1ce47bd57b0f4b43cce64ccddf2fb822e"
     },
     {
       "path": "android/client/gradle.properties",
-      "size": 100,
-      "sha256": "d5f372c6d46ad7c8d33f714bfae564eb5e1d73a159c495df9bc782b33e3567c2"
+      "size": 415,
+      "sha256": "363727fd7dff5355ef7156c9589b686966832438e83a5b93979752708803208d"
+    },
+    {
+      "path": "android/client/gradlew",
+      "size": 8656,
+      "sha256": "a5a5c199ba02189ae8c46a334223371a20599d9c298ef65e7540ede4a3f72d59"
+    },
+    {
+      "path": "android/client/gradlew.bat",
+      "size": 2848,
+      "sha256": "d539676c48b596afda64c963ec8f7ee56c7b3fe7e3b81d1dbe2d1a1e3dd9e9f8"
     },
     {
       "path": "android/client/settings.gradle.kts",
-      "size": 273,
-      "sha256": "c722707c01105f7fb122ab9999258ed2e89d6a90b6a18bd03f32bf0dda35202d"
+      "size": 429,
+      "sha256": "a9e04dc6147af1b2bf9525b03fc7c7bb6dfd45c67ef332b59a473aa4504051fc"
     },
     {
       "path": "android/driver/app/build.gradle.kts",
-      "size": 805,
-      "sha256": "598d4503946b72f9dfb91370d28b51af388d06ca4a3362de485eccc0839607b1"
+      "size": 3723,
+      "sha256": "72cdddee44d1f87655e8e51ba5732361de1fd825fb36c9f5ef9007a5c386b9ed"
+    },
+    {
+      "path": "android/driver/app/src/debug/res/xml/vexa_network_security_config.xml",
+      "size": 225,
+      "sha256": "a603931b29ae211a8d13e4a04946c676fce812831976b48ca284e145df201ef4"
     },
     {
       "path": "android/driver/app/src/main/AndroidManifest.xml",
-      "size": 456,
-      "sha256": "fb049135716710814c5b69923c0a3c94a3c5e0b8931275b742124daacfefc455"
+      "size": 2292,
+      "sha256": "8c2c0160b595bd8fa35a4917286fda2229cb07964f6c25a9cfadf1e784394e9e"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverApiClient.kt",
+      "size": 23857,
+      "sha256": "196dac8fdac0767e2d4a13c9f8b9a4f8b349a5eccb0b2bbc9022bed3e588812d"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverDutyRules.kt",
+      "size": 352,
+      "sha256": "adf3d8ab4642d279cc8f97e3353b4c868c4229d56d2d53f32c208bed8e0c69ac"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverFinanceActivity.kt",
+      "size": 2744,
+      "sha256": "f688bd441df0951259aee27d632193cc932897f793e34965a7308c9c3e6fc4c0"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverFinancePanel.kt",
+      "size": 21454,
+      "sha256": "8626c034078fe4ea6a5e2a0fd4c046110dd582bfe1a1a8fe696b7a2fc9cdf5d8"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverGpsReporter.kt",
+      "size": 4987,
+      "sha256": "4401a1858a1d3ae80c7c253743c6bae93dcfaa0985ea4329a64d7dd43b11f4d2"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverHomeMapCard.kt",
+      "size": 1300,
+      "sha256": "6a754bc3530fc9ef3bb1fcca0af7127512122e7a3af20f11e89d09d69154a69e"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverLocationService.kt",
+      "size": 25895,
+      "sha256": "923c4d2401a128af4793caa270687f1a8cd7b3fa7c3a732f1d3eeb0320bff455"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverMap.kt",
+      "size": 24476,
+      "sha256": "2361165a09a38ecf2bb5f54de649b3440d445f49fc0e106f09d37deae1abce78"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverOfferAlertPolicy.kt",
+      "size": 439,
+      "sha256": "a5c2bc2f11d7035efe1cf1f88bb76c7ef85c71fb32f449aff95386c6f78cee17"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverOfferAlerts.kt",
+      "size": 6168,
+      "sha256": "129c13d0b7373f3186c5ec431db5554eb13ed9302b36556f456b108771fd13a8"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverPreferences.kt",
+      "size": 2099,
+      "sha256": "75b2f96e47e7828806cb6d1023ad254ac943276c4db8a2c4917c43ac632aa5a9"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverQuickActions.kt",
+      "size": 2654,
+      "sha256": "dc5c732c26cf2e51d4c374fb76324521f76f0c77d5401b4296353ff02d9082d4"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/DriverSettingsScreen.kt",
+      "size": 10310,
+      "sha256": "dda51bc5aa3fec5d341608d18657625488026d51e21123bade685e6ecf0205c1"
     },
     {
       "path": "android/driver/app/src/main/java/ru/vexa/driver/MainActivity.kt",
-      "size": 3613,
-      "sha256": "bf50470ed19193e33ef5e56b5cf38f8dc30b918139118762c80a92769ee27a78"
+      "size": 50992,
+      "sha256": "1d7166f027eea2c1db5b48d5eb66bd5ae7aa5c0aeedd1076e84927c0a0ae0a01"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/VexaApplication.kt",
+      "size": 297,
+      "sha256": "7eaea017e8b891ca99f647a42f64a8c36886656754bfe341ef359001f6f729e9"
+    },
+    {
+      "path": "android/driver/app/src/main/java/ru/vexa/driver/VexaDesign.kt",
+      "size": 1932,
+      "sha256": "f20e1938f3ce8df6a8605521a244c1723de7f6e43445bda953286f4311e1d4bd"
+    },
+    {
+      "path": "android/driver/app/src/release/res/xml/vexa_network_security_config.xml",
+      "size": 334,
+      "sha256": "7cde0588d3b1ef0b646315443e82dc0ed6a8aead145e977430ddbb9de20c2e39"
     },
     {
       "path": "android/driver/build.gradle.kts",
-      "size": 207,
-      "sha256": "e1cd0888abdf99f6ae05800a853dcc26ee458b9d7925d1a1059c666d61fb5490"
+      "size": 267,
+      "sha256": "1852ec7fe434019a92d06a8961eefb627c5681da1b3c06f148a51d4c0f61e89e"
+    },
+    {
+      "path": "android/driver/gradle/gradle-daemon-jvm.properties",
+      "size": 1138,
+      "sha256": "6c13aa5ba36690ccfbbb25a8807d01d98c15833e446d7ae82ddc726472cb8ef7"
+    },
+    {
+      "path": "android/driver/gradle/wrapper/gradle-wrapper.jar",
+      "size": 48462,
+      "sha256": "497c8c2a7e5031f6aa847f88104aa80a93532ec32ee17bdb8d1d2f67a194a9c7"
+    },
+    {
+      "path": "android/driver/gradle/wrapper/gradle-wrapper.properties",
+      "size": 231,
+      "sha256": "4432b77fd0ff4a49a7ba7e17a8657eb1ce47bd57b0f4b43cce64ccddf2fb822e"
     },
     {
       "path": "android/driver/gradle.properties",
-      "size": 100,
-      "sha256": "d5f372c6d46ad7c8d33f714bfae564eb5e1d73a159c495df9bc782b33e3567c2"
+      "size": 415,
+      "sha256": "363727fd7dff5355ef7156c9589b686966832438e83a5b93979752708803208d"
+    },
+    {
+      "path": "android/driver/gradlew",
+      "size": 8656,
+      "sha256": "a5a5c199ba02189ae8c46a334223371a20599d9c298ef65e7540ede4a3f72d59"
+    },
+    {
+      "path": "android/driver/gradlew.bat",
+      "size": 2848,
+      "sha256": "d539676c48b596afda64c963ec8f7ee56c7b3fe7e3b81d1dbe2d1a1e3dd9e9f8"
     },
     {
       "path": "android/driver/settings.gradle.kts",
-      "size": 273,
-      "sha256": "8b1002f4450b2edaaf23b3a33cca3a55f9472c6dd3cdd3e043a88e8f62496763"
+      "size": 432,
+      "sha256": "b54bf18fac4e9db4b4518b34980ccf4f574739d30845accb8a2758d6e0fc03cd"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/build.gradle.kts",
+      "size": 899,
+      "sha256": "885209569efd0df0199fdf09684cb3bd1ffed3130c9668ab6365c79b5b7f9fc2"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/AndroidManifest.xml",
+      "size": 111,
+      "sha256": "c8fe08b06e479efc7e3d00476fffe693a3e943e2b874b3c6a1ba5156fc180751"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/DriverMapPreference.kt",
+      "size": 757,
+      "sha256": "3b48d86d0eb049b4aa777d8f4ec0cd5d609a17cf46a1fadfff171ebc2763ec09"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/MapSourcePolicy.kt",
+      "size": 1091,
+      "sha256": "63ab056494a37cd87e2d753f2b213873520ed3375abf48b844c394d1453004ea"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/NavigationCameraRules.kt",
+      "size": 754,
+      "sha256": "12a0a591c28a89c07d0d34413b5cec0191d99a4f8e915ef7df48c2dda9b6c5d8"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineGraph.kt",
+      "size": 4528,
+      "sha256": "443b824408ab2aa91074133749112732b4261c031c42be749f9f83ea8253f114"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineMapFileImporter.kt",
+      "size": 6938,
+      "sha256": "01eb6bd9ac7b0a4ee6616691de67bf8e46720e7c6e444df7ac9ff82bf728b8dc"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineMapMode.kt",
+      "size": 2162,
+      "sha256": "e987003d9fa764f4ac4439b8a449f2ddef008e7ea7120e4a1bd6ad971f4cd54f"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineMapRules.kt",
+      "size": 1252,
+      "sha256": "3faa6be484eafdafc1e907119ea4973d2239ac504356aaca3bb3104d07784b29"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineMapsRepository.kt",
+      "size": 13013,
+      "sha256": "a4aa4862d9d99cbafe0487d5a754ba01fc345edfecc954eef947336165919b7a"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineMapsScreen.kt",
+      "size": 18275,
+      "sha256": "3da9352ffdc9a37ed00895e854e69de6e6fe6298b673b975cb3442198e17f68a"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineMbtilesServer.kt",
+      "size": 18411,
+      "sha256": "5d8fef704797559aa36a7e14625b1d3170c2f7d318c786014f80ab40c7faf637"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineNavigation.kt",
+      "size": 11612,
+      "sha256": "3eaa3acd55d5d466de82b03fe3639664be0392a936595152cb91e14a5942cd86"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineSearchTerms.kt",
+      "size": 352,
+      "sha256": "a0386dd65868885520ff68f52b6eac28b1c4810c0797fbe6fa8b01db6cfab465"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/OfflineTileMath.kt",
+      "size": 817,
+      "sha256": "5b21055071993250a584d1aee1a165dbabe9feb180105882a8e27a5d84e6ef75"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/RoadAwareMatching.kt",
+      "size": 3369,
+      "sha256": "51aa48c375cb4cdd8ab3dd9167b25ec0ffe26519a40439d3edac605a3da3d32c"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/RouteGuidance.kt",
+      "size": 2426,
+      "sha256": "9381291ebf20f642802aac136012aee55818a6598b5ce6fc1dfd0b5e5ec7df14"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/RouteIntelligence.kt",
+      "size": 5233,
+      "sha256": "666c9deadab235cad3c2b1bb8300575e03bc8ff47c7063a4285d216ef8233c66"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/RouteMatching.kt",
+      "size": 2064,
+      "sha256": "d2d7f1488a3e2f497d449302934084c1aac33bf368f325d248b8e216f59668b9"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/main/java/ru/vexa/offline/TravelEstimate.kt",
+      "size": 773,
+      "sha256": "58c5f61f47caec46b66452a77c6aeee7d08351cb6a4d84ab5b349a2dc2bbd0df"
+    },
+    {
+      "path": "android/shared/vexa-map-offline/src/test/kotlin/ru/vexa/offline/RouteMatchingSmoke.kt",
+      "size": 1183,
+      "sha256": "2d7da9828b17d0c0aa5e39f03f2f3f2deb3b2e13c3a79bc63b0755ac6a000c46"
+    },
+    {
+      "path": "backend/.dockerignore",
+      "size": 43,
+      "sha256": "f7c892115761c007dde70c924ef81b4d9195ba355d7b07ba976facbc6f39bcee"
     },
     {
       "path": "backend/Dockerfile",
-      "size": 203,
-      "sha256": "f892f13ba52cf16bbaaa6d88c1ab5b9bffc45128c4157f02fc3fd2d02a473297"
+      "size": 331,
+      "sha256": "77826a18c5b3b080adb1d2a7a905ff90402c98bdabef1be9825e0cac0eb7c7d0"
+    },
+    {
+      "path": "backend/README.md",
+      "size": 2259,
+      "sha256": "09214db2b4aab8354e66387c36cebec02f10823fdbc42bced8ecb187ed5e249f"
+    },
+    {
+      "path": "backend/alembic.ini",
+      "size": 625,
+      "sha256": "e9389005f7a6e75e822fc4142e73e1bac8c79f3c589131da2c11d843f890ce30"
     },
     {
       "path": "backend/app/__init__.py",
@@ -83,49 +886,569 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
+      "path": "backend/app/application_models.py",
+      "size": 7853,
+      "sha256": "4a6d7d3e04b762c2a79a1b5630a1fc088b842ccad6f8bc7d27e83829a076ca16"
+    },
+    {
+      "path": "backend/app/auth_models.py",
+      "size": 2029,
+      "sha256": "773a7b698406a71b034a7aae9cb564af4025bb656a38786ba685ba3326fe275e"
+    },
+    {
+      "path": "backend/app/auth_providers.py",
+      "size": 5294,
+      "sha256": "17bf40c97f85a2acf0631d5a83155769ec675a2189375b37a7ef55b6baee93fd"
+    },
+    {
+      "path": "backend/app/config.py",
+      "size": 3591,
+      "sha256": "a8879054bfc789c7d222428a32818ba8d35df5c2d22324d0cd057a39f4ebc234"
+    },
+    {
+      "path": "backend/app/create_admin.py",
+      "size": 3163,
+      "sha256": "7992772f54c30fa301682a871f48171ae30eba212ba6509fec6e2d875ff0dbcb"
+    },
+    {
+      "path": "backend/app/create_platform_admin.py",
+      "size": 2448,
+      "sha256": "f58862d0f93dfd58b3412145a8408e4167172ce633b7586b91ffdac96110a165"
+    },
+    {
+      "path": "backend/app/database.py",
+      "size": 530,
+      "sha256": "a0c48c002be0bd332ee385cc7190fbe8156747d47b233f20b300b202bd29ff0e"
+    },
+    {
+      "path": "backend/app/dispatch_driver_api.py",
+      "size": 37331,
+      "sha256": "56831400066b24c66bc02e9f5a829341639131eed95178869854661fd77e102d"
+    },
+    {
+      "path": "backend/app/dispatch_engine.py",
+      "size": 5471,
+      "sha256": "b983380bd4682e2a630557c697d9a041b5eadaef76b43c8d9e1f9355710b375b"
+    },
+    {
+      "path": "backend/app/dispatch_order_api.py",
+      "size": 36705,
+      "sha256": "4afb47c27a09818684d08c556916c9f94a25e1ad2defbb85a48950c780aca767"
+    },
+    {
+      "path": "backend/app/dispatch_worker.py",
+      "size": 1432,
+      "sha256": "060ecb66651c0378eacadcf9f8519d4dcb3780a1656223bfb3338cd87cc7c125"
+    },
+    {
+      "path": "backend/app/driver_api.py",
+      "size": 41205,
+      "sha256": "39a874477bd4b5a66e9a49d40af6538325f6dbe19af67e9025c86f3394e258d2"
+    },
+    {
+      "path": "backend/app/driver_order_offer_models.py",
+      "size": 3944,
+      "sha256": "2d5fc68f0d81b754efd8289c20b64a4aeeccd8f9ebd502d43b8ca986694d3d9b"
+    },
+    {
+      "path": "backend/app/driver_transfer_api.py",
+      "size": 6595,
+      "sha256": "0487083f6b021b17159cba8ff107287228d0fbef51ab1bf86727a2ffb473d48a"
+    },
+    {
+      "path": "backend/app/driver_transfer_models.py",
+      "size": 3289,
+      "sha256": "e375c675a5615bc9195cef5e5b7fab3ec98b9a405af6dea206e7df0597f44c44"
+    },
+    {
+      "path": "backend/app/dynamic_pricing.py",
+      "size": 9129,
+      "sha256": "8e5e72d097925a2e232cefeffc31522feade9fd2b51c0441709a04c849dc9aac"
+    },
+    {
+      "path": "backend/app/dynamic_pricing_api.py",
+      "size": 14934,
+      "sha256": "2590fc6527932b71459ebe172865c3bdca780d6a1a8c570a17513a1495c7e9a9"
+    },
+    {
+      "path": "backend/app/dynamic_pricing_service.py",
+      "size": 11623,
+      "sha256": "ccaf1e1e9ab7c80a48cf164d53cddea222f06f1a9b72bc93adef3eb8302c0433"
+    },
+    {
+      "path": "backend/app/legal_acceptance_models.py",
+      "size": 1307,
+      "sha256": "5f926fe1b1ab67f3f86d492021f757c7ef4442c7bd096a3186805afba43e3d97"
+    },
+    {
+      "path": "backend/app/legal_acceptance_service.py",
+      "size": 1489,
+      "sha256": "c28f9f83905203dd0b78708b1ac96367c115d8fbce5d2e78efd0cf07c92535fe"
+    },
+    {
+      "path": "backend/app/legal_account_api.py",
+      "size": 2783,
+      "sha256": "4aed705cdd6d7085309538e52f2e07d1949a4b8039493efa2948e8bb11916bd4"
+    },
+    {
+      "path": "backend/app/legal_compliance.py",
+      "size": 3971,
+      "sha256": "cc4545db8ff70196037ac6dd729e2598cf6ab6e9f3058030ac4336360e7d3270"
+    },
+    {
+      "path": "backend/app/legal_dispatch_gate.py",
+      "size": 2346,
+      "sha256": "d3220dd863dba158bc959dd4d19ab2ea550377d3ff152ac2baf65ccba84f812f"
+    },
+    {
+      "path": "backend/app/legal_dispatch_models.py",
+      "size": 2151,
+      "sha256": "f0b1e21d9d922f57339960292e58dfb8f1e9c5d8fe9926db93927ec16810d75f"
+    },
+    {
+      "path": "backend/app/legal_documents.py",
+      "size": 1957,
+      "sha256": "3c436400c1f329f17ebb9c55012440d3dda5630abcf3caa91ac2eb12cd679ca9"
+    },
+    {
+      "path": "backend/app/legal_documents_catalog.json",
+      "size": 48937,
+      "sha256": "e349565db1751bdcfd8bdeb3e8efed99106b2a1fb8220460f30a70c70119c6e3"
+    },
+    {
       "path": "backend/app/main.py",
-      "size": 3406,
-      "sha256": "794a7869de1cb2bc6f4e931e2fae17b33286ed79adee60f86466ff0002e194f1"
+      "size": 60574,
+      "sha256": "a4997f853e154bae890e114a1d0d298364c21b47d74d10ec91a4b621be4e68d1"
+    },
+    {
+      "path": "backend/app/models.py",
+      "size": 45481,
+      "sha256": "2ba1f6010a49035f52f951ec7aa327a32f51376925c1f102bf20169b8095dac6"
+    },
+    {
+      "path": "backend/app/operational_pricing.py",
+      "size": 1584,
+      "sha256": "8b8457b2494b392e09cfe5e10529377d5e2bb461cd058f0c634b02da74e85b23"
+    },
+    {
+      "path": "backend/app/organization_access_models.py",
+      "size": 9394,
+      "sha256": "0d1ab1bda21cb7422bdbd05624856e99fd64cef4b13a186d68572cab1c99e127"
+    },
+    {
+      "path": "backend/app/organization_api.py",
+      "size": 16615,
+      "sha256": "484df9e356c181c074ead5ff43f8f69749afda0ed1e1561c687489c59de2e87c"
+    },
+    {
+      "path": "backend/app/organization_models.py",
+      "size": 5598,
+      "sha256": "73e3b5d2bdfe2c77d6008443d6215f7582eaf1cb0ea027e7bff95e47450578e7"
+    },
+    {
+      "path": "backend/app/organization_service.py",
+      "size": 4460,
+      "sha256": "3bdd5cded8b467c6e978fade2e26dde9d019e90e102ef978ce69abb518c552db"
+    },
+    {
+      "path": "backend/app/passenger_auth.py",
+      "size": 16646,
+      "sha256": "6abc1e1bf7cbda57793a00b977035aa2d26a55ad5cca4e9d03f75560a5a73d1f"
+    },
+    {
+      "path": "backend/app/phone_utils.py",
+      "size": 530,
+      "sha256": "d3985e154f84e9e71c4d1ec8c27ce1647a1a2056d75750293c8412f787be1b01"
+    },
+    {
+      "path": "backend/app/platform_admin_auth.py",
+      "size": 3688,
+      "sha256": "23113d55323c96504d3b63869ab55e37cb1213501b210d4208a7084303c30b01"
+    },
+    {
+      "path": "backend/app/platform_admin_cities.py",
+      "size": 6454,
+      "sha256": "0bfd25b24ab6758fe9fb0f09cfe163e1c67959c66a89c0c6c086683cd4139847"
+    },
+    {
+      "path": "backend/app/platform_admin_router.py",
+      "size": 446,
+      "sha256": "ffee9b8afa6d43dadc7a56309ceef4f41edc65114df3b24bf26453259b762940"
+    },
+    {
+      "path": "backend/app/price_breakdown.py",
+      "size": 3857,
+      "sha256": "26ef8b76e5da408067774dc23b59797cf0d0082513f53a1b52caf329043bab9e"
+    },
+    {
+      "path": "backend/app/pricing.py",
+      "size": 4250,
+      "sha256": "162ed52ffd4ecb20bf72a4dd2e0340e96d96fc75ac5236d8797649e4a4ae5c35"
+    },
+    {
+      "path": "backend/app/route_pricing.py",
+      "size": 2465,
+      "sha256": "65ef85b34bddc6cbe68c2f396707c7cad69633fff1401af3fed255283f15e576"
+    },
+    {
+      "path": "backend/app/routing.py",
+      "size": 3325,
+      "sha256": "c9e320ab3cee434359cc09b6cfc2f8b40bd6bd3f6811598573fe4b606e0fdb14"
+    },
+    {
+      "path": "backend/app/routing_providers.py",
+      "size": 3426,
+      "sha256": "c97cfce734fe03e65417c5b1c8a0a39869841aea5df52f49b92bac37be2476ec"
+    },
+    {
+      "path": "backend/app/schemas.py",
+      "size": 13680,
+      "sha256": "f464e4a8df8d66b42053808171c849260c72e8108c96f016d45c8b407dd995f0"
+    },
+    {
+      "path": "backend/app/security.py",
+      "size": 4475,
+      "sha256": "d8a6c3d9b976e61351b6653184779863faed2baf217b1812defcfbef39015f6e"
+    },
+    {
+      "path": "backend/app/seed_pilot.py",
+      "size": 2512,
+      "sha256": "d77f738e826295cd090e98a20c6e5b89bdc1efa03c9e13a459fb529d1fd0583d"
+    },
+    {
+      "path": "backend/migrations/env.py",
+      "size": 2554,
+      "sha256": "9fd6ac339744844a1b5c503eb781c836cd4d2e6dd1890e5f5d00fc90b10bb1ef"
+    },
+    {
+      "path": "backend/migrations/script.py.mako",
+      "size": 636,
+      "sha256": "e0b3a2b667b3aead36f26d483f3525f4033b5d6d0a2063141e52b6f66c018514"
+    },
+    {
+      "path": "backend/migrations/versions/.gitkeep",
+      "size": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "backend/migrations/versions/0001_initial_schema.py",
+      "size": 10540,
+      "sha256": "6820cea92bae7a42b7c266cb0b4e818365a7e4af6058aa4a698328a1cca48e00"
+    },
+    {
+      "path": "backend/migrations/versions/0002_add_order_route_metadata.py",
+      "size": 986,
+      "sha256": "18b74b6ecd863888937628c3a940ce8014fb9edb2033b6e470d57efc77aa4fe5"
+    },
+    {
+      "path": "backend/migrations/versions/0002_organizations.py",
+      "size": 4303,
+      "sha256": "4a4e0ad004f47e2eb44acff495b60f61f0475e47a482282f7937c3e0655ed2f9"
+    },
+    {
+      "path": "backend/migrations/versions/0003_add_tariff_fare_limits.py",
+      "size": 1750,
+      "sha256": "952167b04c28ca2b4bd150ce96cc8cc0d623eb881cb50afe84993ffa442564a0"
+    },
+    {
+      "path": "backend/migrations/versions/0003_applications.py",
+      "size": 6384,
+      "sha256": "9dc3fa4f35c5e4a63c73d310e32196e7509b757f6f21ab4f0c15b74d088d47e1"
+    },
+    {
+      "path": "backend/migrations/versions/0004_add_tariff_change_history.py",
+      "size": 2460,
+      "sha256": "6f36ec5ddf51d6335042aedd99f5920461599fe929230f98175d77318c2dcd34"
+    },
+    {
+      "path": "backend/migrations/versions/0005_add_order_fare_breakdown.py",
+      "size": 2569,
+      "sha256": "0e8c81a377347118823bd2bf70559e30d8fdb518415ad70ec4c3a55a71426f22"
+    },
+    {
+      "path": "backend/migrations/versions/0006_add_passenger_auth_sessions.py",
+      "size": 2688,
+      "sha256": "f9f1f160606c95a7f4db6f921a59557ca34f77a68a4643dbee56e1912ffc1cc6"
+    },
+    {
+      "path": "backend/migrations/versions/0007_add_order_options_and_tariff_surcharges.py",
+      "size": 9688,
+      "sha256": "ff09b0442853f606f1d84964c5cef93484940473da25ddf651c8e752ad79d9de"
+    },
+    {
+      "path": "backend/migrations/versions/0008_add_driver_locations.py",
+      "size": 2048,
+      "sha256": "e53903f6abb040343db6b016a9939abf5de6878e60322726058ad728b93fbd7b"
+    },
+    {
+      "path": "backend/migrations/versions/0009_add_driver_finance_transactions.py",
+      "size": 5223,
+      "sha256": "1d396efb42b4086d435ec7a93f143815d2ea2b3f5682c136d3cba71350ffe14f"
+    },
+    {
+      "path": "backend/migrations/versions/0010_add_driver_branch_transfers.py",
+      "size": 3335,
+      "sha256": "5918dc3e93bfe1b9277a99dbb7c5b886a96b17871f585769854ed00651ba8b59"
+    },
+    {
+      "path": "backend/migrations/versions/0010_add_dynamic_pricing.py",
+      "size": 8879,
+      "sha256": "e28c33ba67d2909c72f2d7da56c202ea2559e5334216e56554e76af56030135c"
+    },
+    {
+      "path": "backend/migrations/versions/0011_add_order_dynamic_pricing_snapshot.py",
+      "size": 7944,
+      "sha256": "7202f5363e42b7fd12a3b6be522bfd95faa53c17580ddc4d453f05f0426ba6d8"
+    },
+    {
+      "path": "backend/migrations/versions/0012_add_driver_order_offers.py",
+      "size": 3429,
+      "sha256": "b131e6d581be39abd1a066d04b7ec081bd8bab1bd20805c88634eaa1637e9613"
+    },
+    {
+      "path": "backend/migrations/versions/0013_merge_migration_heads.py",
+      "size": 436,
+      "sha256": "05f8a0b56e764b10dd33c5b0a312543c999210806dbef949cf3a06d27ab84d52"
+    },
+    {
+      "path": "backend/migrations/versions/0014_remove_anonymous_order.py",
+      "size": 7497,
+      "sha256": "7d92c50fc8a4e4bdeafc4823e45814450d1fe9831cb6a719d186bcc0634aae03"
+    },
+    {
+      "path": "backend/migrations/versions/0015_organization_access.py",
+      "size": 8091,
+      "sha256": "5f8f5b3ef76e36a52e65f2283904e5c509e405359a0d7c5ec6e4a14cda9e816e"
+    },
+    {
+      "path": "backend/migrations/versions/0016_dispatch_pending_offer_uniqueness.py",
+      "size": 933,
+      "sha256": "0a4d11972042f094347895ca137383f7951fc4bc5a1eeb6b33b8426d98c6b443"
+    },
+    {
+      "path": "backend/migrations/versions/0017_tariff_inclusions_and_operational_policy.py",
+      "size": 1423,
+      "sha256": "def443769c5a0f0f4d1e9de8bf96a8ec7c8d48b11c44ca197026a275ffd1c164"
+    },
+    {
+      "path": "backend/migrations/versions/0018_legal_dispatch_verification.py",
+      "size": 1851,
+      "sha256": "66e11351199cb43face962e6557d8cae08e994265da4f03127f842fd0ad74137"
+    },
+    {
+      "path": "backend/migrations/versions/0019_legal_acceptances.py",
+      "size": 534,
+      "sha256": "2b1273e9c6e0517d74df6c155551602d690b9a9bba3d4ad10d169dd373938c69"
+    },
+    {
+      "path": "backend/migrations/versions/0020_legal_acceptance_history.py",
+      "size": 1223,
+      "sha256": "0cce36923126cea71e752e1dd3f4e1e916d127213dce907ddea9f1bea51faf2b"
     },
     {
       "path": "backend/requirements.txt",
-      "size": 60,
-      "sha256": "7a1a436a09a46b9d2e327d40e8750e9fb2c60c48679e04b2acb567ba26e018c7"
+      "size": 243,
+      "sha256": "b2270a3964c22dff2326012f929d9eb45ea3afba9133b85d193d3bf2cc346aea"
+    },
+    {
+      "path": "backend/tests/test_admin_portal_contract.py",
+      "size": 2778,
+      "sha256": "c9cd987117ea69e2a30e074db29ff4e32c9bde06712ef1bd9b5c3900d345a884"
+    },
+    {
+      "path": "backend/tests/test_automatic_dispatch.py",
+      "size": 10542,
+      "sha256": "c64c3a4068a3f1488fa6dccd8d459b22a247d6b0254b952434ff68211b3a3292"
+    },
+    {
+      "path": "backend/tests/test_driver_status_retry_contract.py",
+      "size": 4312,
+      "sha256": "0412b4e4a1035878117aaad67343655d149008b65c713300e684b6dd04146f31"
+    },
+    {
+      "path": "backend/tests/test_legal_acceptance_service.py",
+      "size": 1065,
+      "sha256": "9c05a99b5c50b55f6f207d44258607b26e112be9a886cade5d3ef38ba785210c"
+    },
+    {
+      "path": "backend/tests/test_legal_compliance.py",
+      "size": 2077,
+      "sha256": "1ca0fbf323463443ff06b6c8ae7efef4f438306921b6f70466df88ec53c7a17f"
+    },
+    {
+      "path": "backend/tests/test_legal_dispatch_gate.py",
+      "size": 2320,
+      "sha256": "c0a36ee4503f5eebbf57678ef7658ce1ddde5a173485a9df8cf9eba82353fd29"
+    },
+    {
+      "path": "backend/tests/test_legal_documents.py",
+      "size": 2152,
+      "sha256": "1bf05759589c16370f2a8db62f140857b81c7bbc285e5055c19655adad071805"
+    },
+    {
+      "path": "backend/tests/test_mobile_integration_contract.py",
+      "size": 8710,
+      "sha256": "adf940c0a37c43dd3f5c1afff063094195a1a12faee6e19604b3b587f088ed6e"
+    },
+    {
+      "path": "backend/tests/test_order_fare_breakdown_migration.py",
+      "size": 3462,
+      "sha256": "86b5937d141886b51f2c03686ab1f48afc83ef6df9c809ffa7ae4bcf18cd4e80"
+    },
+    {
+      "path": "backend/tests/test_order_idempotency.py",
+      "size": 7198,
+      "sha256": "e0a9dd6acac74cc9e1b67069e7a7182bb45c452cfa48ec39e3d84601bb78b9d6"
+    },
+    {
+      "path": "backend/tests/test_order_response.py",
+      "size": 2950,
+      "sha256": "152055e69b48f60e2b7ddb905036b832260f112df147348c480b8667efcdd78a"
+    },
+    {
+      "path": "backend/tests/test_order_validation.py",
+      "size": 8362,
+      "sha256": "9d94cf19019e45625173e83129fdcdfee899cd4c38224e03b595d6bfd7381543"
+    },
+    {
+      "path": "backend/tests/test_passenger_order_cancel.py",
+      "size": 5586,
+      "sha256": "5bb1156646a9cd48d70286815d7f8d3144f06e3ed37cf8b65d8c79bb1a93df93"
+    },
+    {
+      "path": "backend/tests/test_price_breakdown.py",
+      "size": 3492,
+      "sha256": "c52e5ddd98f792438a3749319c48069cb1fb8a91736f8389eefa2bfc71e63da6"
+    },
+    {
+      "path": "backend/tests/test_pricing.py",
+      "size": 5841,
+      "sha256": "3c1e5fef5cf538d8b15017cd0a0c36891f2265f60d9dafa41ea4b25c27573fe2"
+    },
+    {
+      "path": "backend/tests/test_remove_anonymous_order_migration.py",
+      "size": 4188,
+      "sha256": "98bebebf8cd5d766a936355dab475c4bd22442195569fd69005c3be6e7e6c5d1"
+    },
+    {
+      "path": "backend/tests/test_route_pricing.py",
+      "size": 5126,
+      "sha256": "ca2c6b4fd8c4a8321247be5065240fa482e76907d054378335a4f5a404049096"
+    },
+    {
+      "path": "backend/tests/test_routing.py",
+      "size": 3622,
+      "sha256": "a8a500027b264592f9f330471335f7b0f1699330cc72b5e8f8e555c157eb1e20"
+    },
+    {
+      "path": "backend/tests/test_routing_providers.py",
+      "size": 2809,
+      "sha256": "48af37bae60d0430df4cb8106b20c8ab259efc7336e0432f1b9e5569fc1f5ef9"
+    },
+    {
+      "path": "backend/tests/test_tariff_inclusions_and_waiting.py",
+      "size": 7720,
+      "sha256": "d3ec3f8d05673d8afe5d88e8298007d48c94f4d8872df7493f4ba23583308829"
     },
     {
       "path": "database/schema.sql",
-      "size": 2366,
-      "sha256": "155c9698e0b62e9de2ed384ba1b79f4e79ba88a88de88a99538e62fe17593b77"
+      "size": 26226,
+      "sha256": "91989467b2a433f874acf67ca64354f11919cdd76b34cdb53afde7d3d2b07ac4"
     },
     {
       "path": "database/tariffs.json",
-      "size": 3468,
-      "sha256": "e2cda575ed336ee2cba1e500f511f373a87e6583ab0157cf57186ef9e9287987"
+      "size": 3438,
+      "sha256": "586fc34340a1f4238c3f7d0eb29c70a73c4ce9799e8f57c0ff2d57e6fd051d22"
+    },
+    {
+      "path": "design/VEXA_DESIGN_GUIDE_RU.md",
+      "size": 6135,
+      "sha256": "0e895abc342a2f50581b1e64d9b3a60057b9e5926b543ea5673f42ed73bed474"
     },
     {
       "path": "design/palette.json",
-      "size": 574,
-      "sha256": "10fd4e9776284c42f719469926041c6bc76b2f9236e749dcf5fd97d3987373d2"
+      "size": 600,
+      "sha256": "7f2a13004e5ca8bd3107aae3d6b420180763af736034893353fce5563433d44d"
+    },
+    {
+      "path": "design/tokens.json",
+      "size": 1583,
+      "sha256": "21267fbda27bbff52b9fb1ba4fe0be40ea5dbc0ea6d9f53914baea4515389678"
+    },
+    {
+      "path": "dispatcher/.dockerignore",
+      "size": 41,
+      "sha256": "1a52fe41043022f9d2b05a1cd799de279c114a07db204e270377912fad8cd6ec"
+    },
+    {
+      "path": "dispatcher/.env.example",
+      "size": 217,
+      "sha256": "2f4d9ef157602151359af812637e5ad221187baa9e845fd66e70591806a09ecd"
+    },
+    {
+      "path": "dispatcher/Dockerfile",
+      "size": 331,
+      "sha256": "a95647c25f9bc919035b72db35443d64620fc9f8799791760af6a75d1ad2be90"
     },
     {
       "path": "dispatcher/index.html",
-      "size": 259,
-      "sha256": "2277d7fca37a1f4d677406cc87546933f719c17e26383f7a168fa0ae37ae1024"
+      "size": 309,
+      "sha256": "8e7b113d2f329046d0fbc1d4852ff15c9b11d643f9dc1510b038a5a714d92802"
+    },
+    {
+      "path": "dispatcher/main.tsx",
+      "size": 19281,
+      "sha256": "b3b947d82989f1b2ecf5db9f98582056b6559d2b2a061826e370ab722fbfa48e"
+    },
+    {
+      "path": "dispatcher/nginx-dispatcher.conf",
+      "size": 1032,
+      "sha256": "675caa90ed1f9be7e68ace357151e721ef2d9b6135a200fe57b5303d4a782364"
     },
     {
       "path": "dispatcher/package.json",
-      "size": 415,
-      "sha256": "1cfcf1f9c2dc5012b75d1765d00e42b84f0d74252fe5bb4a1c0c822a978fcbf6"
+      "size": 522,
+      "sha256": "423685bb0b209081eda2ee9734b8186f503572fd2f642c3cb3d54fa20ed578e7"
+    },
+    {
+      "path": "dispatcher/src/brand.css",
+      "size": 612,
+      "sha256": "c0c9fe1d443fc5e2006a4954754367ab0263e034a16d73426a42a872ec499d58"
+    },
+    {
+      "path": "dispatcher/src/components/DriverFinancePanel.tsx",
+      "size": 27172,
+      "sha256": "a6fd47a5892f6f702e96ef6f5f5e4440cf63a3121f5518bc26aa711fa5e0aacf"
+    },
+    {
+      "path": "dispatcher/src/components/FinanceSummaryPanel.tsx",
+      "size": 24217,
+      "sha256": "3a8e706c2899cdf8e2e0496cfcc74eab0a2251ec627e60eed0a55a2e5dd0e3d7"
+    },
+    {
+      "path": "dispatcher/src/components/LegalDocumentsPanel.tsx",
+      "size": 6071,
+      "sha256": "9b92b2ec58ae3b6e0c4690ac94ecff9800d35d9095aa9b0f190fa351a4b7e4af"
+    },
+    {
+      "path": "dispatcher/src/components/VexaMap.tsx",
+      "size": 3473,
+      "sha256": "63e902d9fa88bd6632bb9e59f5e41bb76ecdb63ec78cc43c94e1e0fd7a10c453"
     },
     {
       "path": "dispatcher/src/main.tsx",
-      "size": 3753,
-      "sha256": "e3feee9d3abe3e54f944a7f13d2589e16ea3a033d67baf41e6b19487bf74ce57"
+      "size": 58810,
+      "sha256": "9dd1a2d19a70ef7e01e576cef15de4cb6d74db337f4af17a9e0312ca48054dc6"
     },
     {
       "path": "dispatcher/src/style.css",
-      "size": 5357,
-      "sha256": "edef0b6e0dc93219f60de1f865500e14def271735198d8d5ac123826b7d05fba"
+      "size": 9819,
+      "sha256": "2ca6d8bc8d72d65681d95cdf1ce8d4cd54428a0d59ebe8f90b392476f72cdc16"
+    },
+    {
+      "path": "dispatcher/src/vite-env.d.ts",
+      "size": 38,
+      "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5"
     },
     {
       "path": "dispatcher/tsconfig.json",
@@ -134,28 +1457,83 @@
     },
     {
       "path": "dispatcher/vite.config.ts",
-      "size": 128,
-      "sha256": "a64500b58c376b9e886092ce84f9f27c5d8fbd8512b68c757e9e4f461427e865"
+      "size": 209,
+      "sha256": "c3996a7b95317851fda0f5eb7ed8449edac476b6e79c1e5f7ee23b593a848d94"
+    },
+    {
+      "path": "docs/01_APPROVED_DECISIONS.md",
+      "size": 29499,
+      "sha256": "38cd5af13368f485f8dae0f257cd245ed7a7fe50a0544d332907f3ff0a58e88b"
+    },
+    {
+      "path": "docs/02_ARCHITECTURE.md",
+      "size": 5579,
+      "sha256": "048b89c7f78a4e20b3349eb44d28a6b7b3669a4a6349097c0d9bddd14453333c"
+    },
+    {
+      "path": "docs/03_DATABASE_DESIGN.md",
+      "size": 10055,
+      "sha256": "69664f24cacd635d7d6319f950828a431f1e3d86a05880cbaacd55fb5df7d7fd"
+    },
+    {
+      "path": "docs/04_ORDER_AND_FINANCE_FLOWS.md",
+      "size": 4995,
+      "sha256": "eac438eae5279be15ba6360bbb243d9178ab7e894de75a2e6b33f30ff4de7459"
+    },
+    {
+      "path": "docs/05_ROADMAP_AND_STATUS.md",
+      "size": 5319,
+      "sha256": "11044f7ba48a9ae928c181157a1000f7abc0a5837e461a2078549942e464bfd0"
+    },
+    {
+      "path": "docs/06_VPS_AND_DEPLOYMENT_GUIDE.md",
+      "size": 5619,
+      "sha256": "f7696102c7e1e5d5d502b0d3a88a399f43a7916ad91037e344439c06c6082879"
+    },
+    {
+      "path": "docs/07_OPEN_QUESTIONS.md",
+      "size": 3505,
+      "sha256": "039ceb201a4887f68e66df8e267fd36d7e995ffb478dc3cb766d0748625dbd79"
     },
     {
       "path": "docs/ACCEPTANCE_TESTS.md",
-      "size": 1874,
-      "sha256": "247326eb326c9617d8865777437a4517e4534cf3dc18d7fdb7a877161f1bfe9a"
+      "size": 2049,
+      "sha256": "f9e0fa18e5b8c46b3837acc284df5b9c2e7d8a92299c6a1d28e09793caeb40ac"
     },
     {
       "path": "docs/ANDROID_BUILD.md",
-      "size": 1189,
-      "sha256": "8335a3a05b537913ffd9e00a1a0a9533792e35128f854662a0a8dc0b55543a0e"
+      "size": 1477,
+      "sha256": "281b7c4ab84348e7ef5d9885dd2767ba93fb1735773d8ac5accd1e0108c89920"
     },
     {
       "path": "docs/DECISIONS_AND_REQUIREMENTS.md",
-      "size": 10407,
-      "sha256": "d3b7a2662f199031095b179376b35280c3b2ba154ab9f1da6596889f1cecd926"
+      "size": 10345,
+      "sha256": "df756c81845d0b8054b08de549a05996ce61ec835cbacef58f3de54fab643375"
+    },
+    {
+      "path": "docs/DESIGN_SYSTEM_0.3.5.md",
+      "size": 3197,
+      "sha256": "4e8ab3c644cb0b85d60372c924edb6855a3d490669c3bebdd8db4bb782493296"
+    },
+    {
+      "path": "docs/FEATURE_READINESS_0.3.5.md",
+      "size": 2619,
+      "sha256": "03ed9ebf0e8c227f278e496622fff22b86d1ded62149005efee815b52bc77268"
+    },
+    {
+      "path": "docs/FEATURE_READINESS_0.3.8.md",
+      "size": 1494,
+      "sha256": "915b4101f9ace88fdb0ff54f92ca26688d193ed895fe54d91f462dd6543669c3"
     },
     {
       "path": "docs/INSTALLATION.md",
-      "size": 1131,
-      "sha256": "396fb0181dd8b9627ec90361399326cca051d0851b75e9b8eec41487401a6d37"
+      "size": 1739,
+      "sha256": "65f084371bcc10a88b81fb682751c5885e7b21e1900155b6d2c27c3c3450cc3f"
+    },
+    {
+      "path": "docs/PRODUCTION_DEPLOYMENT_0.3.5.md",
+      "size": 5749,
+      "sha256": "879b3ff8e906aab5e2dc376e1a09ddbb707c1de2ba098b591cd517cd5491fc2e"
     },
     {
       "path": "docs/STATUS.md",
@@ -163,19 +1541,314 @@
       "sha256": "5baaced05d077fa713659212c6a19c3253908eb1ec97a0697894cf33d7a496f6"
     },
     {
-      "path": "infrastructure/.env.example",
-      "size": 195,
-      "sha256": "e2d612d8e025646d6f31579971f583b1ba70f3a8a3eaea3bed1230013d0de7f0"
+      "path": "docs/VEXA_0.3.38_RELEASE.md",
+      "size": 874,
+      "sha256": "af67bcc290fd760f99f761cfbe84db97911ce8da8f3b08161fba1ca7fbb19761"
+    },
+    {
+      "path": "docs/VEXA_COMMON_LAW_0.3.38_RU.md",
+      "size": 3384,
+      "sha256": "ae7e291d64e87d7f070f422693be405bb544cc9f8db87601e447b9fb31796258"
+    },
+    {
+      "path": "docs/VEXA_LEGAL_0.3.39_INTEGRATION_RU.md",
+      "size": 3833,
+      "sha256": "999bddc6722097551c086f8cbb1a8280b7129283cc7db6986e1137aa1ca53deb"
+    },
+    {
+      "path": "docs/VEXA_LEGAL_ENFORCEMENT_0.3.36_RU.md",
+      "size": 3514,
+      "sha256": "b506eb6b1a426876891552688e3df31a88cf57ce3c4a9588edfe5d590d1a6991"
+    },
+    {
+      "path": "docs/VEXA_LEGAL_ROLES_0.3.37_RU.md",
+      "size": 4650,
+      "sha256": "052aaa5b7224842c17ca6cf68fbfc8cd95ce8d73c065aa5ed7768dbe9690e451"
+    },
+    {
+      "path": "docs/VEXA_LEGAL_UI_0.3.40_RU.md",
+      "size": 2738,
+      "sha256": "63222c867708f26c9b61ed3562babe8ae3b91372a977ec8494f1e5963aa88abe"
+    },
+    {
+      "path": "docs/VEXA_RU_LEGAL_COMPLIANCE_0.3.35.md",
+      "size": 13571,
+      "sha256": "4d04ae0c4f0d95c601368686671245844de9ea2881693513058881d66cba0392"
+    },
+    {
+      "path": "docs/VEXA_SERVER_CONFIG.md",
+      "size": 1384,
+      "sha256": "e1466793b5bb67279623917dfd2cf59014e8cc53e54d5512b847aa9522513a70"
+    },
+    {
+      "path": "infrastructure/Caddyfile.production",
+      "size": 1029,
+      "sha256": "1a7647bdc8e27db4e2e6374e6b064e2f1cb4098e02bb1f48eb5a761c719d1082"
+    },
+    {
+      "path": "infrastructure/compose.production.yml",
+      "size": 6482,
+      "sha256": "cd49b5abaf91a46613c866e29152bf0b7dd7672efadf77c36e72339163f1a8d9"
     },
     {
       "path": "infrastructure/docker-compose.yml",
-      "size": 975,
-      "sha256": "4a825ef5cc718ee5651bfef1d96d6a163cba3069c4134432952337807c2db0c2"
+      "size": 3592,
+      "sha256": "483ffe1af9212ded71707c9e310e0e31311e0f96f7c66705b927c098855cd3c3"
     },
     {
       "path": "infrastructure/nginx-vexa.conf.example",
-      "size": 405,
-      "sha256": "4b34fc040c88d436202e27d766c57a9acf70850ae703b3b2d967c827e23dc5ba"
+      "size": 1996,
+      "sha256": "9c78733696c9bae225c4b58cacc52dc7ec861c33c795fd5d8982c70856f3d979"
+    },
+    {
+      "path": "infrastructure/vexa-backup.service",
+      "size": 259,
+      "sha256": "82e03a36b71372bc773db6ef559a163d62375a1c2eb777814d6bb4e40e390a3e"
+    },
+    {
+      "path": "infrastructure/vexa-backup.timer",
+      "size": 158,
+      "sha256": "52d75cfdd20869876893a19cb41224d0f0086e464c40cf966af35c792e9e8b7b"
+    },
+    {
+      "path": "infrastructure/vexa-health.service",
+      "size": 312,
+      "sha256": "078386c5f21312dabf2d9f64660d9f34aa6c00c5554a0f01339c3c78721feeb0"
+    },
+    {
+      "path": "infrastructure/vexa-health.timer",
+      "size": 133,
+      "sha256": "91f39f89a062db824a8be7c35b3b7a67385ed493c81cb5aab978c76fbe25dc95"
+    },
+    {
+      "path": "platform-admin/.dockerignore",
+      "size": 41,
+      "sha256": "1a52fe41043022f9d2b05a1cd799de279c114a07db204e270377912fad8cd6ec"
+    },
+    {
+      "path": "platform-admin/Dockerfile",
+      "size": 340,
+      "sha256": "d738a2d6ca39433ff656f8fcd7f56876a8f6402d9bda40fd81ec1e6595e3b307"
+    },
+    {
+      "path": "platform-admin/index.html",
+      "size": 517,
+      "sha256": "61b5e890f5589397761d7b9dae1f1f875f7e9babd6b5e6dc5fd99e48ea50a888"
+    },
+    {
+      "path": "platform-admin/nginx-platform-admin.conf",
+      "size": 446,
+      "sha256": "0229c76ce0041def092f1d443447c765ecdfeed88229827d891dce3c87308b76"
+    },
+    {
+      "path": "platform-admin/package.json",
+      "size": 497,
+      "sha256": "5f906edcd71947f6f7b9a26a07d973df9052c1179e8ec23c80bedd8cc14ee548"
+    },
+    {
+      "path": "platform-admin/src/App.tsx",
+      "size": 13354,
+      "sha256": "a62b001df7cea941da8961e1b4e8d35234507a008e92b45f92e0e9dc5c99650e"
+    },
+    {
+      "path": "platform-admin/src/Cities.tsx",
+      "size": 14031,
+      "sha256": "97d7cd6b42398d5e953c79be5df587530956328efa1f6204f6a32c3017bfb68c"
+    },
+    {
+      "path": "platform-admin/src/Organizations.tsx",
+      "size": 24625,
+      "sha256": "d6b3272125dbcdb00d9db68d9d2c51917287845179f45306136060c070b656cc"
+    },
+    {
+      "path": "platform-admin/src/components/LegalDocumentsPanel.tsx",
+      "size": 6071,
+      "sha256": "9b92b2ec58ae3b6e0c4690ac94ecff9800d35d9095aa9b0f190fa351a4b7e4af"
+    },
+    {
+      "path": "platform-admin/src/main.tsx",
+      "size": 239,
+      "sha256": "4c6cc49636dba4223675e1f2141cc0c0b494ee8383f25ca1ed74c5f2554ca86b"
+    },
+    {
+      "path": "platform-admin/src/styles.css",
+      "size": 23424,
+      "sha256": "388ead91e817f3dbd498f3480fb9d53c1755527bda6f831c4e6e177cd062bcff"
+    },
+    {
+      "path": "platform-admin/src/vexa-brand.css",
+      "size": 612,
+      "sha256": "c0c9fe1d443fc5e2006a4954754367ab0263e034a16d73426a42a872ec499d58"
+    },
+    {
+      "path": "platform-admin/tsconfig.json",
+      "size": 515,
+      "sha256": "3e379c85cfc3040e12bfff5e64948d8e84cd50cf51cea0a46a5d46aea7c20122"
+    },
+    {
+      "path": "platform-admin/vite.config.ts",
+      "size": 260,
+      "sha256": "f1482d2379be31e3e5e71da26bf09c03bbc796092b9bf4a4303c19192caaebde"
+    },
+    {
+      "path": "pricing.py",
+      "size": 1595,
+      "sha256": "5c85ecfee7b63f93bcaf1e2faa0045341239312991ea5839f2f3b05102648a13"
+    },
+    {
+      "path": "tests/driver_duty_rules_smoke.kt",
+      "size": 501,
+      "sha256": "2c1abee9caaed8dc8700a7d0722b2354beab32d0204379189e6afe00e8e87374"
+    },
+    {
+      "path": "tests/test_additional_features_0_3_8_contract.py",
+      "size": 4374,
+      "sha256": "306ab68703be8d543b202320b2b3a4bd5d6cb8def24fe438b77182053f8e716a"
+    },
+    {
+      "path": "tests/test_android_offline_manager_0316.py",
+      "size": 3274,
+      "sha256": "81dcd93803bf75ea0e9529b9570efff20da62ff6453ff6ac9d8bf72e168642dc"
+    },
+    {
+      "path": "tests/test_client_settings_contract.py",
+      "size": 3396,
+      "sha256": "206fd6910515d96c7493ea0a5b431dfebd7f2f197b5c212af776d1bdef61aec1"
+    },
+    {
+      "path": "tests/test_design_system_0_3_14.py",
+      "size": 5586,
+      "sha256": "7e05da3500ddb67e91fe3e0efe8d8bc02cbfd4e4a2ac59b1c93ae526d1989b21"
+    },
+    {
+      "path": "tests/test_driver_settings_money_contract.py",
+      "size": 3069,
+      "sha256": "aba1d0826ff6beaaed9530632bfb0f3fd5b05615ce7654a9926e35d6063c1c0f"
+    },
+    {
+      "path": "tests/test_integration_preflight_0341.py",
+      "size": 819,
+      "sha256": "491c35787a495f4d7c06f0bfb329f0979eb4b1e5b1a9bc0331211b44ef190d5a"
+    },
+    {
+      "path": "tests/test_legal_web_ui_contract.py",
+      "size": 810,
+      "sha256": "0e3c60886d7a77ff8f83b9fc79bde0e05f77954d0db0572f835e56fbfb99af72"
+    },
+    {
+      "path": "tests/test_offline_navigation_0318.py",
+      "size": 2709,
+      "sha256": "1cec75e4814ce5dc29f200bc5c518c33348449eb10b7a81e68907f67b81f3bdc"
+    },
+    {
+      "path": "tests/test_offline_renderer_0317.py",
+      "size": 4258,
+      "sha256": "ec921b9832b817c80c19cdaa7535f9e0cd6799f71aacc6116bfac5f265996cfe"
+    },
+    {
+      "path": "tests/test_production_0342.py",
+      "size": 2181,
+      "sha256": "53bc0c2940d2e10d80fe9546f667b7d96cb29325c3f819a5a0e7a7cb146da58b"
+    },
+    {
+      "path": "tests/test_release_contracts.py",
+      "size": 2858,
+      "sha256": "febee789e002c3aeea7c30615b1c2e650533525ce4dff9c4bbeaf757fad8ad0b"
+    },
+    {
+      "path": "tests/test_release_preflight.py",
+      "size": 2023,
+      "sha256": "0e2940adc8ce58d4eb095352a58c372821d78e9b09fbb82b61b6a5c57221f452"
+    },
+    {
+      "path": "tests/test_ux_contracts_0_3_13.py",
+      "size": 3000,
+      "sha256": "26b058f71b2247d50e124465aacb74e4b7457b8664953b689dd1e534ba0ee82c"
+    },
+    {
+      "path": "tests/test_vector_camera_0319.py",
+      "size": 3000,
+      "sha256": "a017ed5fed379b7688e5bdba44ebe62bda955fc1d6d4a1c46b4df287202b5077"
+    },
+    {
+      "path": "tests/test_vps_config.py",
+      "size": 1555,
+      "sha256": "88fe8a1127ed15c5bcca8a2a9992a55fb70e9ee78af00894fa65028b328cec3d"
+    },
+    {
+      "path": "tools/backup_postgres.sh",
+      "size": 1384,
+      "sha256": "3a3042801e6bf4fa8195009a3740227694c7fba186cf8d2980dad86188bd13df"
+    },
+    {
+      "path": "tools/check_admin_portals.ps1",
+      "size": 1428,
+      "sha256": "3c8b1703cd4221ef552b9bb426a3f37630d098f0462e03d1bfbc7204e9b3f778"
+    },
+    {
+      "path": "tools/check_local_system.ps1",
+      "size": 944,
+      "sha256": "53bcb3422809ce97b93f0b47b7a34833b02a792c7c9552fb9ff4281fc41598b3"
+    },
+    {
+      "path": "tools/ci_smoke.py",
+      "size": 1471,
+      "sha256": "7f3672634a7a48c3099fde5ef6cdd136a138e01ef7de32604aedc83232ec4239"
+    },
+    {
+      "path": "tools/configure_local_ip.ps1",
+      "size": 2226,
+      "sha256": "aae360f2fc25733a73a3b0359bc92704bb1136dca87aed79f11333809e834e8d"
+    },
+    {
+      "path": "tools/deploy_vps.sh",
+      "size": 3780,
+      "sha256": "fa821aedfa6ea1e7f4158cb147195096bd9573632cadbe9d38d94001fc112340"
+    },
+    {
+      "path": "tools/diagnostics.sh",
+      "size": 267,
+      "sha256": "de5c445b2c91e6a5fbeeb36264b7f314a047c51405e83c4d9fc989b0393528ed"
+    },
+    {
+      "path": "tools/fetch_osm_region.ps1",
+      "size": 2072,
+      "sha256": "b605628f9ff35d18fefe10a38447c1b4ec8126ad1648c8d9e1ace96b8535a186"
+    },
+    {
+      "path": "tools/healthcheck.sh",
+      "size": 1506,
+      "sha256": "4d90bc53fd3643f9e749106289610b4827849a1cf503dea54dad38f73125a160"
+    },
+    {
+      "path": "tools/integration_preflight.py",
+      "size": 3801,
+      "sha256": "4ba89ad5682a493a8a4a783a8668da404fc78bdae5f85108b5fefdc0094d07da"
+    },
+    {
+      "path": "tools/prepare_osrm_region.ps1",
+      "size": 2502,
+      "sha256": "f39b067340b37bcc1f69d8d7c0c2891465adb8f91098bbe0867c6567456d0b2f"
+    },
+    {
+      "path": "tools/release_preflight.py",
+      "size": 6570,
+      "sha256": "ff894f8513d240f9138621054ab7d02621c221491d2c610e60bc27b34d84219f"
+    },
+    {
+      "path": "tools/restore_test.sh",
+      "size": 963,
+      "sha256": "ae235914d3ed3fc2d86cb2d4db920cfc9ee390514c744c16fd444e36add7d364"
+    },
+    {
+      "path": "tools/setup_vps.sh",
+      "size": 2790,
+      "sha256": "2487334e334a55be19d8d0897923c1d80c348dc398330154a981ed2809542e9e"
+    },
+    {
+      "path": "tools/sync_design_tokens.py",
+      "size": 4500,
+      "sha256": "a07de9a9240830e9d2914d2fab144e392c5b8b19246731870c68a0261392dd70"
     }
   ]
 }

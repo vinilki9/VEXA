@@ -1,6 +1,9 @@
+# Historical Nginx example; use production Caddy gateway instead.
+# > **Примечание:** рабочая конфигурация VEXA теперь рассчитана на локальный компьютер; этот документ может описывать исторический VPS. Актуальные шаги — в `README_LOCAL_SETUP.md`.
+
 
 # Include these locations inside the existing HTTPS server block for
-# 109.120.184.20. Keep the existing TLS certificate configuration intact.
+# 45.143.139.162. Keep the existing TLS certificate configuration intact.
 
 # Dispatcher
 location = /dispatch {

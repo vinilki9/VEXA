@@ -37,6 +37,11 @@ class PlatformAdminTokenResponse(BaseModel):
     expires_in: int
 
 
+class PlatformAdminMeResponse(BaseModel):
+    id: UUID
+    username: str
+
+
 def create_platform_admin_access_token(user_id: UUID) -> str:
     expires = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_minutes
@@ -138,3 +143,14 @@ def platform_admin_login(
         access_token=access_token,
         expires_in=settings.access_token_minutes * 60,
     )
+
+
+@router.get(
+    "/me",
+    response_model=PlatformAdminMeResponse,
+)
+def platform_admin_me(
+    user: User = Depends(get_current_platform_admin),
+):
+    """Verify the platform-admin token and return the logged-in account."""
+    return PlatformAdminMeResponse(id=user.id, username=user.username)
