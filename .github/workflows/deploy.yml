@@ -1,9 +1,9 @@
-
-name: Deploy VEXA
+name: VEXA Auto Deploy
 
 on:
   push:
-    branches: [deploy]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -15,30 +15,45 @@ concurrency:
 
 jobs:
   deploy:
+    name: Deploy VEXA to VPS
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Configure the restricted deploy key
-        env:
-          DEPLOY_KEY: ${{ secrets.VEXA_DEPLOY_KEY }}
-          DEPLOY_HOST: ${{ vars.VEXA_DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.VEXA_DEPLOY_PORT }}
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check project structure
         run: |
-          set -eu
-          test -n "$DEPLOY_KEY"
-          test -n "$DEPLOY_HOST"
-          test -n "$DEPLOY_PORT"
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-      - name: Send the commit and deploy it
+          test -d backend
+          test -d dispatcher
+          test -d platform-admin
+          test -f infrastructure/docker-compose.yml
+
+      - name: Configure SSH
         env:
-          DEPLOY_HOST: ${{ vars.VEXA_DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.VEXA_DEPLOY_PORT }}
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
-          set -euo pipefail
-          git archive --format=tar "$GITHUB_SHA" | gzip -n | \
-            ssh -i ~/.ssh/id_ed25519 -p "$DEPLOY_PORT" \
-              -o BatchMode=yes -o StrictHostKeyChecking=yes \
-              vexa-deploy@"$DEPLOY_HOST" "deploy $GITHUB_SHA"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/vexa_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/vexa_deploy
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -i ~/.ssh/vexa_deploy \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            /opt/vexa-deploy/deploy.sh "$GITHUB_SHA"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/vexa_deploy
