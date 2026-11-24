@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -297,6 +297,78 @@ def list_platform_cities(
                 "is_active": city.is_active,
             }
             for city in cities
+        ]
+    }
+
+
+@router.get("/catalog/branches")
+def list_platform_branches(
+    organization_id: UUID | None = None,
+    city_id: UUID | None = None,
+    active_only: bool = True,
+    db: Session = Depends(get_db),
+):
+    if organization_id is not None:
+        get_organization_or_404(db, organization_id)
+
+    query = (
+        select(
+            Branch,
+            City,
+            OrganizationBranch,
+        )
+        .join(
+            City,
+            City.id == Branch.city_id,
+        )
+        .outerjoin(
+            OrganizationBranch,
+            OrganizationBranch.branch_id == Branch.id,
+        )
+    )
+
+    if city_id is not None:
+        query = query.where(Branch.city_id == city_id)
+
+    if active_only:
+        query = query.where(Branch.is_active.is_(True))
+
+    if organization_id is not None:
+        query = query.where(
+            or_(
+                OrganizationBranch.id.is_(None),
+                OrganizationBranch.organization_id == organization_id,
+            )
+        )
+
+    query = query.order_by(
+        City.name.asc(),
+        Branch.name.asc(),
+    )
+
+    rows = db.execute(query).all()
+
+    return {
+        "items": [
+            {
+                "id": str(branch.id),
+                "branch_id": str(branch.id),
+                "branch_name": branch.name,
+                "city_id": str(city.id),
+                "city_name": city.name,
+                "branch_is_active": branch.is_active,
+                "organization_id": (
+                    str(link.organization_id)
+                    if link is not None
+                    else None
+                ),
+                "organization_link_is_active": (
+                    link.is_active
+                    if link is not None
+                    else None
+                ),
+            }
+            for branch, city, link in rows
         ]
     }
 

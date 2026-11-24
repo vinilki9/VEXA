@@ -1,12 +1,15 @@
 
 import { useEffect, useState } from "react";
 import Organizations from "./Organizations";
+import Cities from "./Cities";
 
 type AdminUser = {
   username: string;
 };
 
 const API_BASE = "/api/v1/platform-admin";
+
+type Section = "organizations" | "cities" | null;
 
 function App() {
   const [username, setUsername] = useState("");
@@ -18,9 +21,7 @@ function App() {
     () => sessionStorage.getItem("vexa_platform_admin_token") || "",
   );
   const [admin, setAdmin] = useState<AdminUser | null>(null);
-  const [activeSection, setActiveSection] = useState<
-    "organizations" | null
-  >(null);
+  const [activeSection, setActiveSection] = useState<Section>(null);
 
   useEffect(() => {
     if (!token) {
@@ -142,6 +143,15 @@ function App() {
     );
   }
 
+  if (admin && activeSection === "cities") {
+    return (
+      <Cities
+        token={token}
+        onBack={() => setActiveSection(null)}
+      />
+    );
+  }
+
   if (admin) {
     return (
       <main className="admin-screen">
@@ -187,12 +197,19 @@ function App() {
               <span className="module-status">Открыть раздел →</span>
             </button>
 
-            <article className="module-card">
+            <button
+              type="button"
+              className="module-card module-card-clickable"
+              onClick={() => setActiveSection("cities")}
+            >
               <span className="module-icon">◎</span>
               <h3>Города и филиалы</h3>
-              <p>География работы и территориальная структура.</p>
-              <span className="module-status">Раздел готовится</span>
-            </article>
+              <p>
+                Создание городов, изменение настроек и управление
+                доступностью территорий.
+              </p>
+              <span className="module-status">Открыть управление городами →</span>
+            </button>
 
             <article className="module-card">
               <span className="module-icon">▤</span>
